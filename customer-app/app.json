@@ -1,0 +1,106 @@
+{
+  "expo": {
+    "name": "ChowBuy",
+    "slug": "chowbuy-customer",
+    "scheme": "chowbuy",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FF5A1F"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "ng.chowbuy.customer",
+      "config": {
+        "googleMapsApiKey": "REPLACE_WITH_IOS_MAPS_KEY"
+      },
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "ChowBuy uses your location to find stores near you and to help your rider find you.",
+        "NSMicrophoneUsageDescription": "ChowBuy uses the microphone for in-app calls with your rider.",
+        "NSCameraUsageDescription": "Take a photo of your prescription to upload it.",
+        "NSPhotoLibraryUsageDescription": "Choose a prescription photo to upload.",
+        "UIBackgroundModes": [
+          "audio",
+          "voip",
+          "remote-notification"
+        ]
+      },
+      "entitlements": {
+        "aps-environment": "production"
+      },
+      "usesAppleSignIn": true
+    },
+    "android": {
+      "package": "ng.chowbuy.customer",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FF5A1F"
+      },
+      "config": {
+        "googleMaps": {
+          "apiKey": "REPLACE_WITH_ANDROID_MAPS_KEY"
+        }
+      },
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "CAMERA",
+        "POST_NOTIFICATIONS",
+        "VIBRATE",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MICROPHONE",
+        "BLUETOOTH_CONNECT"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-sqlite",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "ChowBuy uses your location to find stores near you."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#FF5A1F"
+        }
+      ],
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "production"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a prescription photo to upload."
+        }
+      ],
+      "@livekit/react-native-expo-plugin",
+      "expo-apple-authentication"
+    ],
+    "experiments": {
+      "typedRoutes": false
+    },
+    "extra": {
+      "eas": {
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Track order · ChowBuy</title><meta name="robots" content="noindex">
+<link rel="icon" href="../assets/logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<script>(function(){try{var t=localStorage.getItem('cb-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t)}catch(e){}})()</script>
+<link rel="stylesheet" href="../admin/admin.css"><link rel="stylesheet" href="app.css"></head>
+<body>
+<header class="nav2"><a class="brand" href="../index.html"><img src="../assets/logo.png" alt="" width="32" height="32"><span>ChowBuy</span></a><button type="button" class="ib" id="theme" aria-label="Toggle theme"></button></header>
+<main class="pg">
+<div class="acts" style="justify-content:space-between"><div><h1 id="ttl" style="font-size:clamp(1.8rem,4vw,2.4rem)">Order</h1><p class="muted" id="sub"></p></div><span class="pill ok" id="pst"></span></div>
+<div class="cols">
+ <section><div class="mapwrap"><svg id="map" viewBox="0 0 800 460" role="img" aria-label="Live map showing the restaurant, your address and your rider"></svg><div class="eta" id="eta" aria-live="polite"></div></div><p class="demo" id="mnote" style="margin-top:.6rem"></p></section>
+ <aside style="display:grid;gap:1rem">
+  <div class="card pad"><div class="who"><span class="tile" style="width:3rem;height:3rem;background:#FF5A1F" id="rav">SB</span><div><b id="rnm">Sodiq Bello</b><small id="rpl">ChowBuy Partner · LND-482-KJA · 4.9 ★</small></div></div><div class="acts" style="margin-top:1rem"><a class="btn pri" href="tel:+2348031234567" id="call"></a><button type="button" class="btn" id="chat"></button></div></div>
+  <div class="card pad" id="otpbox"></div>
+  <div class="card pad"><h3 style="margin-bottom:.8rem">Progress</h3><ul class="steps" id="steps"></ul></div>
+  <div class="card pad" style="font-size:.9rem"><div class="row2"><span class="muted">Payment</span><b id="pm"></b></div><div class="row2"><span class="muted">Reference</span><b class="mono" id="pr"></b></div><div class="row2"><span class="muted">Total</span><b class="mono" id="pt"></b></div></div>
+ </aside>
+</div></main>
+<div class="mwrap" id="mwrap" role="dialog" aria-modal="true"><div class="modal" id="mbody"></div></div><div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<script src="common.js"></script><script src="order.js"></script></body></html>

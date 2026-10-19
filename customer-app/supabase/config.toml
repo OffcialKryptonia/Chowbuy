@@ -1,0 +1,8 @@
+project_id = "chowbuy"
+
+[functions.webhook-korapay]
+verify_jwt = false
+[functions.webhook-pocketfi]
+verify_jwt = false
+[functions.payment-link]
+verify_jwt = false

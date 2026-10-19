@@ -1,0 +1,2 @@
+# Sponsor payment links: pay.chowbuy.ng/p/<token> and chowbuy.ng/p/<token> both serve the same page
+/p/*  /pay/index.html  200

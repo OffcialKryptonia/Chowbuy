@@ -1,0 +1,10 @@
+node_modules
+.expo
+dist
+ios
+android
+google-services.json
+.env
+.env.local
+*.zip
+.DS_Store

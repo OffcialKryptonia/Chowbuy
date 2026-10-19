@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Pay for a friend's order · ChowBuy</title>
+<style>
+  :root { --bg:#FFF8F3; --card:#fff; --ink:#1F1A17; --mute:#6B625D; --line:#EADFD7; --brand:#FF5A1F; --ok:#12805C; --bad:#D92D20; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#17120F; --card:#221B17; --ink:#F7EFE9; --mute:#B3A79F; --line:#3A302A; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; min-height:100vh; display:grid; place-items:center; padding:16px; }
+  main { width:100%; max-width:420px; background:var(--card); border:1px solid var(--line); border-radius:20px; padding:24px; display:grid; gap:14px; }
+  .brand { color:var(--brand); font-weight:800; font-size:22px; letter-spacing:-.02em; }
+  h1 { font-size:22px; margin:0; line-height:1.25; }
+  .amt { font-size:38px; font-weight:800; letter-spacing:-.02em; }
+  p { margin:0; color:var(--mute); }
+  label { font-size:13px; font-weight:700; color:var(--mute); display:block; margin-bottom:6px; }
+  input { width:100%; min-height:50px; border:1px solid var(--line); border-radius:12px; padding:0 14px; font:inherit; background:transparent; color:var(--ink); }
+  button { min-height:52px; border:0; border-radius:14px; background:var(--brand); color:#fff; font:inherit; font-weight:700; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:default; }
+  .msg { font-size:14px; } .ok { color:var(--ok); } .bad { color:var(--bad); }
+  .note { font-size:12px; }
+</style>
+</head>
+<body>
+<main id="app" aria-live="polite"><div class="brand">ChowBuy</div><p>Loading…</p></main>
+<script src="/pay/config.js"></script>
+<script>
+(function () {
+  var app = document.getElementById('app');
+  var base = (window.CHOWBUY_FUNCTIONS_URL || '').replace(/\/$/, '');
+  var m = location.pathname.match(/\/p\/([0-9a-f]{18})\/?$/);
+  var token = m ? m[1] : '';
+  var naira = function (n) { return '₦' + String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); };
+  var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]; }); };
+  function show(html) { app.innerHTML = '<div class="brand">ChowBuy</div>' + html; }
+  if (!token || !base) { show('<h1>This link is not valid</h1><p>Ask your friend to send the payment link again.</p>'); return; }
+
+  fetch(base + '/payment-link?token=' + token).then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.message || 'This link is not valid.'); return j; }); }).then(function (v) {
+    if (v.status === 'paid') { show('<h1>Already paid</h1><p>Thank you! ' + esc(v['for']) + "'s order from " + esc(v.store) + ' is on its way.</p>'); return; }
+    if (v.status === 'expired') { show('<h1>This link has expired</h1><p>Links work for 24 hours. Ask ' + esc(v['for']) + ' for a new one.</p>'); return; }
+    show('<h1>' + esc(v['for']) + ' asked you to pay for their order</h1><p>' + esc(v.store) + '</p><div class="amt">' + naira(v.amount) + '</div>' +
+      '<div><label for="em">Your email (for your receipt)</label><input id="em" type="email" autocomplete="email" placeholder="you@example.com"></div>' +
+      '<button id="go">Pay ' + naira(v.amount) + ' securely</button><p class="msg bad" id="err" hidden></p>' +
+      '<p class="note">Card, bank or USSD through Korapay. We never see your card details. Paying a friend’s order is final once the kitchen starts.</p>');
+    document.getElementById('go').onclick = function () {
+      var btn = this, err = document.getElementById('err'); err.hidden = true; btn.disabled = true; btn.textContent = 'Opening secure checkout…';
+      fetch(base + '/payment-link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: token, email: document.getElementById('em').value.trim() }) })
+        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.message || 'Could not start the payment.'); return j; }); })
+        .then(function (j) { location.href = j.checkoutUrl; })
+        .catch(function (e) { err.textContent = e.message; err.hidden = false; btn.disabled = false; btn.textContent = 'Try again'; });
+    };
+  }).catch(function (e) { show('<h1>This link is not valid</h1><p>' + esc(e.message) + '</p>'); });
+})();
+</script>
+</body>
+</html>

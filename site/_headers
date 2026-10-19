@@ -1,0 +1,5 @@
+# The admin console files change often: always revalidate so a stale copy is never served.
+/admin/*
+  Cache-Control: no-cache
+/assets/content.js
+  Cache-Control: no-cache

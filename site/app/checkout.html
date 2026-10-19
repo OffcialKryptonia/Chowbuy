@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Checkout · ChowBuy</title><meta name="robots" content="noindex">
+<link rel="icon" href="../assets/logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<script>(function(){try{var t=localStorage.getItem('cb-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t)}catch(e){}})()</script>
+<link rel="stylesheet" href="../admin/admin.css"><link rel="stylesheet" href="app.css"></head>
+<body>
+<header class="nav2"><a class="brand" href="../index.html"><img src="../assets/logo.png" alt="" width="32" height="32"><span>ChowBuy</span></a><button type="button" class="ib" id="theme" aria-label="Toggle theme"></button></header>
+<main class="pg">
+<div><h1 style="font-size:clamp(1.8rem,4vw,2.4rem)">Checkout</h1><p class="muted">Demo checkout. Payment options follow what an admin enabled in Settings, and no real money moves.</p></div>
+<div class="cols">
+ <section class="card pad" aria-labelledby="ph"><h2 id="ph" style="font-size:1.15rem;margin-bottom:1rem">Pay with</h2>
+  <div class="f" style="margin-bottom:1rem"><label for="cname">Your name</label><input id="cname" value="Kelechi Okafor" maxlength="40"></div>
+  <label class="acts" style="gap:.6rem;margin-bottom:1rem"><input type="checkbox" id="first" style="width:auto"> I am a first-time customer (demo)</label>
+  <div id="opts" style="display:grid;gap:.7rem" role="radiogroup" aria-label="Payment method"></div>
+  <button type="button" class="btn pri" id="pay" style="width:100%;margin-top:1.2rem;padding:.9rem" disabled>Choose a payment method</button>
+  <p class="demo" style="margin-top:.8rem">Demo only: card numbers, bank details and cash are simulated in your browser.</p>
+ </section>
+ <aside class="card pad"><h2 style="font-size:1.15rem;margin-bottom:.8rem">Order summary</h2><p class="muted" style="margin-bottom:.8rem">Mama Put Kitchen · Lekki Phase 1</p><div id="sum"></div></aside>
+</div>
+</main>
+<div class="mwrap" id="mwrap" role="dialog" aria-modal="true"><div class="modal" id="mbody"></div></div><div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<script src="common.js"></script><script src="checkout.js"></script></body></html>

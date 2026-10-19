@@ -1,0 +1,52 @@
+{
+  "cli": {
+    "version": ">= 10.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.chowbuy.ng",
+        "EXPO_PUBLIC_DEMO": "1"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://staging-api.chowbuy.ng"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.chowbuy.ng",
+        "EXPO_PUBLIC_DEMO": "0"
+      }
+    },
+    "apk": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_DEMO": "1"
+      }
+    },
+    "live": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_DEMO": "0",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://nhaxcyfkbrbwlqbpizjo.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_fEoqE8u49jwFe1v36CacDg_seaMgyUS",
+        "EXPO_PUBLIC_PAY_URL": "https://pay.chowbuy.ng"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /app/
+Disallow: /merchant/
+
+Sitemap: https://chowbuy.pages.dev/sitemap.xml
