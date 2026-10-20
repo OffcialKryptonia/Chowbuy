@@ -67,11 +67,15 @@ jobs:
       - name: Generate the Android project
         run: npx expo prebuild --platform android --no-install
 
-      - name: Check Android SDK
+      - name: Install Android SDK components
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
-          ls "$ANDROID_HOME" || true
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+          SM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          # The SDK folder is root-owned on the runner, so install with sudo and keep Java on the path.
+          yes | sudo env "JAVA_HOME=$JAVA_HOME" "PATH=$PATH" "$SM" --licenses >/dev/null 2>&1 || true
+          sudo env "JAVA_HOME=$JAVA_HOME" "PATH=$PATH" "$SM" "platforms;android-34" "build-tools;34.0.0" "ndk;26.1.10909125"
+          sudo chmod -R a+rwX "$ANDROID_HOME" || true
+          ls "$ANDROID_HOME/ndk"
 
       - name: Build release APK
         working-directory: customer-app/android
