@@ -83,7 +83,8 @@ jobs:
           code=${PIPESTATUS[0]}
           if [ "$code" -ne 0 ]; then
             # Surface the actual error as annotations (visible on the run page without downloading logs).
-            grep -nE "FAILED|What went wrong|Could not|error:|Execution failed|SDK location|licen[cs]e|No space|OutOfMemory" ../gradle.log | head -25 | while IFS= read -r line; do echo "::error::${line:0:400}"; done
+            grep -n -A14 "What went wrong" ../gradle.log | head -40 | while IFS= read -r line; do echo "::error::${line:0:600}"; done
+            grep -nE "Manifest merger|is also present|Suggestion|tools:replace|Attribute " ../gradle.log | head -15 | while IFS= read -r line; do echo "::error::${line:0:600}"; done
             echo "::error::gradle tail: $(tail -n 25 ../gradle.log | tr '\n' '|' | cut -c1-3500)"
           fi
           exit $code
