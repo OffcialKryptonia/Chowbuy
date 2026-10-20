@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FF5A1F"
+      "backgroundColor": "#FA4501"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -42,7 +42,7 @@
       "package": "ng.chowbuy.customer",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FF5A1F"
+        "backgroundColor": "#FA4501"
       },
       "config": {
         "googleMaps": {

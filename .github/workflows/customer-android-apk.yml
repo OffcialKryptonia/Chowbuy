@@ -83,7 +83,7 @@ jobs:
           sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g/' gradle.properties
           chmod +x gradlew
           set +e
-          ./gradlew assembleRelease --no-daemon --stacktrace -PreactNativeArchitectures=arm64-v8a,armeabi-v7a 2>&1 | tee ../gradle.log
+          ./gradlew assembleRelease --no-daemon --stacktrace -PreactNativeArchitectures=arm64-v8a,armeabi-v7a,x86_64 2>&1 | tee ../gradle.log
           code=${PIPESTATUS[0]}
           if [ "$code" -ne 0 ]; then
             # Surface the actual error as annotations (visible on the run page without downloading logs).
@@ -105,3 +105,38 @@ jobs:
           path: dist/chowbuy-customer-${{ matrix.mode }}.apk
           if-no-files-found: error
           retention-days: 30
+
+  # Launches each built APK on an Android emulator (x86_64) and fails if the app crashes within 35 seconds.
+  smoke:
+    needs: apk
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [demo, live]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: chowbuy-customer-${{ matrix.mode }}-apk
+          path: apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: bash .github/scripts/android-smoke.sh apk/chowbuy-customer-${{ matrix.mode }}.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-${{ matrix.mode }}
+          path: smoke-out
+          if-no-files-found: ignore
+          retention-days: 7
