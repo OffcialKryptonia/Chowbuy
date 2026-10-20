@@ -13,8 +13,10 @@ PID=$(adb shell pidof "$PKG" | tr -d '\r')
 echo "pid after 35s: ${PID:-none}"
 if [ -z "$PID" ] || grep -q "FATAL EXCEPTION" smoke-out/logcat.txt; then
   echo "::error::APP CRASHED ON LAUNCH"
-  grep -n -A18 "FATAL EXCEPTION" smoke-out/logcat.txt | head -45 | while IFS= read -r l; do echo "::error::${l:0:500}"; done
-  grep -nE "ReactNativeJS|SoLoader|UnsatisfiedLink|Unable to load script|JavascriptException|Hermes|AndroidRuntime" smoke-out/logcat.txt | head -25 | while IFS= read -r l; do echo "::error::${l:0:500}"; done
+  # one compact annotation: annotations are capped at 10 per step
+  S=$(grep -A40 "FATAL EXCEPTION" smoke-out/logcat.txt | sed -E 's/^[0-9-]+ [0-9:.]+ +[0-9]+ +[0-9]+ [A-Z] //' | cut -c1-160 | tr '\n' '~' | cut -c1-3800)
+  echo "::error::${S}"
+  echo "::error::JS: $(grep -E 'ReactNativeJS' smoke-out/logcat.txt | head -8 | cut -c1-300 | tr '\n' '~')"
   exit 1
 fi
 echo "App is running after 35 seconds."
