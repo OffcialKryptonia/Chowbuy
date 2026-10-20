@@ -1,0 +1,88 @@
+name: Customer Android APK
+
+# Builds an installable test APK of customer-app/ on GitHub's runners (no Expo account needed).
+# Run it by hand: Actions, Customer Android APK, Run workflow. It also runs when customer-app/ changes on main.
+# Result: the run page, Artifacts section, chowbuy-customer-<mode>-apk.
+#   demo = built-in sample data, works offline from any backend.
+#   live = talks to the ChowBuy Supabase project (real accounts, orders, wallet).
+# The APK is signed with the standard Android debug key: fine for installing and testing, not for Google Play.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['customer-app/**', '.github/workflows/customer-android-apk.yml']
+
+concurrency:
+  group: customer-android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [demo, live]
+    defaults:
+      run:
+        working-directory: customer-app
+    env:
+      CI: '1'
+      EXPO_PUBLIC_DEMO: ${{ matrix.mode == 'demo' && '1' || '0' }}
+      # Publishable values only (safe in an app). Empty in the demo build.
+      EXPO_PUBLIC_SUPABASE_URL: ${{ matrix.mode == 'live' && 'https://nhaxcyfkbrbwlqbpizjo.supabase.co' || '' }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ matrix.mode == 'live' && 'sb_publishable_fEoqE8u49jwFe1v36CacDg_seaMgyUS' || '' }}
+      EXPO_PUBLIC_PAY_URL: https://pay.chowbuy.ng
+      # Optional repository secrets (Settings, Secrets and variables, Actions). Unset is fine.
+      GOOGLE_MAPS_ANDROID_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: customer-app/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Optional Firebase config (Android push)
+        env:
+          GSJ: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GSJ" ]; then printf '%s' "$GSJ" > google-services.json; echo "google-services.json written"; else echo "No GOOGLE_SERVICES_JSON secret: building without FCM push"; fi
+
+      - run: npm ci --legacy-peer-deps
+      - run: npx tsc --noEmit
+      - run: npm test
+
+      - name: Generate the Android project
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Build release APK
+        working-directory: customer-app/android
+        run: |
+          sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g/' gradle.properties
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+
+      - name: Name the APK
+        run: |
+          mkdir -p ../dist
+          cp android/app/build/outputs/apk/release/app-release.apk "../dist/chowbuy-customer-${{ matrix.mode }}.apk"
+          ls -la ../dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chowbuy-customer-${{ matrix.mode }}-apk
+          path: dist/chowbuy-customer-${{ matrix.mode }}.apk
+          if-no-files-found: error
+          retention-days: 30
