@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   apk:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -67,12 +67,26 @@ jobs:
       - name: Generate the Android project
         run: npx expo prebuild --platform android --no-install
 
+      - name: Check Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME" || true
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+
       - name: Build release APK
         working-directory: customer-app/android
         run: |
           sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g/' gradle.properties
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+          set +e
+          ./gradlew assembleRelease --no-daemon --stacktrace -PreactNativeArchitectures=arm64-v8a,armeabi-v7a 2>&1 | tee ../gradle.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            # Surface the actual error as annotations (visible on the run page without downloading logs).
+            grep -nE "FAILED|What went wrong|Could not|error:|Execution failed|SDK location|licen[cs]e|No space|OutOfMemory" ../gradle.log | head -25 | while IFS= read -r line; do echo "::error::${line:0:400}"; done
+            echo "::error::gradle tail: $(tail -n 25 ../gradle.log | tr '\n' '|' | cut -c1-3500)"
+          fi
+          exit $code
 
       - name: Name the APK
         run: |
