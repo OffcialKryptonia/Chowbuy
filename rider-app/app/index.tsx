@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { Check, ChevronDown } from 'lucide-react-native';
-import { MotoScene } from '@/components/art/MotoScene';
+import { RiderClip } from '@/components/art/RiderClip';
 import { Button, Txt, tap } from '@/components/ui';
 import { useTheme } from '@/lib/theme';
 
@@ -16,7 +16,7 @@ export default function Welcome() {
   const [open, setOpen] = useState(false);
   // Tablets, unfolded foldables and landscape phones get two columns; phones in portrait stack the scene above the actions.
   const wide = width >= 720;
-  const sceneW = wide ? Math.min(width * 0.46, ((height - 48) * 320) / 240, 560) : Math.min(width, 560);
+  const sceneW = wide ? Math.min(width * 0.46, ((height - 48) * 836) / 768, 560) : Math.min(width - 32, 560);
 
   const actions = (
     <View style={{ width: '100%', maxWidth: 460, gap: 16, paddingHorizontal: 20, paddingVertical: 22 }}>
@@ -43,12 +43,12 @@ export default function Welcome() {
       <SafeAreaView style={{ flex: 1 }}>
         {wide ? (
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24, paddingHorizontal: 24 }}>
-            <MotoScene width={sceneW} dark={p.scheme === 'dark'} />
+            <RiderClip width={sceneW} dark={p.scheme === 'dark'} />
             <ScrollView style={{ flexGrow: 0, maxWidth: 480 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>{actions}</ScrollView>
           </View>
         ) : (
           <ScrollView contentContainerStyle={{ flexGrow: 1, alignItems: 'center' }}>
-            <MotoScene width={sceneW} dark={p.scheme === 'dark'} flat={width <= 560} />
+            <RiderClip width={sceneW} dark={p.scheme === 'dark'} />
             {actions}
           </ScrollView>
         )}

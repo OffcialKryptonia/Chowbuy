@@ -1,10 +1,21 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type PressableProps, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, X, ThumbsUp, type LucideIcon } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { radius, fonts, useTheme } from '@/lib/theme';
 import { tap } from '@/lib/sound-effects';
+
+
+/** Pressable with a pressed look. NativeWind's JSX transform drops function-valued `style` props, which left buttons
+ *  with no background or layout, so the pressed state is tracked here and the style passed as a plain value. */
+export function Press({ style, pressedOpacity = 0.85, onPressIn, onPressOut, children, ...rest }: Omit<PressableProps, 'style' | 'children'> & { style?: StyleProp<ViewStyle>; pressedOpacity?: number; children?: React.ReactNode }) {
+  const [down, setDown] = useState(false);
+  return (
+    <Pressable {...rest} onPressIn={(e) => { setDown(true); onPressIn?.(e); }} onPressOut={(e) => { setDown(false); onPressOut?.(e); }}
+      style={[style, down ? { opacity: pressedOpacity } : null]}>{children}</Pressable>
+  );
+}
 
 type Tone = 'brand' | 'ok' | 'warn' | 'bad' | 'neutral';
 export function toneColors(p: ReturnType<typeof useTheme>, t: Tone) {
@@ -41,7 +52,7 @@ export function Screen({ children, scroll = true, pad = true, edges = ['top'], f
 export function Card({ children, style, onPress, pad = 16 }: { children: React.ReactNode; style?: StyleProp<ViewStyle>; onPress?: () => void; pad?: number }) {
   const p = useTheme();
   const base: ViewStyle = { backgroundColor: p.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: p.line, padding: pad };
-  if (onPress) return <Pressable accessibilityRole="button" onPress={() => { tap(); onPress(); }} style={({ pressed }) => [base, { opacity: pressed ? 0.85 : 1 }, style]}>{children}</Pressable>;
+  if (onPress) return <Press accessibilityRole="button" onPress={() => { tap(); onPress(); }} style={[base, style]}>{children}</Press>;
   return <View style={[base, style]}>{children}</View>;
 }
 
@@ -56,22 +67,22 @@ export function Button({ label, onPress, icon: Icon, variant = 'primary', disabl
   }[variant];
   const off = disabled || loading;
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ disabled: !!off, busy: !!loading }} disabled={off}
+    <Press accessibilityRole="button" accessibilityState={{ disabled: !!off, busy: !!loading }} disabled={off}
       onPress={() => { tap(); onPress(); }}
-      style={({ pressed }) => [{ backgroundColor: v.bg, borderColor: v.bd, borderWidth: 1, borderRadius: radius.pill, minHeight: small ? 38 : 52, paddingHorizontal: small ? 14 : 20, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, opacity: off ? 0.5 : pressed ? 0.88 : 1, alignSelf: full ? 'stretch' : 'flex-start' }]}>
+      pressedOpacity={0.88} style={{ backgroundColor: v.bg, borderColor: v.bd, borderWidth: 1, borderRadius: radius.pill, minHeight: small ? 38 : 52, paddingHorizontal: small ? 14 : 20, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, opacity: off ? 0.5 : 1, alignSelf: full ? 'stretch' : 'flex-start' }}>
       {loading ? <ActivityIndicator color={v.fg} /> : Icon ? <Icon size={small ? 16 : 18} color={tone ?? v.fg} /> : null}
       <Text style={{ color: tone ?? v.fg, fontFamily: fonts.bold, fontSize: small ? 13 : 16 }}>{label}</Text>
-    </Pressable>
+    </Press>
   );
 }
 
 export function IconButton({ icon: Icon, onPress, label, size = 44, tint, bg }: { icon: LucideIcon; onPress: () => void; label: string; size?: number; tint?: string; bg?: string }) {
   const p = useTheme();
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} hitSlop={8} onPress={() => { tap(); onPress(); }}
-      style={({ pressed }) => ({ width: size, height: size, borderRadius: size / 2, backgroundColor: bg ?? p.surface, borderWidth: 1, borderColor: p.line, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.8 : 1 })}>
+    <Press accessibilityRole="button" accessibilityLabel={label} hitSlop={8} onPress={() => { tap(); onPress(); }}
+      pressedOpacity={0.8} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: bg ?? p.surface, borderWidth: 1, borderColor: p.line, alignItems: 'center', justifyContent: 'center' }}>
       <Icon size={size * 0.46} color={tint ?? p.ink} />
-    </Pressable>
+    </Press>
   );
 }
 

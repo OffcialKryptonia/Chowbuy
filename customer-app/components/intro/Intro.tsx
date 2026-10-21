@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { SvgXml } from 'react-native-svg';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { Button, Txt } from '@/components/ui';
-import { MotoScene } from '@/components/art/MotoScene';
+import { RiderClip } from '@/components/art/RiderClip';
 import { useTheme } from '@/lib/theme';
 import { foodArt, groceryArt, introDark, introLight, pharmacyArt } from '@/lib/art/intro';
 import { tap, tick } from '@/lib/sound-effects';
@@ -74,11 +74,12 @@ export function Intro({ onDone }: { onDone: () => void }) {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
+        extraData={index}
         onMomentumScrollEnd={onEnd}
         getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
         renderItem={({ item }) => {
           const picture = item.key === 'track'
-            ? <MotoScene width={artW} dark={p.scheme === 'dark'} />
+            ? <RiderClip width={artW} dark={p.scheme === 'dark'} active={SLIDES[index]?.key === 'track'} />
             : <Float><SvgXml xml={art[item.key as 'food' | 'grocery' | 'pharmacy']} width={artW * 0.9} height={artW * 0.9 * (240 / 280)} /></Float>;
           const words = (
             <View style={{ width: '100%', maxWidth: 520, gap: 10, paddingBottom: 8 }}>

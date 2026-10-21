@@ -40,6 +40,29 @@ report_crash() {
 adb logcat -d -v threadtime > smoke-out/logcat.txt 2>&1
 if crashed; then report_crash; fi
 
+# Fails if the button labelled $1 is not drawn in the brand orange (catches white-on-white buttons that the UI tree cannot see).
+check_orange() {
+  dump; adb exec-out screencap -p > smoke-out/shot.png 2>/dev/null || true
+  python3 -m pip install -q pillow >/dev/null 2>&1
+  R=$(python3 - "$1" <<'PY'
+import re, sys, xml.etree.ElementTree as ET
+from PIL import Image
+want = sys.argv[1]
+root = ET.parse('smoke-out/ui.xml').getroot(); im = Image.open('smoke-out/shot.png').convert('RGB')
+for n in root.iter('node'):
+    if want in (n.get('text'), n.get('content-desc')):
+        a, b, c, d = map(int, re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', n.get('bounds')).groups())
+        # the button background can be larger than the text node: sample a wide band around the label
+        px = [im.getpixel((x, y)) for x in range(max(a - 120, 0), min(c + 120, im.width), 6) for y in range(max(b - 20, 0), min(d + 20, im.height), 6)]
+        o = sum(1 for r, g, bl in px if r > 225 and 70 < g < 140 and bl < 80)
+        print('%d/%d' % (o, len(px))); sys.exit(0 if o / max(len(px), 1) > 0.25 else 3)
+print('label not found'); sys.exit(2)
+PY
+  ) || fail "Button '$1' is not drawn in brand orange (orange pixels: $R)"
+  echo "button '$1' is orange ($R)"
+}
+if [ -n "$EXPECT_ORANGE" ]; then check_orange "$EXPECT_ORANGE"; fi
+
 if [ -n "$EXPECT_FIRST" ]; then
   dump; adb exec-out screencap -p > smoke-out/screen1.png 2>/dev/null || true
   find_xy "$EXPECT_FIRST" >/dev/null || fail "UI check failed: '$EXPECT_FIRST' not found on the first screen. Visible: $(grep -oE '(text|content-desc)="[^"]+"' smoke-out/ui.xml | head -25 | tr '\n' ' ' | cut -c1-900)"

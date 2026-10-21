@@ -6,6 +6,7 @@ import { Button, Page, Txt, tap } from '@/components/ui';
 import { useTheme } from '@/lib/theme';
 import { RINGS, DEFAULT_RING, isRingId, previewRing, type RingId } from '@/lib/rings';
 import { usePrefs } from '@/stores/prefs';
+import { useApply } from '@/stores/apply';
 
 /** Landing after sign-in. Live map, shifts and deliveries arrive in the next build; ring tones and the offer screen work now. */
 export default function Home() {
@@ -14,11 +15,14 @@ export default function Home() {
   const saved = usePrefs((s) => s.ring);
   const vibrate = usePrefs((s) => s.vibrate);
   const set = usePrefs((s) => s.set);
+  const type = useApply((s) => s.type);
+  const verified = useApply((s) => s.verified);
   const current: RingId = isRingId(saved) ? saved : DEFAULT_RING;
 
   return (
     <Page back={false} footer={<><Button label="Simulate an incoming order" variant="brand" onPress={() => r.push('/offer')} /><Button label="Sign out" variant="soft" onPress={() => r.replace('/')} /></>}>
       <Txt size={26} weight="display">You’re signed in</Txt>
+      {verified ? <Txt size={14} weight="bold" color={p.ok}>{'✓ Verified demo rider · ' + (type === 'fleet' ? 'Fleet (salaried)' : 'Partner (per ride)')}</Txt> : null}
       <Txt size={14} color={p.mute}>Preview build: onboarding, ring tones and the order offer screen. Shifts and deliveries are not connected to the backend yet.</Txt>
 
       <Txt size={18} weight="display" style={{ marginTop: 8 }}>New order ring</Txt>

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { fonts, radius, useResolvedScheme, useTheme } from '@/lib/theme';
-import { Txt } from '@/components/ui';
+import { Press, Txt } from '@/components/ui';
 import { usePublicConfig } from '@/hooks/usePublicConfig';
 import { useAuth } from '@/stores/auth';
 import { tap, warn } from '@/lib/sound-effects';
@@ -51,18 +51,18 @@ export function SocialButtons({ onError }: { onError: (m: string) => void }) {
   return (
     <View style={{ gap: 10 }}>
       {apple ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Continue with Apple" disabled={!!busy} onPress={() => void run('apple')}
-          style={({ pressed }) => [base, { backgroundColor: dark ? '#fff' : '#000', borderColor: dark ? '#fff' : '#000', opacity: busy ? 0.6 : pressed ? 0.88 : 1 }]}>
+        <Press accessibilityRole="button" accessibilityLabel="Continue with Apple" disabled={!!busy} onPress={() => void run('apple')}
+          pressedOpacity={0.88} style={[base, { backgroundColor: dark ? '#fff' : '#000', borderColor: dark ? '#fff' : '#000', opacity: busy ? 0.6 : 1 }]}>
           {busy === 'apple' ? <ActivityIndicator color={dark ? '#000' : '#fff'} /> : <AppleLogo size={20} color={dark ? '#000' : '#fff'} />}
           <Text style={{ color: dark ? '#000' : '#fff', fontFamily: fonts.bold, fontSize: 16 }}>Continue with Apple</Text>
-        </Pressable>
+        </Press>
       ) : null}
       {google ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Continue with Google" disabled={!!busy} onPress={() => void run('google')}
-          style={({ pressed }) => [base, { backgroundColor: '#fff', borderColor: p.line, opacity: busy ? 0.6 : pressed ? 0.88 : 1 }]}>
+        <Press accessibilityRole="button" accessibilityLabel="Continue with Google" disabled={!!busy} onPress={() => void run('google')}
+          pressedOpacity={0.88} style={[base, { backgroundColor: '#fff', borderColor: p.line, opacity: busy ? 0.6 : 1 }]}>
           {busy === 'google' ? <ActivityIndicator color="#444" /> : <GoogleLogo size={20} />}
           <Text style={{ color: '#1F1F1F', fontFamily: fonts.bold, fontSize: 16 }}>Continue with Google</Text>
-        </Pressable>
+        </Press>
       ) : null}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 4 }}>
         <View style={{ flex: 1, height: 1, backgroundColor: p.line }} /><Txt size={12} color={p.mute}>or use your email</Txt><View style={{ flex: 1, height: 1, backgroundColor: p.line }} />

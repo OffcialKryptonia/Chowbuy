@@ -8,11 +8,13 @@ interface ApplyState {
   /** Held in memory only, never written to storage. */
   password: string;
   submitted: boolean;
+  /** True for the built-in demo riders: they skip approval. */
+  verified: boolean;
   set: (p: Partial<Omit<ApplyState, 'set'>>) => void;
   reset: () => void;
 }
 
-const empty = { email: '', phone: '', type: null, vehicle: null, password: '', submitted: false } as const;
+const empty = { email: '', phone: '', type: null, vehicle: null, password: '', submitted: false, verified: false } as const;
 
 export const useApply = create<ApplyState>()(
   persist(
