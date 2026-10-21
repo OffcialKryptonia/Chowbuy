@@ -107,3 +107,24 @@ jobs:
           path: smoke-out
           if-no-files-found: ignore
           retention-days: 7
+
+  # Publishes the tested APK as a plain .apk on the "rider-builds" release, so phones can download it directly (no zip to extract).
+  publish:
+    needs: smoke
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: chowbuy-rider-apk
+          path: apk
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view rider-builds >/dev/null 2>&1 || gh release create rider-builds --prerelease --title "Rider app test builds" --notes "Latest tested Rider APK. Signed with the Android debug key (testing only)."
+          gh release upload rider-builds apk/chowbuy-rider.apk --clobber
+          gh release edit rider-builds --notes "Latest tested Rider APK, built from ${GITHUB_SHA::7}. Signed with the Android debug key (testing only)."
