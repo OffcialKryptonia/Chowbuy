@@ -9,6 +9,8 @@ interface SettingsState {
   sounds: boolean;
   haptics: boolean;
   pushOneSignal: boolean;
+  /** Notification sound id from lib/sounds.ts (a plain string here so the store has no audio dependency). */
+  notifSound: string;
   onboarded: boolean;
   set: (p: Partial<Omit<SettingsState, 'set'>>) => void;
 }
@@ -20,6 +22,7 @@ export const useSettings = create<SettingsState>()(
       sounds: true,
       haptics: true,
       pushOneSignal: false,
+      notifSound: 'chime',
       onboarded: false,
       set: (p) => set(p),
     }),

@@ -59,4 +59,13 @@ fi
 sleep 5
 adb logcat -d -v threadtime > smoke-out/logcat.txt 2>&1
 if crashed; then report_crash; fi
+# Cold-start it three more times: native start-up bugs (e.g. audio module init) often only show on a relaunch.
+for i in 1 2 3; do
+  adb shell am force-stop "$PKG"; adb logcat -c
+  adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+  sleep 15
+  adb logcat -d -v threadtime > smoke-out/logcat.txt 2>&1
+  if crashed; then echo "::error::crash on cold relaunch $i"; report_crash; fi
+  echo "cold relaunch $i ok"
+done
 echo "App is running and responsive."

@@ -1,0 +1,24 @@
+diff --git a/node_modules/expo-av/android/src/main/java/expo/modules/av/AVManager.java b/node_modules/expo-av/android/src/main/java/expo/modules/av/AVManager.java
+index 1d39b23..e30b4aa 100644
+--- a/node_modules/expo-av/android/src/main/java/expo/modules/av/AVManager.java
++++ b/node_modules/expo-av/android/src/main/java/expo/modules/av/AVManager.java
+@@ -180,10 +180,16 @@ public class AVManager implements LifecycleEventListener, AudioManager.OnAudioFo
+ 
+       uiManager.registerLifecycleEventListener(this);
+       uiManager.runOnClientCodeQueueThread(() -> {
+-        final JavaScriptContextProvider jsContextProvider = mModuleRegistry.getModule(JavaScriptContextProvider.class);
++        // ChowBuy patch: the registry, provider or call-invoker holder can be null while React Native is still starting
++        // (or shutting down). Passing null into the native method throws a NullPointerException that kills the app at launch.
++        final ModuleRegistry registry = mModuleRegistry;
++        if (registry == null) { return; }
++        final JavaScriptContextProvider jsContextProvider = registry.getModule(JavaScriptContextProvider.class);
++        if (jsContextProvider == null) { return; }
+         final long jsContextRef = jsContextProvider.getJavaScriptContextRef();
+-        if (jsContextRef != 0) {
+-          installJSIBindings(jsContextRef, jsContextProvider.getJSCallInvokerHolder());
++        final CallInvokerHolderImpl callInvokerHolder = jsContextProvider.getJSCallInvokerHolder();
++        if (jsContextRef != 0 && callInvokerHolder != null) {
++          installJSIBindings(jsContextRef, callInvokerHolder);
+         }
+       });
+     }

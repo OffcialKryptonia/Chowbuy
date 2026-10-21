@@ -84,7 +84,17 @@
       [
         "expo-notifications",
         {
-          "color": "#FF5A1F"
+          "color": "#FF5A1F",
+          "sounds": [
+            "./assets/sounds/notif_chime.wav",
+            "./assets/sounds/notif_bell.wav",
+            "./assets/sounds/notif_ding.wav",
+            "./assets/sounds/notif_marimba.wav",
+            "./assets/sounds/notif_fanfare.wav",
+            "./assets/sounds/notif_horn.wav",
+            "./assets/sounds/notif_droplet.wav",
+            "./assets/sounds/notif_pop.wav"
+          ]
         }
       ],
       [

@@ -241,12 +241,12 @@ function vRiders(){
   var rows=list.map(function(r){
     var act=r.status==='onboarding'?btn(ic('check')+'Approve','approveR',r.id,'pri'):r.status==='active'?btn(ic('ban')+'Suspend','suspendR',r.id,'danger'):btn(ic('refresh')+'Reinstate','suspendR',r.id);
     var low=r.status==='active'&&r.accept<75;
-    return '<tr><td><div class="who"><span class="tile" style="background:'+(r.type==='FLEET'?'#0F172A':'#FF8A00')+'">'+initials(r.name)+'</span><div><b>'+esc(r.name)+'</b><small>'+esc(r.id)+'</small></div></div></td><td>'+pill(r.type,r.type==='FLEET'?'info':'acc')+'</td><td>'+esc(r.city)+'</td><td class="r mono">'+num(r.trips30)+'</td><td class="r mono">'+(r.rating?r.rating.toFixed(1)+' ★':'—')+'</td><td class="r mono">'+(r.status==='onboarding'?'—':r.accept+'%')+(low?' <span class="pill bad" title="Below the 75% acceptance threshold">Low</span>':'')+'</td><td>'+pill(r.status)+'</td><td class="r">'+act+'</td></tr>'}).join('');
+    return '<tr><td><div class="who"><span class="tile" style="background:'+(r.type==='FLEET'?'#0F172A':'#FF8A00')+'">'+initials(r.name)+'</span><div><b>'+esc(r.name)+'</b><small>'+esc(r.id)+'</small></div></div></td><td>'+pill(r.type,r.type==='FLEET'?'info':'acc')+'</td><td>'+esc(r.city)+'</td><td class="r mono">'+num(r.trips30)+'</td><td class="r mono">'+(r.rating?r.rating.toFixed(1)+' ★':'—')+'</td><td class="r mono">'+(r.status==='onboarding'?'—':r.accept+'%')+(low?' <span class="pill bad" title="Below the 75% acceptance threshold">Low</span>':'')+'</td><td class="nw">'+(r.type==='FLEET'?'<b class="mono">'+ngn(riderSalary(r))+'</b><small class="muted" style="display:block">salary / month</small>':'<b>Per ride</b><small class="muted" style="display:block">'+((S.rpay.tiers&&S.rpay.tiers[r.id])||'Standard')+' tier</small>')+'</td><td>'+pill(r.status)+'</td><td class="r"><div class="rowact">'+btn(ic('wallet')+'Pay','rpRider',r.id)+act+'</div></td></tr>'}).join('');
   var cnt=function(t){return S.riders.filter(function(r){return r.type===t}).length};
   return head('Riders & fleet','Fleet riders are company-managed. Partners are independent contractors.',
     '<span class="pill info">'+cnt('FLEET')+' fleet</span><span class="pill acc">'+cnt('PARTNER')+' partner</span>')+
-  vRadar()+'<div class="card"><div class="bar">'+search('riders','Search by name or city')+tabs('rdT',[['all','All types'],['FLEET','Fleet'],['PARTNER','Partner']],1)+tabs('rdS',[['all','Any status'],['active','Active'],['onboarding','Onboarding'],['suspended','Suspended']],1)+'</div>'+
-  (list.length?'<div class="tw"><table class="t" style="min-width:56rem"><thead><tr><th>Rider</th><th>Type</th><th>City</th><th class="r">Trips (30d)</th><th class="r">Rating</th><th class="r">Acceptance</th><th>Status</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="foot"><span>Fleet earnings are salaried and kept confidential, so per-trip pay is not shown here.</span></div>':empty('bike','No riders match','Try clearing the filters.',btn('Clear filters','clear','riders','pri')))+'</div>';
+  vRadar()+riderPayPanel()+'<div class="card"><div class="bar">'+search('riders','Search by name or city')+tabs('rdT',[['all','All types'],['FLEET','Fleet'],['PARTNER','Partner']],1)+tabs('rdS',[['all','Any status'],['active','Active'],['onboarding','Onboarding'],['suspended','Suspended']],1)+'</div>'+
+  (list.length?'<div class="tw"><table class="t" style="min-width:62rem"><thead><tr><th>Rider</th><th>Type</th><th>City</th><th class="r">Trips (30d)</th><th class="r">Rating</th><th class="r">Acceptance</th><th>Pay</th><th>Status</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="foot"><span>Fleet riders are salaried and never see per-ride fares. Partner riders earn per ride.</span></div>':empty('bike','No riders match','Try clearing the filters.',btn('Clear filters','clear','riders','pri')))+'</div>';
 }
 
 function hoodCounts(){var a=0;S.locs.hoods.forEach(function(h){if(h.status==='active')a++});return a}
@@ -1503,6 +1503,181 @@ document.addEventListener('change',function(e){
   var s=t.getAttribute&&t.getAttribute('data-file');if(s){onFile(s,t.files&&t.files[0],t)}
 });
 document.addEventListener('keydown',function(e){var t=e.target;if((e.key==='Enter'||e.key===' ')&&t.getAttribute&&t.getAttribute('role')==='button'&&t.tagName!=='BUTTON'&&t.getAttribute('data-act')){e.preventDefault();t.dispatchEvent(new MouseEvent('click',{bubbles:true}))}if(e.key==='Escape'){if($('#mwrap').classList.contains('show'))closeM();else{closeSide();$('#pop').classList.remove('show')}}});
+
+/* ---------- customers, master points system, rider pay ---------- */
+var PTDEF={enabled:true,earnPer:100,pointValue:1,minRedeem:500,stepRedeem:100,reviewPoints:50,signupBonus:0,
+  tiers:[{id:'bronze',name:'Bronze',min:0,mult:1},{id:'silver',name:'Silver',min:5000,mult:1.25},{id:'gold',name:'Gold',min:20000,mult:1.5}]};
+var RPDEF={commission:{Standard:15,Silver:12,Gold:10},fleetSalary:120000,payDay:28,sal:{}};
+function genCustomers(){
+  var a=7,R=function(){a=(a*1103515245+12345)&0x7fffffff;return a/0x7fffffff},
+   fn=['Ada','Tunde','Ngozi','Ibrahim','Funke','Chidi','Amina','Emeka','Bisi','Yusuf','Kemi','Obinna','Zainab','Seun','Halima','Dayo','Chiamaka','Musa','Tolu','Efe','Ifeoma','Segun','Hadiza','Uche'],
+   ln=['Okafor','Balogun','Adeyemi','Bello','Nwosu','Eze','Abubakar','Ogunleye','Mohammed','Obi','Ajayi','Danjuma'],out=[];
+  for(var i=0;i<fn.length;i++){var orders=Math.floor(R()*42),spent=orders*Math.round(6000+R()*9000),life=Math.floor(spent/100*(orders>25?1.4:1)),used=Math.floor(life*R()*.5),pts=life-used,nm=fn[i]+' '+ln[i%ln.length];
+    out.push({id:'C'+(1000+i),name:nm,email:(fn[i]+'.'+ln[i%ln.length]).toLowerCase()+'@mail.ng',phone:'+23480'+(31000000+Math.floor(R()*8999999)),balance:Math.round(R()*30)*1000,points:pts,lifetime:life,orders:orders,spent:spent,joined:Date.now()-Math.floor(R()*400)*864e5,wtx:[],ptx:[]})}
+  return out;
+}
+function ensureCust(){
+  if(!S.cust)S.cust=genCustomers();
+  if(!S.points)S.points=clone(PTDEF);
+  if(!S.rpay)S.rpay=clone(RPDEF);
+  if(!S.rpay.sal)S.rpay.sal={};
+}
+ensureCust();
+U.cust={live:null,load:false,err:'',sel:null};U.ptd=null;U.rpd=null;U.pcalc={gmv:486240000,comm:9,redeem:80};
+function ptc(){return U.ptd||S.points}
+function ptDirty(){return !!U.ptd&&JSON.stringify(U.ptd)!==JSON.stringify(S.points)}
+function tierOf(life){var t=S.points.tiers.slice().sort(function(a,b){return a.min-b.min}),c=t[0];t.forEach(function(x){if(life>=x.min)c=x});return c}
+function custRows(){
+  var q=(U.q.customers||'').trim().toLowerCase();
+  var rows=beOn()&&U.cust.live?U.cust.live.rows.map(function(r){return{id:r.id,name:r.name,email:r.email||'',phone:r.phone||'',balance:r.balance,points:r.points,lifetime:r.lifetime,orders:Number(r.orders),spent:Number(r.spent),joined:Date.parse(r.joined)}}):S.cust;
+  return rows.filter(function(c){return !q||(c.name+' '+c.email+' '+c.phone).toLowerCase().indexOf(q)>-1});
+}
+function custLoad(){
+  if(!beOn()||U.cust.load)return;U.cust.load=true;U.cust.err='';
+  beReq('/rest/v1/rpc/admin_customers','POST',{p_search:'',p_limit:200,p_offset:0}).then(function(j){U.cust.live=j;U.cust.load=false;refresh()},function(e){U.cust.err=e.message;U.cust.load=false;U.cust.live=U.cust.live||{rows:[],stats:{},total:0};refresh()});
+}
+function vCustomers(){
+  if(beOn()&&!U.cust.live&&!U.cust.load)custLoad();
+  var live=beOn()&&U.cust.live,all=custRows(),f=T('cuF','all');
+  var list=all.filter(function(c){return f==='all'||(f==='bal'&&c.balance>0)||(f==='pts'&&c.points>0)||(f==='top'&&tierOf(c.lifetime).min>0)});
+  var st=live&&U.cust.live.stats&&U.cust.live.stats.customers!=null?U.cust.live.stats:{customers:all.length,walletTotal:all.reduce(function(s,c){return s+c.balance},0),pointsOutstanding:all.reduce(function(s,c){return s+c.points},0)};
+  var pv=S.points.pointValue;
+  var rows=list.map(function(c){var t=tierOf(c.lifetime);
+    return '<tr><td><div class="who"><span class="tile" style="background:#0F172A">'+esc(initials(c.name))+'</span><div><b>'+esc(c.name)+'</b><small>'+esc(c.email||c.id)+'</small></div></div></td><td class="mono nw">'+esc(c.phone||'—')+'</td><td class="r mono"><b>'+ngn(c.balance)+'</b></td><td class="r mono">'+num(c.points)+'<small class="muted" style="display:block">worth '+ngn(c.points*pv)+'</small></td><td>'+pill(t.name,t.min>=20000?'acc':t.min>0?'info':'')+'</td><td class="r mono">'+num(c.orders)+'</td><td class="r mono">'+ngn(c.spent)+'</td><td class="r"><div class="rowact">'+btn(ic('wallet')+'Manage','custOpen',c.id,'pri')+'</div></td></tr>'}).join('');
+  var banner=beOn()?(U.cust.err?'<div class="card pad" style="border-color:var(--bad)"><b>Could not load live customers.</b> <span class="muted">'+esc(U.cust.err)+'. Apply the 20261021000001 migration to your Supabase project, then reload.</span></div>':'<span class="pill ok">'+ic('checkc')+'Live data</span>'):'<span class="pill" title="Connect the backend in Messaging to manage real customers.">'+ic('alert')+'Demo data</span>';
+  return head('Customers','Master control of customer wallets and loyalty points. Every change needs a reason and is logged.',banner+btn(ic('down')+'Export CSV','custCsv',null,''))+
+  '<div class="grid g4">'+kpi('Customers',num(st.customers),'','users','n')+kpi('Wallet balances held',ngn(st.walletTotal),'','wallet','g')+kpi('Points outstanding',num(st.pointsOutstanding),'','star')+kpi('Points liability',ngn(st.pointsOutstanding*pv),'at '+ngn(pv)+' per point','trend','n')+'</div>'+
+  '<div class="card"><div class="bar">'+search('customers','Search name, email or phone')+tabs('cuF',[['all','All'],['bal','With balance'],['pts','With points'],['top','Silver and Gold']],1)+'</div>'+
+  (list.length?'<div class="tw"><table class="t" style="min-width:60rem"><thead><tr><th>Customer</th><th>Phone</th><th class="r">Wallet</th><th class="r">Points</th><th>Tier</th><th class="r">Orders</th><th class="r">Spent</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>':(beOn()&&U.cust.load?empty('users','Loading customers','Fetching from your project…'):empty('users','No customers match','Try another search or filter.',btn('Clear filters','clear','customers','pri'))))+'</div>';
+}
+function findCust(id){return custRows().filter(function(c){return c.id===id})[0]}
+function patchCust(id,fn){
+  var c=S.cust.filter(function(x){return x.id===id})[0];if(c)fn(c);
+  if(U.cust.live){var r=U.cust.live.rows.filter(function(x){return x.id===id})[0];if(r)fn(r)}
+}
+function custHead(c){var t=tierOf(c.lifetime);return '<h3>'+esc(c.name)+'</h3><p class="muted">'+esc(c.email||'')+' · '+esc(c.phone||'')+'</p><div class="kv"><span>Wallet balance</span><b class="mono">'+ngn(c.balance)+'</b><span>Points</span><b class="mono">'+num(c.points)+' (worth '+ngn(c.points*S.points.pointValue)+')</b><span>Tier</span><b>'+esc(t.name)+' · '+t.mult+'x earn</b><span>Lifetime points</span><b class="mono">'+num(c.lifetime)+'</b></div>'}
+function walletForm(id,dir){
+  var c=findCust(id);if(!c)return;var up=dir===1;
+  openM(custHead(c)+'<hr style="border:0;border-top:1px solid var(--line);margin:1rem 0"><h3 style="font-size:1rem">'+(up?'Top up wallet':'Deduct from wallet')+'</h3>'+inp('wa','Amount (₦)','','inputmode="numeric" placeholder="e.g. 2000"')+inp('wr','Reason (shown to the customer)','','maxlength="80" placeholder="'+(up?'Refund for cold food':'Chargeback / correction')+'"')+(up?'':'<small class="muted">The balance cannot go below ₦0.</small>')+'<label class="acts" style="gap:.6rem;flex-wrap:nowrap;margin-top:.6rem"><input type="checkbox" name="big" value="1" style="width:auto"> I confirm amounts of ₦100,000 or more</label><div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn '+(up?'pri':'danger')+'">'+(up?'Top up':'Deduct')+'</button></div>',function(v){
+    var amt=Math.round(Number(String(v.wa).replace(/[,₦\s]/g,'')));
+    if(!(amt>=1&&amt<=1000000))return 'Enter an amount from ₦1 to ₦1,000,000.';
+    if(String(v.wr).trim().length<3)return 'Add a short reason. The customer sees it in their wallet history.';
+    if(amt>=100000&&!document.querySelector('#mf [name=big]').checked)return 'Tick the box to confirm this large amount.';
+    if(!up&&amt>c.balance)return 'The balance is only '+ngn(c.balance)+'.';
+    var why=String(v.wr).trim(),done=function(bal){
+      patchCust(id,function(x){x.balance=bal;if(x.wtx)x.wtx.unshift({t:(up?'ChowBuy top-up: ':'ChowBuy adjustment: ')+why,a:amt,d:dir,ts:Date.now()})});
+      log((up?'Topped up ':'Deducted ')+ngn(amt)+(up?' to ':' from ')+c.name+'’s wallet: '+why,'money');audit((up?'Wallet top-up ':'Wallet deduction ')+ngn(amt)+' · '+c.name);save();refresh();toast((up?'Added ':'Deducted ')+ngn(amt)+'. New balance '+ngn(bal)+'.')};
+    if(beOn()){beReq('/rest/v1/rpc/admin_wallet_adjust','POST',{p_user:id,p_amount:amt,p_dir:dir,p_reason:why}).then(function(b){done(b)},function(e){toast(e.message,'err')});return}
+    done(c.balance+dir*amt);
+  });
+}
+function pointsForm(id){
+  var c=findCust(id);if(!c)return;
+  openM(custHead(c)+'<hr style="border:0;border-top:1px solid var(--line);margin:1rem 0"><h3 style="font-size:1rem">Adjust points</h3><p class="muted">Use a positive number to give points and a negative number to remove them. Gifted points count toward the tier.</p>'+inp('pd','Points (+ or −)','','inputmode="numeric" placeholder="e.g. 500 or -200"')+inp('pr','Reason','','maxlength="100" placeholder="Goodwill gift"')+'<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Apply</button></div>',function(v){
+    var d=Math.round(Number(String(v.pd).replace(/[,\s]/g,'')));
+    if(!d||Math.abs(d)>1000000||isNaN(d))return 'Enter a points amount (not zero).';
+    if(String(v.pr).trim().length<3)return 'Add a short reason.';
+    if(c.points+d<0)return 'This would take the balance below zero (they have '+num(c.points)+').';
+    var why=String(v.pr).trim(),done=function(pts){patchCust(id,function(x){x.points=pts;if(d>0)x.lifetime+=d;if(x.ptx)x.ptx.unshift({t:'ChowBuy: '+why,a:d,ts:Date.now()})});
+      log((d>0?'Gave ':'Removed ')+num(Math.abs(d))+' points '+(d>0?'to ':'from ')+c.name+': '+why,'money');audit('Points '+(d>0?'+':'')+d+' · '+c.name);save();refresh();toast('Points updated. Balance '+num(pts)+'.')};
+    if(beOn()){beReq('/rest/v1/rpc/admin_points_adjust','POST',{p_user:id,p_delta:d,p_reason:why}).then(function(p){done(p)},function(e){toast(e.message,'err')});return}
+    done(c.points+d);
+  });
+}
+function histView(id){
+  var c=findCust(id);if(!c)return;
+  var show=function(w,p){
+    var wr=(w||[]).map(function(x){return '<tr><td>'+esc(x.t||x.title)+'</td><td class="r mono" style="color:'+((x.d||x.dir)===1?'var(--ok)':'var(--bad)')+'">'+((x.d||x.dir)===1?'+':'−')+ngn(x.a||x.amount)+'</td><td class="nw">'+fdt(x.ts||Date.parse(x.created_at))+'</td></tr>'}).join('')||'<tr><td colspan="3" class="muted">No wallet activity yet.</td></tr>';
+    var pr=(p||[]).map(function(x){return '<tr><td>'+esc(x.t||x.note)+'</td><td class="r mono">'+((x.a||x.delta)>0?'+':'')+num(x.a||x.delta)+'</td><td class="nw">'+fdt(x.ts||Date.parse(x.created_at))+'</td></tr>'}).join('')||'<tr><td colspan="3" class="muted">No points activity yet.</td></tr>';
+    openM(custHead(c)+'<h3 style="font-size:1rem;margin-top:1rem">Wallet history</h3><div class="tw" style="max-height:12rem;overflow:auto"><table class="t" style="min-width:0"><tbody>'+wr+'</tbody></table></div><h3 style="font-size:1rem;margin-top:1rem">Points history</h3><div class="tw" style="max-height:12rem;overflow:auto"><table class="t" style="min-width:0"><tbody>'+pr+'</tbody></table></div><div class="ft"><button type="submit" class="btn pri">Done</button></div>',function(){});
+  };
+  if(beOn()){beReq('/rest/v1/rpc/admin_customer_ledger','POST',{p_user:id}).then(function(j){show(j.wallet,j.points)},function(e){toast(e.message,'err')});return}
+  show(c.wtx,c.ptx);
+}
+/* ---- master points system ---- */
+function pointsCost(D,g){
+  var tiers=S.cust.length?S.cust:[],avg=1.1,earnRate=D.pointValue/Math.max(D.earnPer,1);
+  var accrued=g.gmv*earnRate*avg,cost=accrued*(g.redeem/100),commission=g.gmv*g.comm/100;
+  return{pctGmv:cost/Math.max(g.gmv,1)*100,pctComm:commission?cost/commission*100:0,cost:cost,accrued:accrued};
+}
+function vPoints(){
+  var D=ptc(),dirty=ptDirty(),g=U.pcalc,k=pointsCost(D,g),pv=D.pointValue;
+  var verdict=k.pctComm<=12?['ok','Sustainable','The programme costs about '+k.pctComm.toFixed(1)+'% of the commission you earn. Good headroom for promos.']:k.pctComm<=25?['info','Watch closely','Rewards take '+k.pctComm.toFixed(1)+'% of commission. Fine for a growth push, tight for the long run.']:['bad','Too generous','Rewards would take '+k.pctComm.toFixed(1)+'% of commission. Raise ₦ per point or lower the point value.'];
+  var f=function(id,l,key,suf,hint){return '<div class="f"><label for="pt-'+id+'">'+l+'</label><input id="pt-'+id+'" data-fid="pt-'+id+'" data-in="pt:'+key+'" inputmode="decimal" value="'+esc(D[key])+'">'+(hint?'<small>'+hint+'</small>':'')+'</div>'};
+  var tr=D.tiers.map(function(t,i){return '<tr><td><b>'+esc(t.name)+'</b></td><td><input aria-label="'+esc(t.name)+' threshold" data-fid="pt-tm'+i+'" data-in="ptt:'+i+':min" inputmode="numeric" value="'+esc(t.min)+'" style="max-width:9rem"'+(i===0?' disabled':'')+'></td><td><input aria-label="'+esc(t.name)+' multiplier" data-fid="pt-tx'+i+'" data-in="ptt:'+i+':mult" inputmode="decimal" value="'+esc(t.mult)+'" style="max-width:6rem"></td><td class="muted">≈ '+ngn(t.min*D.earnPer)+' lifetime food spend at the base rate</td></tr>'}).join('');
+  var out=S.cust.reduce(function(s,c){return s+c.points},0);
+  var presets=[['lean','Lean','0.5% back',200],['bal','Balanced','1% back (recommended)',100],['gen','Generous','2% back',50]];
+  return head('Points system','One programme for every customer: how points are earned, what they are worth, and what they cost you.',(dirty?'<span class="badge-un">Unsaved changes</span>'+btn('Discard','ptDiscard',null,''):'')+btn(ic('check')+'Save points settings','ptSave',null,'pri'))+
+  '<div class="grid g4">'+kpi('Earn rate','1 pt / '+ngn(D.earnPer),'≈ '+(pv/Math.max(D.earnPer,1)*100).toFixed(2)+'% back','star','g')+kpi('1 point is worth',ngn(pv),'when redeemed to wallet','wallet')+kpi('Points outstanding',num(out),'','users','n')+kpi('Liability',ngn(out*pv),'if all redeemed','trend','n')+'</div>'+
+  '<div class="grid g2" style="align-items:start"><div class="card pad"><div class="trow"><div><b>Points programme</b><small>Turn off to stop earning and redeeming everywhere.</small></div>'+sw(D.enabled,'ptOn','x','Points programme')+'</div>'+
+  '<h3 style="margin-top:1.2rem">Earning and value</h3><div class="frow" style="margin-top:.8rem">'+f('ep','₦ spent per 1 point','earnPer','','Food value only, delivery and fees excluded.')+f('pv','Value of 1 point (₦)','pointValue','','Applied when points are redeemed to the wallet.')+f('rp','Review bonus (points)','reviewPoints','','Once per delivered order.')+f('sb','Sign-up bonus (points)','signupBonus','','Not awarded automatically yet.')+f('mr','Minimum to redeem','minRedeem','','Stops tiny redemptions.')+f('sr','Redeem in steps of','stepRedeem','','')+'</div>'+
+  '<h3 style="margin-top:1.2rem">Quick presets</h3><div class="chips" style="margin-top:.6rem">'+presets.map(function(p){return '<button type="button" data-act="ptPreset" data-id="'+p[0]+'" aria-pressed="'+(D.earnPer===p[3]&&D.pointValue===1)+'">'+p[1]+' · '+p[2]+'</button>'}).join('')+'</div></div>'+
+  '<div style="display:grid;gap:1rem;align-content:start"><div class="card pad"><h3>Value calculator</h3><p class="sub">Estimate what the rewards cost. Points earned are only a cost when customers redeem them.</p><div class="frow" style="margin-top:.8rem">'+
+  '<div class="f"><label for="pc-g">Monthly marketplace volume (₦)</label><input id="pc-g" data-fid="pc-g" data-in="pc:gmv" inputmode="numeric" value="'+esc(g.gmv)+'"></div><div class="f"><label for="pc-c">Average commission (%)</label><input id="pc-c" data-fid="pc-c" data-in="pc:comm" inputmode="decimal" value="'+esc(g.comm)+'"></div><div class="f"><label for="pc-r">Share of points redeemed (%)</label><input id="pc-r" data-fid="pc-r" data-in="pc:redeem" inputmode="decimal" value="'+esc(g.redeem)+'"><small>Many points go unused. 70 to 90% is a safe planning figure.</small></div></div>'+
+  '<div class="kv" style="margin-top:1rem"><span>Points issued per month</span><b class="mono">'+num(k.accrued/Math.max(pv,.0001))+'</b><span>Estimated cost per month</span><b class="mono">'+ngn(k.cost)+'</b><span>As % of volume</span><b class="mono">'+k.pctGmv.toFixed(2)+'%</b><span>As % of commission</span><b class="mono">'+k.pctComm.toFixed(1)+'%</b></div><div style="margin-top:.8rem"><span class="pill '+verdict[0]+'">'+verdict[1]+'</span> <small class="muted">'+verdict[2]+'</small></div></div>'+
+  '<div class="card pad"><h3>Why these defaults</h3><ul class="muted" style="margin:.6rem 0 0 1.1rem;display:grid;gap:.4rem"><li>1 point = ₦1 keeps it easy to understand. Customers see ₦ value, not a puzzle.</li><li>1 point per ₦100 returns about 1% of food spend, a tenth of a typical 10 to 15% commission.</li><li>Redeeming from 500 points (₦500) avoids many tiny wallet credits.</li><li>Silver and Gold earn faster, which rewards your best customers without extra spend per order up front.</li><li>Review points (50 = ₦50) pay for feedback that improves merchant and rider ratings.</li></ul></div></div></div>'+
+  '<div class="card" style="margin-top:1rem"><div class="bar"><div style="margin-right:auto"><h3>Tiers</h3><p class="sub">Tiers follow lifetime points earned. Redeeming does not lower a tier.</p></div></div><div class="tw"><table class="t" style="min-width:36rem"><thead><tr><th>Tier</th><th>Lifetime points from</th><th>Earn multiplier</th><th>Roughly</th></tr></thead><tbody>'+tr+'</tbody></table></div></div>';
+}
+/* ---- rider pay: Fleet = salary, Partner = per ride ---- */
+function rpd(){if(!U.rpd)U.rpd=clone(S.rpay);return U.rpd}
+function rpDirty(){return !!U.rpd&&JSON.stringify(U.rpd)!==JSON.stringify(S.rpay)}
+function riderSalary(r){var s=S.rpay.sal[r.id];return s!=null?s:S.rpay.fleetSalary}
+function riderPayPanel(){
+  var D=U.rpd||S.rpay,dirty=rpDirty(),fl=S.riders.filter(function(r){return r.type==='FLEET'&&r.status==='active'}),pa=S.riders.filter(function(r){return r.type==='PARTNER'&&r.status==='active'});
+  var payroll=fl.reduce(function(s,r){return s+riderSalary(r)},0),cm=D.commission;
+  var inpf=function(id,l,path,val,suf){return '<div class="f"><label for="'+id+'">'+l+'</label><input id="'+id+'" data-fid="'+id+'" data-in="rp:'+path+'" inputmode="numeric" value="'+esc(val)+'"></div>'};
+  var ex=Math.round(2400*(100-cm.Standard)/100);
+  return '<div class="grid g2" style="align-items:start;margin-bottom:1rem"><div class="card pad"><div class="acts" style="justify-content:space-between"><h3>Fleet riders · salary</h3>'+tbadge('FLEET')+'</div><p class="sub">Company riders are paid a fixed monthly salary. They never see per-ride fares. Customer tips are always theirs.</p><div class="frow" style="margin-top:.8rem">'+inpf('rp-s','Default monthly salary (₦)','fleetSalary',D.fleetSalary)+inpf('rp-d','Pay day (day of month)','payDay',D.payDay)+'</div><div class="kv" style="margin-top:1rem"><span>Active fleet riders</span><b class="mono">'+fl.length+'</b><span>Monthly payroll</span><b class="mono">'+ngn(payroll)+'</b><span>Next pay day</span><b>'+D.payDay+'th of the month</b></div><p class="muted" style="margin-top:.6rem">Set a different salary for one rider with “Pay” in the table below.</p></div>'+
+  '<div class="card pad"><div class="acts" style="justify-content:space-between"><h3>Partner riders · per ride</h3>'+tbadge('PARTNER')+'</div><p class="sub">Independent riders earn on every delivery: the delivery fare minus ChowBuy’s commission for their tier, plus 100% of tips.</p><div class="frow" style="margin-top:.8rem">'+['Standard','Silver','Gold'].map(function(t){return inpf('rp-'+t,t+' commission (%)','commission.'+t,cm[t])}).join('')+'</div><div class="kv" style="margin-top:1rem"><span>Active partner riders</span><b class="mono">'+pa.length+'</b><span>Example: ₦2,400 fare, Standard</span><b class="mono">rider keeps '+ngn(ex)+'</b></div></div></div>'+
+  '<div class="acts" style="margin-bottom:1rem;justify-content:flex-end">'+(dirty?'<span class="badge-un">Unsaved changes</span>'+btn('Discard','rpDiscard',null,''):'')+btn(ic('check')+'Save rider pay','rpSave',null,'pri')+'</div>';
+}
+Object.assign(INP,{
+ pt:function(k,v){var D=ptc();if(!U.ptd)U.ptd=clone(S.points);U.ptd[k]=Number(String(v).replace(/[^\d.]/g,''))||0;refresh()},
+ ptt:function(k,v){var p=k.split(':');if(!U.ptd)U.ptd=clone(S.points);U.ptd.tiers[Number(p[0])][p[1]]=Number(String(v).replace(/[^\d.]/g,''))||0;refresh()},
+ pc:function(k,v){U.pcalc[k]=Number(String(v).replace(/[^\d.]/g,''))||0;refresh()},
+ rp:function(k,v){var D=rpd(),n=Number(String(v).replace(/[^\d.]/g,''))||0;setPath(D,k,n);refresh()}
+});
+function ptValid(D){
+  if(D.earnPer<1)return '₦ per point must be at least 1.';if(D.pointValue<=0||D.pointValue>10)return 'Point value must be above ₦0 and at most ₦10.';
+  if(D.minRedeem<1||D.stepRedeem<1)return 'Redemption minimum and step must be at least 1.';
+  if(D.pointValue/D.earnPer>0.05)return 'That returns more than 5% of spend. Raise ₦ per point or lower the point value.';
+  for(var i=1;i<D.tiers.length;i++)if(D.tiers[i].min<=D.tiers[i-1].min)return 'Each tier must start above the previous one.';
+  for(var j=0;j<D.tiers.length;j++)if(D.tiers[j].mult<1||D.tiers[j].mult>3)return 'Multipliers must be between 1 and 3.';
+  return '';
+}
+function beUpsert(key,value){
+  return fetch(BE.url.replace(/\/+$/,'')+'/rest/v1/platform_settings?on_conflict=key',{method:'POST',headers:{apikey:BE.anon,Authorization:'Bearer '+BE.tok,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({key:key,value:value,updated_at:new Date().toISOString()})}).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error('Could not save to your project ('+r.status+'). '+t.slice(0,120))})});
+}
+Object.assign(A,{
+ custOpen:function(el){var id=el.getAttribute('data-id'),c=findCust(id);if(!c)return;
+   openM(custHead(c)+'<div class="acts" style="margin-top:1rem;gap:.6rem"><button type="button" class="btn pri" data-act="custTop" data-id="'+id+'">'+ic('plus')+'Top up wallet</button><button type="button" class="btn danger" data-act="custDed" data-id="'+id+'">'+ic('down')+'Deduct wallet</button><button type="button" class="btn" data-act="custPts" data-id="'+id+'">'+ic('star')+'Adjust points</button><button type="button" class="btn" data-act="custHist" data-id="'+id+'">'+ic('list')+'History</button></div><div class="ft"><button type="submit" class="btn">Close</button></div>',function(){})},
+ custTop:function(el){closeM();walletForm(el.getAttribute('data-id'),1)},
+ custDed:function(el){closeM();walletForm(el.getAttribute('data-id'),-1)},
+ custPts:function(el){closeM();pointsForm(el.getAttribute('data-id'))},
+ custHist:function(el){closeM();histView(el.getAttribute('data-id'))},
+ custCsv:function(){var r=custRows();csv('chowbuy-customers.csv',[['ID','Name','Email','Phone','Wallet NGN','Points','Lifetime points','Tier','Orders','Spent NGN']].concat(r.map(function(c){return[c.id,c.name,c.email,c.phone,c.balance,c.points,c.lifetime,tierOf(c.lifetime).name,c.orders,c.spent]})));toast('Exported '+r.length+' customers to CSV')},
+ ptOn:function(){var D=ptc();if(!U.ptd)U.ptd=clone(S.points);U.ptd.enabled=!U.ptd.enabled;refresh()},
+ ptPreset:function(el){if(!U.ptd)U.ptd=clone(S.points);U.ptd.earnPer={lean:200,bal:100,gen:50}[el.getAttribute('data-id')];U.ptd.pointValue=1;refresh()},
+ ptDiscard:function(){U.ptd=null;refresh();toast('Changes discarded.')},
+ ptSave:function(){var D=ptc(),bad=ptValid(D);if(bad){toast(bad,'err');return}
+   var done=function(){S.points=clone(D);U.ptd=null;log('Points programme updated: 1 pt per '+ngn(D.earnPer)+', 1 pt = '+ngn(D.pointValue),'settings');audit('Points settings saved');save();refresh();toast('Points settings saved'+(beOn()?' to your project.':' (demo, this browser only).'))};
+   if(beOn()){beUpsert('points',D).then(done,function(e){toast(e.message,'err')});return}done()},
+ rpDiscard:function(){U.rpd=null;refresh();toast('Changes discarded.')},
+ rpSave:function(){var D=rpd();
+   if(D.fleetSalary<1)return toast('Set a default fleet salary.','err');if(D.payDay<1||D.payDay>28)return toast('Pay day must be between 1 and 28.','err');
+   for(var t in D.commission)if(D.commission[t]<0||D.commission[t]>40)return toast('Commission must be between 0 and 40%.','err');
+   var done=function(){S.rpay=clone(D);U.rpd=null;log('Rider pay updated','settings');audit('Rider pay settings saved');save();refresh();toast('Rider pay saved'+(beOn()?'.':' (demo, this browser only).'))};
+   if(beOn()){beUpsert('rider_pay',{commission:D.commission,fleetSalary:D.fleetSalary,payDay:D.payDay}).then(done,function(e){toast(e.message,'err')});return}done()},
+ rpRider:function(el){var r=S.riders.filter(function(x){return x.id===el.getAttribute('data-id')})[0];if(!r)return;var fl=r.type==='FLEET';
+   openM('<h3>Pay for '+esc(r.name)+'</h3><p class="muted">'+(fl?'Fleet rider: fixed monthly salary. Per-ride fares are not shown to them.':'Partner rider: paid per ride (fare minus commission) plus 100% of tips.')+'</p>'+(fl?inp('sal','Monthly salary (₦)',riderSalary(r),'inputmode="numeric"'):sel('tier','Commission tier',[['Standard','Standard · '+S.rpay.commission.Standard+'%'],['Silver','Silver · '+S.rpay.commission.Silver+'%'],['Gold','Gold · '+S.rpay.commission.Gold+'%']],(S.rpay.tiers&&S.rpay.tiers[r.id])||'Standard'))+'<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Save</button></div>',function(v){
+     if(fl){var n=Math.round(Number(String(v.sal).replace(/[,₦\s]/g,'')));if(!(n>=1&&n<=5000000))return 'Enter a salary from ₦1 to ₦5,000,000.';S.rpay.sal[r.id]=n;log(r.name+' salary set to '+ngn(n)+' per month','settings')}
+     else{if(!S.rpay.tiers)S.rpay.tiers={};S.rpay.tiers[r.id]=v.tier;log(r.name+' moved to '+v.tier+' commission tier','settings')}
+     audit('Rider pay changed · '+r.name);save();refresh();toast('Saved for '+r.name+'.')})}
+});
+Object.assign(IC,{star:IC.star||'<path d="m12 2 3 7 7 .6-5.300 4.700 1.700 7.200L12 17.800 5.600 21.500l1.700-7.200L2 9.600 9 9z"/>'});
+ROUTES.splice(ROUTES.map(function(r){return r.p}).indexOf('riders'),0,{p:'customers',n:'Customers',i:'users',g:'Marketplace',v:vCustomers});
+ROUTES.splice(ROUTES.map(function(r){return r.p}).indexOf('wallet-transfers')+1,0,{p:'points',n:'Points',i:'star',g:'Money',v:vPoints});
+buildNav();
 
 /* drawer */
 function openSide(){$('#side').classList.add('open');$('#scrim').classList.add('show');$('#burger').setAttribute('aria-expanded','true')}

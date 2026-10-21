@@ -4,6 +4,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { ArrowDownLeft, ArrowUpRight, Award, HeadphonesIcon, MapPin, Monitor, Moon, Plus, Send, Sun, type LucideIcon } from 'lucide-react-native';
 import { Avatar, Button, Card, Field, Header, Row, Screen, SectionTitle, Sheet, Txt, useToast } from '@/components/ui';
 import { AccountPrefs } from '@/components/profile/AccountPrefs';
+import { SoundPicker } from '@/components/profile/SoundPicker';
 import { AddressPicker } from '@/components/discovery/AddressPicker';
 import { useSession } from '@/stores/session';
 import { useSettings } from '@/stores/settings';
@@ -130,6 +131,7 @@ export default function Profile() {
             <Switch value={st[k]} onValueChange={(v) => st.set({ [k]: v })} trackColor={{ true: p.brand, false: p.line }} accessibilityLabel={label} />
           </Row>
         ))}
+        <SoundPicker />
       </Card>
 
       {!DEMO ? <AccountPrefs /> : null}

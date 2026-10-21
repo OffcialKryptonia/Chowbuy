@@ -71,7 +71,7 @@ Deno.serve(handle(async (req) => {
   } else {
     const { data: set } = await db.from('platform_settings').select('value').eq('key', 'public').maybeSingle();
     const provider = set?.value?.push?.provider === 'onesignal' ? 'onesignal' : 'expo';
-    const tokens = rows.map((r) => ({ id: r.id, token: r.push_token?.token as string | undefined })).filter((t) => t.token);
+    const tokens = rows.map((r) => ({ id: r.id, token: r.push_token?.token as string | undefined, sound: (r.push_token?.sound as string | undefined) ?? 'chime' })).filter((t) => t.token);
     if (provider === 'onesignal') {
       const key = await secret('onesignal_rest_key'), appId = set?.value?.push?.onesignalAppId;
       if (!key || !appId) throw new HttpError(400, 'OneSignal is selected but the App ID or REST key is missing in Admin, Settings, Realtime & push.');
@@ -83,7 +83,7 @@ Deno.serve(handle(async (req) => {
       for (let i = 0; i < tokens.length; i += 100) {
         const chunk = tokens.slice(i, i + 100);
         const r = await fetch('https://exp.host/--/api/v2/push/send', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(access ? { Authorization: `Bearer ${access}` } : {}) },
-          body: JSON.stringify(chunk.map((t) => ({ to: t.token, title: subject, body, sound: 'default', channelId: 'orders', data: { type: 'promo' } }))) });
+          body: JSON.stringify(chunk.map((t) => ({ to: t.token, title: subject, body, sound: t.sound === 'default' ? 'default' : `notif_${t.sound}.wav`, channelId: `orders_${t.sound}`, data: { type: 'promo' } }))) });
         const j = await r.json().catch(() => ({}));
         if (!r.ok || !Array.isArray(j.data)) { failed += chunk.length; if (errors.length < 3) errors.push('Expo ' + r.status); continue; }
         j.data.forEach((t: any, k: number) => {

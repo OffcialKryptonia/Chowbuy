@@ -3,6 +3,8 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { supabase } from './supabase';
 import { DEMO } from './config';
+import { applyNotificationSound, channelFor, DEFAULT_SOUND, isSoundId } from './sounds';
+import { useSettings } from '@/stores/settings';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false }),
@@ -26,12 +28,12 @@ export async function registerPush(opts: { oneSignalAppId?: string; useOneSignal
   }
   const perm = await Notifications.requestPermissionsAsync();
   if (!perm.granted) return { provider: 'none' as const };
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('orders', { name: 'Order updates', importance: Notifications.AndroidImportance.HIGH, lightColor: '#FF5A1F' });
-  }
+  const chosen = useSettings.getState().notifSound;
+  const sound = isSoundId(chosen) ? chosen : DEFAULT_SOUND;
+  await applyNotificationSound(sound);
   // Expo push token: the server (admin-broadcast) sends through the Expo push service, which delivers via FCM on Android and APNs on iOS.
   const projectId = (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId ?? Constants.easConfig?.projectId;
   const t = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
-  await supabase.from('profiles').update({ push_token: { provider: 'expo', platform: Platform.OS, token: t.data } }).eq('id', opts.userId);
+  await supabase.from('profiles').update({ push_token: { provider: 'expo', platform: Platform.OS, token: t.data, sound, channel: channelFor(sound) } }).eq('id', opts.userId);
   return { provider: 'expo' as const };
 }

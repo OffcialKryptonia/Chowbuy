@@ -27,3 +27,16 @@ The approved helmet artwork is `brand/chowbuy-helmet-logo.png` (never redrawn; o
 Layout after launch: Welcome switches to two columns at 720 dp wide or more (tablet, unfolded foldable, landscape) and all forms are capped at 560 dp wide. The rider app allows rotation (`orientation: default`).
 
 Still needs a real-device check: Android 12+ splash hand-off, a tablet, an unfolded foldable, landscape, and iOS (not built here).
+
+## Order ring (new)
+
+- `lib/rings.ts`: seven ring tones (Classic, Horn, Siren, Bell, Pulse, Gong, Afrobeat), looped via expo-av with a repeating vibration.
+- `lib/ring-controller.ts`: the ring logic (start, stop, replace). Unit-tested in `tests/ring.test.ts`.
+- `app/offer.tsx`: incoming order screen. The ring plays until the rider **accepts**, **declines**, the 30 s offer **times out**, or the app leaves the foreground.
+- `app/home.tsx`: pick and preview a ring, toggle vibration, and "Simulate an incoming order".
+- Fleet riders see no fares on an offer (salaried). Partner riders see base, distance, surge, waiting and the total they earn.
+- Limit: the ring plays while the app is open. Ringing when the app is closed needs a high-priority push or a foreground service, which comes with the backend hookup.
+
+## Admin additions (this release)
+
+Admin → **Customers** (wallet top-up/deduct with reason, points adjust, history), **Points** (earn rate, value, tiers, cost calculator) and Riders → **Pay** (Fleet salary, Partner per ride). Database: `customer-app/supabase/migrations/20261021000001_admin_customers_points.sql` (not yet applied to the live project; apply it via the Supabase SQL editor or `supabase db push`).

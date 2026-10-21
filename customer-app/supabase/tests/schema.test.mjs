@@ -13,6 +13,7 @@ await db.exec(`
 await db.exec(fs.readFileSync(root + 'migrations/20261018000001_core.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261019000001_messaging.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261019000002_oauth_profile.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261021000001_admin_customers_points.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -99,7 +100,10 @@ await as(A, async () => {
   const pts = (await q(`select submit_review($1, true, array['Delicious'], true, array['Fast'], 'great') p`, [o.id]))[0].p; ok('review awards 50 points', pts === 50);
   await throws('cannot review twice', () => db.query(`select submit_review($1, true, '{}', true, '{}', '')`, [o.id]), 'already');
 });
-ok('points stored', (await q(`select points from profiles where id=$1`, [A]))[0].points === 50);
+const earnedOrder = await q(`select delta from points_ledger where user_id=$1 and kind='order'`, [A]);
+const oSub = (await q(`select subtotal from orders where id=$1`, [o.id]))[0].subtotal;
+ok('delivery earns order points once (1 per ₦100 of food)', earnedOrder.length === 1 && earnedOrder[0].delta === Math.floor(oSub / 100), JSON.stringify(earnedOrder) + ' sub ' + oSub);
+ok('points stored = order points + 50 review points', (await q(`select points from profiles where id=$1`, [A]))[0].points === 50 + earnedOrder[0].delta);
 ok('merchant rating updated', (await q(`select rating_count from merchants where id='m1'`))[0].rating_count === 436);
 // COD + payment link + sponsor
 const cod = (await as(A, () => q(`select place_order('m1','[{"product_id":"p3","qty":1}]'::jsonb,'cod',$1,null) r`, [addr])))[0].r.order;
@@ -152,5 +156,56 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
   const r = (await q(`select full_name, phone from profiles where id=$1`, [id]))[0];
   ok('oauth signup: profile made with name fallback and no phone', r && r.full_name === 'Ada Obi' && r.phone === null);
   ok('oauth signup: wallet made', (await q(`select 1 from wallets where user_id=$1`, [id])).length === 1);
+}
+
+/* ---- admin customers, points, rider pay ---- */
+{
+  const before = (await q(`select balance from wallets where user_id=$1`, [A]))[0].balance;
+  await as(A, async () => {
+    await throws('customer cannot top up wallets', () => db.query(`select admin_wallet_adjust($1, 500, 1, 'free money')`, [A]), 'Admins only');
+    await throws('customer cannot list customers', () => db.query(`select admin_customers('')`), 'Admins only');
+    await throws('customer cannot adjust points', () => db.query(`select admin_points_adjust($1, 500, 'free')`, [A]), 'Admins only');
+    await throws('customer cannot redeem below minimum', () => db.query(`select redeem_points(100)`), 'from 500');
+  });
+  await as(ADM, async () => {
+    const bal = (await q(`select admin_wallet_adjust($1, 2500, 1, 'Refund for cold food') b`, [A]))[0].b;
+    ok('admin top-up raises balance', bal === before + 2500, String(bal));
+    await throws('deduct needs a reason', () => db.query(`select admin_wallet_adjust($1, 100, -1, '')`, [A]), 'reason');
+    await throws('cannot deduct more than the balance', () => db.query(`select admin_wallet_adjust($1, 99999999, -1, 'oops')`, [A]), 'Enter an amount');
+    await throws('cannot overdraw by deducting', () => db.query(`select admin_wallet_adjust($1, 900000, -1, 'too much')`, [A]), 'lower than');
+    const b2 = (await q(`select admin_wallet_adjust($1, 1000, -1, 'Chargeback') b`, [A]))[0].b;
+    ok('admin deduct lowers balance', b2 === before + 1500, String(b2));
+    ok('wallet history shows reason to customer', (await q(`select 1 from wallet_txs where user_id=$1 and title like 'ChowBuy adjustment: Chargeback'`, [A])).length === 1);
+    ok('admin actions are audited', (await q(`select count(*)::int n from audit_log where action='wallet_adjust'`))[0].n === 2);
+    const list = (await q(`select admin_customers('ada@x.ng') r`))[0].r;
+    ok('admin sees customer with balance, points and tier', list.total === 1 && list.rows[0].balance === b2 && list.rows[0].tier === 'Bronze' && list.stats.walletTotal >= b2, JSON.stringify(list));
+    const pts = (await q(`select admin_points_adjust($1, 5000, 'Loyalty gift') p`, [A]))[0].p;
+    const cur = (await q(`select points, lifetime_points from profiles where id=$1`, [A]))[0];
+    ok('bonus points raise balance and lifetime tier progress', cur.points === pts && cur.lifetime_points >= 5000);
+    ok('bonus past 5,000 lifetime moves to Silver', (await q(`select admin_customers('ada@x.ng') r`))[0].r.rows[0].tier === 'Silver', JSON.stringify((await q(`select admin_customers('ada@x.ng') r`))[0].r.rows));
+    await throws('points cannot go below zero', () => db.query(`select admin_points_adjust($1, -99999, 'too many')`, [A]), 'below zero');
+    const led = (await q(`select admin_customer_ledger($1) l`, [A]))[0].l;
+    ok('ledger shows wallet and points history', led.wallet.length >= 2 && led.points.length >= 2);
+  });
+  await as(A, async () => {
+    const n = (await q(`select redeem_points(1000) n`))[0].n;
+    ok('redeem 1,000 points gives ₦1,000 (1 point = ₦1)', n === 1000);
+    await throws('redeem needs steps of 100', () => db.query(`select redeem_points(550)`), 'steps of');
+  });
+  ok('redemption is in both ledgers', (await q(`select 1 from points_ledger where user_id=$1 and kind='redeem' and delta=-1000`, [A])).length === 1 && (await q(`select 1 from wallet_txs where user_id=$1 and title='Points redeemed'`, [A])).length === 1);
+  // rider pay
+  const e = (await q(`select model, fare, commission, net from rider_earnings where rider_id=$1`, [R]))[0];
+  ok('partner earns fare minus tier commission per ride', e && e.model === 'partner' && e.net === e.fare - e.commission && e.commission === Math.round(e.fare * 0.15), JSON.stringify(e));
+  await as(R, async () => { ok('partner can read own earnings', (await q(`select count(*)::int n from rider_earnings`))[0].n === 1); });
+  await as(ADM, async () => {
+    await db.query(`select admin_rider_set_pay($1, 'fleet', 120000, 'Standard')`, [R]);
+    await throws('fleet needs a salary', () => db.query(`select admin_rider_set_pay($1, 'fleet', 0, null)`, [R]), 'salary');
+    const sum = (await q(`select admin_rider_pay_summary(30) s`))[0].s.filter(x => x.id === R)[0];
+    ok('summary: fleet rider has salary', sum.model === 'fleet' && sum.salary === 120000);
+  });
+  await db.exec(`insert into rider_earnings (order_id, rider_id, model) select id, '${R}', 'fleet' from orders where id <> '${o.id}' limit 1`);
+  await as(R, async () => { ok('fleet earnings rows stay hidden from the rider (history of partner rows still visible)', (await q(`select count(*)::int n from rider_earnings where model='fleet'`))[0].n === 0 && (await q(`select count(*)::int n from rider_earnings`))[0].n === 1); });
+  const cfg2 = (await as(null, () => q(`select get_public_config() c`)))[0].c;
+  ok('public config carries the points programme', cfg2.loyalty.earnPer === 100 && cfg2.loyalty.tiers.length === 3);
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
