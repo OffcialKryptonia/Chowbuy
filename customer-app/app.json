@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FFFFFF"
+      "backgroundColor": "#FA4501"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -42,7 +42,7 @@
       "package": "ng.chowbuy.customer",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FFFFFF"
+        "backgroundColor": "#FA4501"
       },
       "config": {
         "googleMaps": {
@@ -61,16 +61,7 @@
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_MICROPHONE",
         "BLUETOOTH_CONNECT"
-      ],
-      "splash": {
-        "backgroundColor": "#FFFFFF",
-        "resizeMode": "native",
-        "mdpi": "./assets/splash/splash-mdpi.png",
-        "hdpi": "./assets/splash/splash-hdpi.png",
-        "xhdpi": "./assets/splash/splash-xhdpi.png",
-        "xxhdpi": "./assets/splash/splash-xxhdpi.png",
-        "xxxhdpi": "./assets/splash/splash-xxxhdpi.png"
-      }
+      ]
     },
     "plugins": [
       "expo-router",
