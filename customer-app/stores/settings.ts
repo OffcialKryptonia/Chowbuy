@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -25,3 +26,13 @@ export const useSettings = create<SettingsState>()(
     { name: 'cb-settings', storage: createJSONStorage(() => AsyncStorage) },
   ),
 );
+
+/** True once the saved settings have been read from storage (so the first-run intro is not flashed at returning users). */
+export function useSettingsHydrated(): boolean {
+  const [done, setDone] = useState(() => useSettings.persist.hasHydrated());
+  useEffect(() => {
+    if (useSettings.persist.hasHydrated()) { setDone(true); return; }
+    return useSettings.persist.onFinishHydration(() => setDone(true));
+  }, []);
+  return done;
+}

@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "ChowBuy Rider",
+    "slug": "chowbuy-rider",
+    "scheme": "chowbuyrider",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "ng.chowbuy.rider"
+    },
+    "android": {
+      "package": "ng.chowbuy.rider",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
+      },
+      "permissions": [
+        "VIBRATE"
+      ],
+      "splash": {
+        "backgroundColor": "#FFFFFF",
+        "resizeMode": "native",
+        "mdpi": "./assets/splash/splash-mdpi.png",
+        "hdpi": "./assets/splash/splash-hdpi.png",
+        "xhdpi": "./assets/splash/splash-xhdpi.png",
+        "xxhdpi": "./assets/splash/splash-xxhdpi.png",
+        "xxxhdpi": "./assets/splash/splash-xxxhdpi.png"
+      }
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

@@ -15,7 +15,8 @@ import { useResolvedScheme, light, dark } from '@/lib/theme';
 import { useOrderTransport } from '@/hooks/useOrderTracking';
 import { registerPush } from '@/lib/push';
 import { usePublicConfig } from '@/hooks/usePublicConfig';
-import { useSettings } from '@/stores/settings';
+import { useSettings, useSettingsHydrated } from '@/stores/settings';
+import { Intro } from '@/components/intro/Intro';
 import { useAuth } from '@/stores/auth';
 import { useBackendSync } from '@/hooks/useBackendSync';
 import { SignIn } from '@/components/auth/SignIn';
@@ -30,12 +31,14 @@ function Boot() {
   const pal = scheme === 'dark' ? dark : light;
   const cfg = usePublicConfig().data;
   const oneSignal = useSettings((s) => s.pushOneSignal);
+  const onboarded = useSettings((s) => s.onboarded);
   const auth = useAuth();
   const uid = auth.session?.user.id ?? 'demo';
   useOrderTransport();
   useBackendSync();
   useEffect(() => auth.init(), []);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!DEMO && !auth.session) return; registerPush({ oneSignalAppId: cfg.push.onesignalAppId, useOneSignal: oneSignal && !!cfg.push.onesignalAppId, userId: uid }).catch(() => {}); }, [cfg.push.onesignalAppId, oneSignal, uid]);   // eslint-disable-line react-hooks/exhaustive-deps
+  if (!onboarded) return <><StatusBar style={scheme === 'dark' ? 'light' : 'dark'} /><Intro onDone={() => useSettings.getState().set({ onboarded: true })} /></>;
   if (!DEMO && !auth.ready) return null;
   if (!DEMO && !auth.session) return <><StatusBar style={scheme === 'dark' ? 'light' : 'dark'} /><SignIn /></>;
   return (
@@ -51,9 +54,10 @@ function Boot() {
 }
 
 export default function Root() {
+  const hydrated = useSettingsHydrated();
   const [loaded] = useFonts({ Sora_700Bold, Sora_800ExtraBold, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
-  useEffect(() => { if (loaded) SplashScreen.hideAsync().catch(() => {}); }, [loaded]);
-  if (!loaded) return null;
+  useEffect(() => { if (loaded && hydrated) SplashScreen.hideAsync().catch(() => {}); }, [loaded, hydrated]);
+  if (!loaded || !hydrated) return null;
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
