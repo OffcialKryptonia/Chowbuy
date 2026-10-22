@@ -97,7 +97,7 @@ export async function sendTemplateEmail(
   to: string | null | undefined,
   variables: Record<string, string | number | null | undefined> = {},
 ): Promise<'sent' | 'skipped'> {
-  if (!to || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(to)) return 'skipped';
+  if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return 'skipped';
   const db = admin();
   const [{ data: settingsRow, error: settingsError }, { data: templatesRow, error: templatesError }] = await Promise.all([
     db.from('platform_settings').select('value').eq('key', 'email').maybeSingle(),
@@ -118,7 +118,7 @@ export async function sendTemplateEmail(
     }
     values[key] = str;
   }
-  const replace = (source: string, html: boolean) => source.replace(/\\{\\{([a-zA-Z0-9_]+)\\}\\}/g, (_match, key: string) => {
+  const replace = (source: string, html: boolean) => source.replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, (_match, key: string) => {
     const value = values[key] ?? '';
     return html ? esc(value) : value;
   });
