@@ -14,20 +14,22 @@ export async function settle(reference: string, paidAmount: number, providerRef?
   // Claim the payment first, so two simultaneous callbacks cannot both apply it.
   const { data: claimed } = await db.from('payments').update({ status: 'paid', provider_ref: providerRef ?? null }).eq('reference', reference).eq('status', 'pending').select('reference');
   if (!claimed?.length) return 'paid';
+  let businessEffectSucceeded = true;
   if (p.purpose === 'topup') {
     const { error } = await db.rpc('credit_wallet', { p_user: p.user_id, p_amount: p.amount, p_ref: reference });
     if (error) {
       console.error('wallet credit RPC failed after payment claim', error.message);
-      return 'paid';
+      businessEffectSucceeded = false;
     }
   } else if (p.order_id) {
     const { error } = await db.rpc('mark_order_paid', { p_order: p.order_id, p_by: by ?? null });
-    if (error) console.error('order payment RPC failed after payment claim', error.message);
+    if (error) { console.error('order payment RPC failed after payment claim', error.message); businessEffectSucceeded = false; }
   }
 
   // Notification is best-effort and runs only after this invocation claimed the payment.
   // It must never reverse or fail the confirmed payment if an email provider is unavailable.
   try {
+    if (!businessEffectSucceeded) return 'paid';
     const { data: profile } = await db.from('profiles').select('full_name,email').eq('id', p.user_id).maybeSingle();
     const { data: wallet } = p.purpose === 'topup'
       ? await db.from('wallets').select('balance').eq('user_id', p.user_id).maybeSingle()
