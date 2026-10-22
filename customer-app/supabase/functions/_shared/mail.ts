@@ -1,6 +1,6 @@
 import { AwsClient } from 'npm:aws4fetch@1.0.20';
 import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
-import { secret } from './util.ts';
+import { admin, secret } from './util.ts';
 
 export interface EmailSettings {
   provider: 'smtp' | 'resend' | 'sendgrid' | 'brevo' | 'mailgun' | 'postmark' | 'ses';
@@ -98,7 +98,6 @@ export async function sendTemplateEmail(
   variables: Record<string, string | number | null | undefined> = {},
 ): Promise<'sent' | 'skipped'> {
   if (!to || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(to)) return 'skipped';
-  const { admin } = await import('./util.ts');
   const db = admin();
   const [{ data: settingsRow, error: settingsError }, { data: templatesRow, error: templatesError }] = await Promise.all([
     db.from('platform_settings').select('value').eq('key', 'email').maybeSingle(),
