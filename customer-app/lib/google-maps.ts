@@ -1,4 +1,5 @@
 import { API_URL, DEMO, DEV_DIRECTIONS_KEY } from './config';
+import { fromRoutesApi } from './routes-api';
 import { fn } from './supabase';
 import type { LatLng } from './types';
 
@@ -93,7 +94,9 @@ export async function getDirections(from: LatLng, to: LatLng, signal?: AbortSign
   const o = `${from.latitude},${from.longitude}`, d = `${to.latitude},${to.longitude}`;
   try {
     const j = DEV_DIRECTIONS_KEY
-      ? await (await fetch(`https://maps.googleapis.com/maps/api/directions/json?origin=${o}&destination=${d}&mode=driving&key=${DEV_DIRECTIONS_KEY}`, { signal })).json()
+      ? fromRoutesApi(await (await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', { method: 'POST', signal,
+          headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': DEV_DIRECTIONS_KEY, 'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline' },
+          body: JSON.stringify({ origin: { location: { latLng: from } }, destination: { location: { latLng: to } }, travelMode: 'DRIVE' }) })).json())
       : DEMO ? await (await fetch(`${API_URL}/maps/directions?origin=${o}&destination=${d}`, { signal })).json()
       : await fn<any>('maps-directions', { query: { origin: o, destination: d } });
     const r = j.routes?.[0];
