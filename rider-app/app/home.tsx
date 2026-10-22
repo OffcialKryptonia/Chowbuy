@@ -20,7 +20,7 @@ export default function Home() {
   const current: RingId = isRingId(saved) ? saved : DEFAULT_RING;
 
   return (
-    <Page back={false} footer={<><Button label="Simulate an incoming order" variant="brand" onPress={() => r.push('/offer')} /><Button label="Sign out" variant="soft" onPress={() => r.replace('/')} /></>}>
+    <Page back={false} footer={<><Button label="Open delivery map" variant="soft" onPress={() => r.push('/map')} /><Button label="Simulate an incoming order" variant="brand" onPress={() => r.push('/offer')} /><Button label="Sign out" variant="soft" onPress={() => r.replace('/')} /></>}>
       <Txt size={26} weight="display">You’re signed in</Txt>
       {verified ? <Txt size={14} weight="bold" color={p.ok}>{'✓ Verified demo rider · ' + (type === 'fleet' ? 'Fleet (salaried)' : 'Partner (per ride)')}</Txt> : null}
       <Txt size={14} color={p.mute}>Preview build: onboarding, ring tones and the order offer screen. Shifts and deliveries are not connected to the backend yet.</Txt>

@@ -5,6 +5,8 @@ name: Rider Android APK
 # Result: the run page, Artifacts section, chowbuy-rider-apk. Signed with the Android debug key (testing only).
 
 on:
+  pull_request:
+    paths: ['rider-app/**', '.github/workflows/rider-android-apk.yml', '.github/scripts/android-smoke.sh']
   workflow_dispatch:
   push:
     branches: [main]
@@ -26,6 +28,7 @@ jobs:
         working-directory: rider-app
     env:
       CI: '1'
+      GOOGLE_MAPS_ANDROID_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_KEY }}
     steps:
       - name: Free disk space
         working-directory: /
