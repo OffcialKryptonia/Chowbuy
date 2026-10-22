@@ -1679,6 +1679,141 @@ ROUTES.splice(ROUTES.map(function(r){return r.p}).indexOf('riders'),0,{p:'custom
 ROUTES.splice(ROUTES.map(function(r){return r.p}).indexOf('wallet-transfers')+1,0,{p:'points',n:'Points',i:'star',g:'Money',v:vPoints});
 buildNav();
 
+/* ---------- KYC review (riders and merchants) and Emergency services ---------- */
+var KDOCS={
+ rider:[['photo_id','Government photo ID'],['next_of_kin','Next of kin'],['guarantor','Guarantor details'],['police','Police character clearance'],['rider_card','Rider’s card / licence'],['plate','Vehicle plate number'],['insurance','Insurance certificate'],['roadworthy','Roadworthiness certificate']],
+ merchant:{restaurant:[['cac','CAC registration'],['tin','Tax ID (TIN)'],['owner_id','Owner’s government ID'],['food_cert','NAFDAC / food handler certificate'],['bank_letter','Bank account proof']],
+  grocery:[['cac','CAC registration'],['tin','Tax ID (TIN)'],['owner_id','Owner’s government ID'],['bank_letter','Bank account proof']],
+  pharmacy:[['cac','CAC registration'],['tin','Tax ID (TIN)'],['owner_id','Owner’s government ID'],['pcn','Pharmacy premises licence (PCN)'],['bank_letter','Bank account proof']],
+  package:[['cac','CAC registration'],['tin','Tax ID (TIN)'],['owner_id','Owner’s government ID'],['bank_letter','Bank account proof']]}
+};
+var EKINDS=[['police','Police'],['ambulance','Ambulance'],['fire','Fire service'],['road_safety','Road safety'],['hotline','Emergency hotline'],['other','Other']];
+function kdocList(kind,x){
+  if(kind==='rider'){var fleet=x.type==='FLEET';return KDOCS.rider.filter(function(d){return fleet?['photo_id','next_of_kin','guarantor','police','rider_card'].indexOf(d[0])>-1:true})}
+  return KDOCS.merchant[x.vertical]||KDOCS.merchant.restaurant;
+}
+function ensureKyc(){
+  if(!S.kyc){
+    S.kyc={};var seed=function(kind,list,fn){list.forEach(function(x,i){var docs={};kdocList(kind,x).forEach(function(d,j){var h=(i*7+j*3)%10;
+      if(x.status==='active'||x.kyc==='verified')docs[d[0]]={status:'approved',note:'',file:d[0]+'.pdf',byAdmin:false};
+      else if(h<4)docs[d[0]]={status:'pending',note:'',file:d[0]+'.jpg',byAdmin:false};
+      else if(h===4)docs[d[0]]={status:'declined',note:'Image is unreadable. Please send a clear photo.',file:d[0]+'.jpg',byAdmin:false}});
+      S.kyc[kind+':'+x.id]=docs})};
+    seed('rider',S.riders);seed('merchant',S.merchants);
+  }
+  if(!S.emerg)S.emerg=[{id:'E1',city:'',kind:'hotline',label:'Nigeria Emergency Services',number:'112',active:true},{id:'E2',city:'Lagos',kind:'hotline',label:'Lagos State Emergency (LASEMA)',number:'767',active:true},{id:'E3',city:'Lagos',kind:'police',label:'Lagos Police Command',number:'08032003913',active:true},{id:'E4',city:'Abuja',kind:'police',label:'FCT Police Command',number:'08032003913',active:true},{id:'E5',city:'',kind:'road_safety',label:'FRSC road safety',number:'122',active:true}];
+  if(!S.sos)S.sos=[{id:'S1',rider:'Sodiq Bello',phone:'+2348031110011',order:'CHB-48212',lat:6.4474,lng:3.4723,status:'open',note:'',at:Date.now()-12*60000,contacts:[{name:'Mum',phone:'08031112222'},{name:'Tunde',phone:'08033334444'}]},{id:'S2',rider:'Emeka Obi',phone:'+2348031110012',order:'',lat:6.5244,lng:3.3792,status:'resolved',note:'Flat tyre, rider safe',at:Date.now()-26*3600000,contacts:[]}];
+}
+ensureKyc();
+U.kyc={live:{rider:null,merchant:null},load:{},err:'',sel:null};U.sosl={live:null,load:false,err:''};U.emrl={live:null,load:false};
+function kApplicants(kind){
+  if(beOn()&&U.kyc.live[kind])return U.kyc.live[kind].map(function(r){var docs={};(r.docs||[]).forEach(function(d){docs[d.doc]={status:d.status,note:d.note||'',file:d.file,byAdmin:!!d.by_admin}});
+    return{id:r.id,name:r.name,sub:kind==='rider'?(r.vehicle+' · '+(r.pay_model==='fleet'?'Fleet':'Partner')):(V[r.vertical]||r.vertical),vertical:r.vertical,type:r.pay_model==='fleet'?'FLEET':'PARTNER',accepted:kind==='rider'?r.verified:r.active,docs:docs,live:true}});
+  return (kind==='rider'?S.riders:S.merchants).map(function(x){return{id:x.id,name:x.name,sub:kind==='rider'?(x.type==='FLEET'?'Fleet':'Partner')+' · '+x.city:(V[x.vertical]||'')+' · '+x.city,vertical:x.vertical,type:x.type,accepted:x.status==='active',docs:S.kyc[kind+':'+x.id]||(S.kyc[kind+':'+x.id]={}),live:false}});
+}
+function kState(x,kind){var req=kdocList(kind,x),ap=0,pe=0,de=0;req.forEach(function(d){var s=(x.docs[d[0]]||{}).status;if(s==='approved')ap++;else if(s==='pending')pe++;else if(s==='declined')de++});return{req:req,ap:ap,pe:pe,de:de,miss:req.length-ap-pe-de}}
+function kLoad(kind){
+  if(!beOn()||U.kyc.live[kind]||U.kyc.load[kind])return;U.kyc.load[kind]=true;
+  beReq('/rest/v1/rpc/admin_kyc_list','POST',{p_kind:kind}).then(function(j){U.kyc.live[kind]=j;U.kyc.load[kind]=false;refresh()},function(e){U.kyc.err=e.message;U.kyc.load[kind]=false;U.kyc.live[kind]=[];refresh()});
+}
+function kBadge(st){var m={approved:['ok','checkc'],pending:['info','clock'],declined:['bad','xc']}[st]||['warn','alert'];return pill(st||'not sent',m[0],m[1])}
+function vKyc(){
+  var kind=T('kycK','rider'),f=T('kycF','all'),q=(U.q.kyc||'').trim().toLowerCase();
+  kLoad(kind);
+  var all=kApplicants(kind),list=all.filter(function(x){var s=kState(x,kind);return(!q||(x.name+' '+x.sub).toLowerCase().indexOf(q)>-1)&&(f==='all'||(f==='review'&&s.pe>0)||(f==='action'&&(s.de>0||s.miss>0))||(f==='verified'&&s.ap===s.req.length)||(f==='accepted'&&x.accepted))});
+  var tot={review:0,action:0,ok:0};all.forEach(function(x){var s=kState(x,kind);if(s.pe)tot.review++;if(s.de||s.miss)tot.action++;if(s.ap===s.req.length)tot.ok++});
+  var rows=list.map(function(x){var s=kState(x,kind);
+    return '<tr><td><div class="who">'+tile(x.name,kind==='merchant'?x.vertical:'package')+'<div><b>'+esc(x.name)+'</b><small>'+esc(x.sub)+'</small></div></div></td><td class="mono">'+s.ap+' / '+s.req.length+'</td><td>'+(s.pe?pill(s.pe+' to review','info'):'')+' '+(s.de?pill(s.de+' declined','bad'):'')+' '+(s.miss?pill(s.miss+' not sent','warn'):'')+(!s.pe&&!s.de&&!s.miss?pill('all approved','ok','shield'):'')+'</td><td>'+pill(x.accepted?'accepted':'not accepted',x.accepted?'ok':'warn')+'</td><td class="r"><div class="rowact">'+btn(ic('eye')+'Review','kycOpen',x.id,'pri')+'</div></td></tr>'}).join('');
+  var banner=beOn()?(U.kyc.err?'<div class="card pad" style="border-color:var(--bad)"><b>Could not load live KYC.</b> <span class="muted">'+esc(U.kyc.err)+'. Apply the 20261022000001 migration to your Supabase project, then reload.</span></div>':'<span class="pill ok">'+ic('checkc')+'Live data</span>'):'<span class="pill" title="Connect the backend in Messaging to review real documents.">'+ic('alert')+'Demo data</span>';
+  return head('KYC review','Check documents for riders and merchants. You can upload on an applicant’s behalf and accept or decline at any time, even while their documents are outstanding.',banner)+
+  '<div class="grid g3">'+kpi('Waiting for review',num(tot.review),'','clock','n')+kpi('Need action',num(tot.action),'documents missing or declined','alert')+kpi('Fully verified',num(tot.ok),'','shield','g')+'</div>'+
+  '<div class="card"><div class="bar">'+search('kyc','Search name or city')+tabs('kycK',[['rider','Riders'],['merchant','Merchants']],1)+tabs('kycF',[['all','All'],['review','To review'],['action','Need action'],['verified','Verified'],['accepted','Accepted']],1)+'</div>'+
+  (list.length?'<div class="tw"><table class="t" style="min-width:52rem"><thead><tr><th>Applicant</th><th>Approved</th><th>Status</th><th>Account</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="foot"><span>'+list.length+' applicant'+(list.length>1?'s':'')+'</span></div>':(beOn()&&U.kyc.load[kind]?empty('shield','Loading','Fetching from your project…'):empty('shield','Nobody matches','Try another search or filter.',btn('Clear filters','clear','kyc','pri'))))+'</div>';
+}
+function kFind(kind,id){return kApplicants(kind).filter(function(x){return x.id===id})[0]}
+function kOpen(kind,id){
+  var x=kFind(kind,id);if(!x)return;var s=kState(x,kind);
+  var rows=s.req.map(function(d){var c=x.docs[d[0]]||{};
+    return '<div class="it" style="align-items:flex-start;justify-content:space-between;gap:.6rem;border-bottom:1px solid var(--line);padding:.6rem 0"><div><b>'+esc(d[1])+'</b><div>'+kBadge(c.status)+(c.byAdmin?' <small class="muted">added by ChowBuy</small>':'')+'</div>'+(c.file?'<small class="muted">File: '+esc(c.file)+'</small>':'')+(c.note?'<div class="muted" style="font-size:.82rem">Note: '+esc(c.note)+'</div>':'')+'</div><div class="acts">'+btn('Update','kycDoc',kind+'|'+id+'|'+d[0],'')+'</div></div>'}).join('');
+  openM('<h3>'+esc(x.name)+'</h3><p class="muted">'+esc(x.sub)+' · '+s.ap+' of '+s.req.length+' documents approved</p>'+rows+'<div class="ft" style="flex-wrap:wrap;gap:.5rem"><button type="button" class="btn" data-m="x">Close</button><button type="button" class="btn danger" data-act="kycDecide" data-id="'+kind+'|'+id+'|0">'+ic('ban')+(kind==='rider'?'Decline rider':'Decline merchant')+'</button><button type="button" class="btn pri" data-act="kycDecide" data-id="'+kind+'|'+id+'|1">'+ic('check')+(kind==='rider'?'Accept rider':'Accept merchant')+'</button></div><small class="muted">Accepting or declining the account does not depend on document status, so you can act while documents are still outstanding.</small>',function(){closeM()});
+}
+function kDocForm(kind,id,doc){
+  var x=kFind(kind,id);if(!x)return;var c=x.docs[doc]||{},name=(kdocList(kind,x).filter(function(d){return d[0]===doc})[0]||[0,doc])[1];
+  openM('<h3>'+esc(name)+'</h3><p class="muted">'+esc(x.name)+'. Upload on their behalf if they need help, then accept or decline.</p>'+
+   '<div class="f"><label for="kf">Document photo or PDF (optional)</label><input id="kf" name="file" type="file" accept="image/*,application/pdf"></div>'+
+   sel('ks','Decision',[['approved','Accept'],['declined','Decline'],['pending','Keep in review']],c.status==='declined'?'declined':c.status==='approved'?'approved':'pending')+
+   inp('kn','Note for the applicant (required when declining)',c.note||'','maxlength="160" placeholder="e.g. Photo is blurry, please send again"')+
+   '<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Save</button></div>',function(v){
+    var status=v.ks,note=String(v.kn||'').trim(),file=document.querySelector('#mf [name=file]').files[0];
+    if(status==='declined'&&note.length<3)return 'Say why it was declined so the applicant can fix it.';
+    if(file&&file.size>8*1024*1024)return 'That file is larger than 8 MB.';
+    var done=function(path){
+      if(!x.live){var m=S.kyc[kind+':'+id]||(S.kyc[kind+':'+id]={});var o=m[doc]||(m[doc]={});o.status=status;o.note=note;if(file||path){o.file=path||file.name;o.byAdmin=true}}
+      else if(U.kyc.live[kind]){var r=U.kyc.live[kind].filter(function(z){return z.id===id})[0];if(r){r.docs=(r.docs||[]).filter(function(d){return d.doc!==doc}).concat([{doc:doc,status:status,note:note,file:path||(c.file||null),by_admin:!!path||!!c.byAdmin}])}}
+      log(x.name+' · '+name+' '+(status==='approved'?'approved':status==='declined'?'declined':'in review')+(file?' (uploaded by ChowBuy)':''),'kyc');audit('KYC '+status+' · '+x.name+' · '+name);save();refresh();setTimeout(function(){kOpen(kind,id)},0);toast(name+' '+(status==='pending'?'kept in review.':status+'.'))};
+    if(beOn()&&x.live){
+      var path=file?id+'/'+doc+'-'+Date.now()+'-'+file.name.replace(/[^\w.\-]/g,'_'):null;
+      var call=function(){return beReq('/rest/v1/rpc/admin_kyc_set','POST',{p_kind:kind,p_subject:id,p_doc:doc,p_status:status,p_note:note,p_path:path})};
+      var up=file?fetch(BE.url.replace(/\/+$/,'')+'/storage/v1/object/kyc/'+path,{method:'POST',headers:{apikey:BE.anon,Authorization:'Bearer '+BE.tok,'Content-Type':file.type||'application/octet-stream'},body:file}).then(function(r){if(!r.ok)throw new Error('Upload failed ('+r.status+')')}):Promise.resolve();
+      up.then(call).then(function(){done(path)},function(e){toast(e.message,'err')});return;
+    }
+    done(null);
+  });
+}
+function vEmergency(){
+  if(beOn()){ if(!U.emrl.live&&!U.emrl.load){U.emrl.load=true;beReq('/rest/v1/emergency_services?select=*&order=sort.asc','GET').then(function(j){U.emrl.live=j;U.emrl.load=false;refresh()},function(){U.emrl.live=[];U.emrl.load=false;refresh()})}
+    if(!U.sosl.live&&!U.sosl.load){U.sosl.load=true;beReq('/rest/v1/rpc/admin_sos_list','POST',{}).then(function(j){U.sosl.live=j;U.sosl.load=false;refresh()},function(e){U.sosl.err=e.message;U.sosl.live=[];U.sosl.load=false;refresh()})} }
+  var svc=beOn()&&U.emrl.live?U.emrl.live:S.emerg;
+  var sos=beOn()&&U.sosl.live?U.sosl.live.map(function(e){return{id:e.id,rider:e.rider,phone:e.phone,order:e.order,lat:e.lat,lng:e.lng,status:e.status,note:e.note,at:Date.parse(e.created_at),contacts:e.contacts||[]}}):S.sos;
+  var open=sos.filter(function(e){return e.status!=='resolved'}).length;
+  var srows=svc.map(function(e){return '<tr><td><b>'+esc(e.label)+'</b></td><td>'+esc((EKINDS.filter(function(k){return k[0]===e.kind})[0]||[0,e.kind])[1])+'</td><td>'+esc(e.city||'Nationwide')+'</td><td class="mono"><a href="tel:'+esc(String(e.number).replace(/\s/g,''))+'">'+esc(e.number)+'</a></td><td>'+sw(e.active,'emTog',e.id,'Show '+e.label+' to riders')+'</td><td class="r"><div class="rowact">'+btn(ic('edit')+'Edit','emEdit',e.id)+btn('Delete','emDel',e.id,'danger')+'</div></td></tr>'}).join('');
+  var erows=sos.slice().sort(function(a,b){return b.at-a.at}).map(function(e){var m=e.lat!=null?'https://maps.google.com/?q='+Number(e.lat).toFixed(5)+','+Number(e.lng).toFixed(5):'';
+    return '<tr><td><b>'+esc(e.rider)+'</b><small style="display:block">'+esc(e.phone||'')+'</small></td><td>'+(e.order?esc(e.order):'—')+'</td><td>'+(m?'<a href="'+m+'" target="_blank" rel="noopener">Open map</a>':'—')+'</td><td>'+esc(fdt(e.at))+'</td><td>'+pill(e.status==='open'?'open':e.status,e.status==='open'?'bad':e.status==='acknowledged'?'warn':'ok')+'</td><td class="r"><div class="rowact">'+btn('Details','sosOpen',e.id,'pri')+'</div></td></tr>'}).join('');
+  return head('Emergency services','Numbers riders see in the app, and SOS alerts riders have raised.',btn(ic('plus')+'Add number','emAdd',null,'pri'))+
+  '<div class="grid g3">'+kpi('Open SOS alerts',num(open),'','alert',open?'':'g')+kpi('Numbers shown to riders',num(svc.filter(function(e){return e.active}).length),'','phone','n')+kpi('Total SOS alerts',num(sos.length),'','shield')+'</div>'+
+  '<div class="card"><div class="bar"><b>SOS alerts</b></div>'+(sos.length?'<div class="tw"><table class="t" style="min-width:48rem"><thead><tr><th>Rider</th><th>Order</th><th>Location</th><th>Raised</th><th>Status</th><th></th></tr></thead><tbody>'+erows+'</tbody></table></div>':empty('shield','No SOS alerts','Nothing has been raised.'))+'</div>'+
+  '<div class="card" style="margin-top:1rem"><div class="bar"><b>Emergency directory</b></div><div class="tw"><table class="t" style="min-width:48rem"><thead><tr><th>Name</th><th>Type</th><th>Where</th><th>Number</th><th>Shown</th><th></th></tr></thead><tbody>'+srows+'</tbody></table></div></div>';
+}
+function emForm(id){
+  var e=id?(beOn()&&U.emrl.live?U.emrl.live:S.emerg).filter(function(x){return x.id===id})[0]:{city:'',kind:'police',label:'',number:'',active:true};if(!e)return;
+  openM('<h3>'+(id?'Edit':'Add')+' emergency number</h3>'+inp('el','Name',e.label,'maxlength="60" placeholder="Lagos Police Command"')+sel('ek','Type',EKINDS,e.kind)+inp('ec','City (leave empty for nationwide)',e.city||'','maxlength="30" placeholder="Lagos"')+inp('en','Phone number',e.number,'inputmode="tel" placeholder="112"')+'<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Save</button></div>',function(v){
+    var lab=String(v.el).trim(),num_=String(v.en).trim();
+    if(lab.length<2)return 'Enter a name.';if(!/^[+]?[0-9 ]{3,}$/.test(num_))return 'Enter a phone number using digits only.';
+    var rec={id:id,city:String(v.ec).trim(),kind:v.ek,label:lab,number:num_,active:e.active!==false};
+    var done=function(nid){if(!beOn()){if(id){var t=S.emerg.filter(function(x){return x.id===id})[0];Object.assign(t,rec)}else{rec.id='E'+Date.now();S.emerg.push(rec)}}else U.emrl.live=null;log('Emergency number '+(id?'updated':'added')+': '+lab,'settings');audit('Emergency number saved · '+lab);save();refresh();toast('Saved '+lab+'.')};
+    if(beOn()){beReq('/rest/v1/rpc/admin_emergency_save','POST',{p_id:id||null,p_city:rec.city,p_kind:rec.kind,p_label:lab,p_number:num_,p_active:rec.active}).then(done,function(er){toast(er.message,'err')});return}
+    done();
+  });
+}
+function sosOpen(id){
+  var sos=beOn()&&U.sosl.live?U.sosl.live.map(function(e){return{id:e.id,rider:e.rider,phone:e.phone,order:e.order,status:e.status,note:e.note,at:Date.parse(e.created_at),contacts:e.contacts||[]}}):S.sos;
+  var e=sos.filter(function(x){return x.id===id})[0];if(!e)return;
+  openM('<h3>SOS from '+esc(e.rider)+'</h3><p class="muted">'+esc(fdt(e.at))+(e.order?' · order '+esc(e.order):'')+'</p><div class="kv"><span>Rider phone</span><b><a href="tel:'+esc(e.phone||'')+'">'+esc(e.phone||'—')+'</a></b>'+(e.contacts||[]).map(function(c,i){return '<span>Contact '+(i+1)+'</span><b>'+esc(c.name)+' · <a href="tel:'+esc(c.phone)+'">'+esc(c.phone)+'</a></b>'}).join('')+'</div>'+
+   sel('ss','Status',[['open','Open'],['acknowledged','Acknowledged'],['resolved','Resolved']],e.status)+inp('sn','Note',e.note||'','maxlength="160" placeholder="What was done"')+'<div class="ft"><button type="button" class="btn" data-m="x">Close</button><button type="submit" class="btn pri">Save</button></div>',function(v){
+    var done=function(){if(!beOn()){var t=S.sos.filter(function(x){return x.id===id})[0];t.status=v.ss;t.note=v.sn}else U.sosl.live=null;log('SOS from '+e.rider+' marked '+v.ss,'warn');audit('SOS '+v.ss+' · '+e.rider);save();refresh();toast('SOS marked '+v.ss+'.')};
+    if(beOn()){beReq('/rest/v1/rpc/admin_sos_set','POST',{p_id:id,p_status:v.ss,p_note:String(v.sn||'')}).then(done,function(er){toast(er.message,'err')});return}done();
+  });
+}
+Object.assign(A,{
+ kycOpen:function(el){kOpen(T('kycK','rider'),el.getAttribute('data-id'))},
+ kycDoc:function(el){var p=el.getAttribute('data-id').split('|');closeM();kDocForm(p[0],p[1],p[2])},
+ kycDecide:function(el){var p=el.getAttribute('data-id').split('|'),kind=p[0],id=p[1],yes=p[2]==='1',x=kFind(kind,id);if(!x)return;
+   var done=function(){if(!x.live){var t=(kind==='rider'?S.riders:S.merchants).filter(function(z){return z.id===id})[0];t.status=yes?'active':(kind==='rider'?'suspended':'rejected');if(kind==='merchant')t.kyc=yes?'verified':'rejected'}else if(U.kyc.live[kind]){U.kyc.live[kind].forEach(function(z){if(z.id===id){z.verified=yes;z.active=yes}})}
+     log(x.name+(yes?' accepted':' declined')+' after KYC review','kyc');audit('KYC '+(yes?'accept':'decline')+' · '+x.name);save();closeM();refresh();toast(x.name+(yes?' accepted.':' declined.'),yes?'':'warn')};
+   if(beOn()&&x.live){beReq('/rest/v1/rpc/admin_kyc_decide','POST',{p_kind:kind,p_subject:id,p_approve:yes}).then(done,function(e){toast(e.message,'err')});return}done()},
+ emAdd:function(){emForm(null)},emEdit:function(el){emForm(el.getAttribute('data-id'))},
+ emTog:function(el){var id=el.getAttribute('data-id'),list=beOn()&&U.emrl.live?U.emrl.live:S.emerg,e=list.filter(function(x){return x.id===id})[0];if(!e)return;
+   var on=!e.active,done=function(){e.active=on;log(e.label+(on?' shown to riders':' hidden from riders'),'settings');save();refresh()};
+   if(beOn()){beReq('/rest/v1/rpc/admin_emergency_save','POST',{p_id:id,p_city:e.city||'',p_kind:e.kind,p_label:e.label,p_number:e.number,p_active:on}).then(done,function(er){toast(er.message,'err')});return}done()},
+ emDel:function(el){var id=el.getAttribute('data-id'),list=beOn()&&U.emrl.live?U.emrl.live:S.emerg,e=list.filter(function(x){return x.id===id})[0];if(!e)return;
+   confirmM('Delete '+esc(e.label)+'?','Riders will no longer see this number.','Delete',function(){var done=function(){if(beOn())U.emrl.live=U.emrl.live.filter(function(x){return x.id!==id});else S.emerg=S.emerg.filter(function(x){return x.id!==id});log('Emergency number removed: '+e.label,'settings');save();refresh();toast('Deleted.')};
+     if(beOn()){beReq('/rest/v1/rpc/admin_emergency_delete','POST',{p_id:id}).then(done,function(er){toast(er.message,'err')});return}done()},true)},
+ sosOpen:function(el){sosOpen(el.getAttribute('data-id'))}
+});
+Object.assign(IC,{clock:IC.clock||'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',phone:IC.phone||'<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.100 4.200 2 2 0 0 1 4.100 2h3a2 2 0 0 1 2 1.700c.1 1 .4 1.900.7 2.800a2 2 0 0 1-.5 2.100L8.100 9.900a16 16 0 0 0 6 6l1.300-1.300a2 2 0 0 1 2.100-.4c.9.300 1.800.6 2.800.7a2 2 0 0 1 1.700 2z"/>'});
+ROUTES.splice(ROUTES.map(function(r){return r.p}).indexOf('riders')+1,0,{p:'kyc',n:'KYC review',i:'shield',g:'Marketplace',v:vKyc},{p:'emergency',n:'Emergency services',i:'alert',g:'Marketplace',v:vEmergency});
+buildNav();
+
 /* drawer */
 function openSide(){$('#side').classList.add('open');$('#scrim').classList.add('show');$('#burger').setAttribute('aria-expanded','true')}
 function closeSide(){$('#side').classList.remove('open');$('#scrim').classList.remove('show');var b=$('#burger');if(b)b.setAttribute('aria-expanded','false')}

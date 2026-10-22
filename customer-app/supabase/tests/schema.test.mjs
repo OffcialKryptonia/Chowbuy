@@ -14,6 +14,7 @@ await db.exec(fs.readFileSync(root + 'migrations/20261018000001_core.sql', 'utf8
 await db.exec(fs.readFileSync(root + 'migrations/20261019000001_messaging.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261019000002_oauth_profile.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261021000001_admin_customers_points.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261022000001_kyc_emergency.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -207,5 +208,52 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
   await as(R, async () => { ok('fleet earnings rows stay hidden from the rider (history of partner rows still visible)', (await q(`select count(*)::int n from rider_earnings where model='fleet'`))[0].n === 0 && (await q(`select count(*)::int n from rider_earnings`))[0].n === 1); });
   const cfg2 = (await as(null, () => q(`select get_public_config() c`)))[0].c;
   ok('public config carries the points programme', cfg2.loyalty.earnPer === 100 && cfg2.loyalty.tiers.length === 3);
+}
+
+// ---- KYC, SOS, emergency services
+{
+  let sosId;
+  await as(R, async () => {
+    await db.query(`select kyc_submit('rider', $1, 'nin', $1 || '/nin.jpg')`, [R]);
+    await throws('rider cannot send documents for someone else', () => db.query(`select kyc_submit('rider', $1, 'nin', 'x/y.jpg')`, [B]), 'own account');
+    await throws('applicant must attach a file', () => db.query(`select kyc_submit('rider', $1, 'licence', '')`, [R]), 'Attach');
+    ok('rider sees own pending document', (await q(`select status from kyc_docs`))[0].status === 'pending');
+  });
+  await as(M, async () => { await db.query(`select kyc_submit('merchant', 'm1', 'cac', 'm1/cac.pdf')`); });
+  await as(A, async () => { ok('customers see no KYC documents', (await q(`select count(*)::int n from kyc_docs`))[0].n === 0); });
+  await as(ADM, async () => {
+    await throws('decline needs a reason', () => db.query(`select admin_kyc_set('rider', $1, 'nin', 'declined', '')`, [R]), 'why');
+    await db.query(`select admin_kyc_set('rider', $1, 'nin', 'declined', 'Photo is blurry')`, [R]);
+    await db.query(`select admin_kyc_set('rider', $1, 'licence', 'approved', '', $1 || '/licence.jpg')`, [R]);
+    const l = (await q(`select admin_kyc_list('rider') l`))[0].l.filter(x => x.id === R)[0];
+    ok('admin can upload on behalf and approve while applicant is unverified', l.docs.some(d => d.doc === 'licence' && d.status === 'approved' && d.by_admin === true), JSON.stringify(l));
+    ok('declined doc carries the reason', l.docs.some(d => d.doc === 'nin' && d.status === 'declined' && d.note === 'Photo is blurry'));
+    await db.query(`select admin_kyc_decide('rider', $1, false)`, [R]);
+    ok('admin can decline a rider outright', (await q(`select verified from riders where user_id=$1`, [R]))[0].verified === false);
+    await db.query(`select admin_kyc_decide('merchant', 'm1', true)`);
+    ok('merchant list works', (await q(`select admin_kyc_list('merchant') l`))[0].l.some(x => x.id === 'm1' && x.docs.length === 1));
+  });
+  await as(R, async () => {
+    await db.query(`select kyc_submit('rider', $1, 'nin', $1 || '/nin2.jpg')`, [R]);
+    ok('applicant can resend a declined document', (await q(`select status, note from kyc_docs where doc_type='nin'`))[0].status === 'pending');
+    await throws('applicant cannot replace an approved document', () => db.query(`select kyc_submit('rider', $1, 'licence', 'z.jpg')`, [R]), 'already approved');
+    await throws('applicant cannot approve', () => db.query(`select admin_kyc_set('rider', $1, 'nin', 'approved')`, [R]), 'Admins only');
+    await db.query(`select rider_set_contacts('Mum', '08031112222', 'Tunde', '+2348033334444')`);
+    ok('rider saves two contacts', (await q(`select count(*)::int n from rider_contacts`))[0].n === 2);
+    await throws('contact phone is validated', () => db.query(`select rider_set_contacts('Mum', 'abc', 'Tunde', '08033334444')`), 'check');
+    sosId = (await q(`select rider_sos('', 6.45, 3.47) id`))[0].id;
+  });
+  await as(A, async () => { await throws('customers cannot raise SOS', () => db.query(`select rider_sos('', 1, 1)`), 'Riders only'); });
+  await as(ADM, async () => {
+    const ev = (await q(`select admin_sos_list() l`))[0].l;
+    ok('admin sees SOS with contacts and location', ev.length === 1 && ev[0].contacts.length === 2 && ev[0].status === 'open' && ev[0].lat === 6.45, JSON.stringify(ev));
+    await db.query(`select admin_sos_set($1, 'resolved', 'Rider safe, called back')`, [sosId]);
+    ok('admin resolves SOS', (await q(`select admin_sos_list() l`))[0].l[0].status === 'resolved');
+    const id = (await q(`select admin_emergency_save(null, 'Abuja', 'police', 'FCT Police Command', '08032003913', true) id`))[0].id;
+    await db.query(`select admin_emergency_save($1, 'Abuja', 'police', 'FCT Police Command', '08032003913', false)`, [id]);
+    await throws('bad number rejected', () => db.query(`select admin_emergency_save(null, '', 'other', 'Bad', 'abc', true)`), 'check');
+  });
+  ok('public can read active emergency numbers only', (await as(null, () => q(`select label from emergency_services`))).every(x => x.label !== 'FCT Police Command') && (await as(null, () => q(`select 1 from emergency_services`))).length === 2);
+  await as(A, async () => { await throws('customers cannot edit services', () => db.query(`select admin_emergency_delete(gen_random_uuid())`), 'Admins only'); });
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

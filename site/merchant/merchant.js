@@ -937,6 +937,35 @@ function vSupport(){
 }
 A.tkNew=function(){openM('<h3>New support ticket</h3><div class="mgrid" style="margin-top:1rem"><div class="f w3"><label for="tc">Topic</label><select id="tc" name="cat"><option>Orders</option><option>Payouts & wallet</option><option>Menu / catalogue</option><option>Prescriptions</option><option>Riders & delivery</option><option>Something else</option></select></div><div class="f w3"><label for="ts">Subject</label><input id="ts" name="subject" maxlength="80"></div><div class="f w3"><label for="tm">What happened?</label><textarea id="tm" name="msg" rows="4" maxlength="500"></textarea></div></div>'+mfoot('Send ticket'),function(d){if(d.subject.trim().length<4)return 'Add a short subject.';if(d.msg.trim().length<10)return 'Describe the problem in a sentence or two.';upd(function(){S.tickets.unshift({id:'TK-'+(4100+S.tickets.length),cat:d.cat,subject:d.subject.trim(),msg:d.msg.trim(),at:Date.now(),status:'open'});log('Support ticket opened','msg')});toast('Ticket sent. We reply within 2 hours.')})};
 
+/* ---------- verification (KYC) ---------- */
+var MDOCS={
+ restaurant:[['cac','CAC registration','Certificate of incorporation or business name'],['tin','Tax ID (TIN)','From FIRS or your state tax office'],['owner_id','Owner’s government ID','NIN slip, passport, driver’s licence or voter’s card'],['food_cert','NAFDAC / food handler certificate','Required for cooked food'],['bank_letter','Bank account proof','Account statement or bank letter for payouts']],
+ grocery:[['cac','CAC registration','Certificate of incorporation or business name'],['tin','Tax ID (TIN)','From FIRS or your state tax office'],['owner_id','Owner’s government ID','NIN slip, passport, driver’s licence or voter’s card'],['bank_letter','Bank account proof','Account statement or bank letter for payouts']],
+ pharmacy:[['cac','CAC registration','Certificate of incorporation or business name'],['tin','Tax ID (TIN)','From FIRS or your state tax office'],['owner_id','Owner’s government ID','NIN slip, passport, driver’s licence or voter’s card'],['pcn','Pharmacy premises licence (PCN)','Current Pharmacists Council of Nigeria premises licence'],['bank_letter','Bank account proof','Account statement or bank letter for payouts']],
+ package:[['cac','CAC registration','Certificate of incorporation or business name'],['tin','Tax ID (TIN)','From FIRS or your state tax office'],['owner_id','Owner’s government ID','NIN slip, passport, driver’s licence or voter’s card'],['bank_letter','Bank account proof','Account statement or bank letter for payouts']]
+};
+function mdocs(){return MDOCS[S.vertical]||MDOCS.restaurant}
+function ensureKyc(){if(!S.kyc)S.kyc={cac:{status:'approved',file:'cac-certificate.pdf',note:''},tin:{status:'pending',file:'tin.jpg',note:''},owner_id:{status:'declined',file:'id-card.jpg',note:'The photo is cropped. Please send the full card.'}}}
+function kbadge(s){var m={approved:['ok','checkc'],pending:['info','clock'],declined:['bad','xc']}[s]||['warn','alert'];return pill(s||'not sent',m[0],m[1])}
+function vVerify(){
+  ensureKyc();var req=mdocs(),ap=0,pe=0,de=0;req.forEach(function(d){var s=(S.kyc[d[0]]||{}).status;if(s==='approved')ap++;else if(s==='pending')pe++;else if(s==='declined')de++});
+  var state=ap===req.length?['ok','Verified']:de?['bad','Action needed']:pe?['info','In review']:['warn','Documents needed'];
+  var rows=req.map(function(d){var c=S.kyc[d[0]]||{},locked=c.status==='approved';
+    return '<li style="align-items:flex-start"><span style="flex:1"><b>'+esc(d[1])+'</b><small class="muted" style="display:block">'+esc(d[2])+'</small>'+(c.file?'<small class="muted" style="display:block">File: '+esc(c.file)+'</small>':'')+(c.note?'<small style="display:block;color:var(--bad)">ChowBuy says: '+esc(c.note)+'</small>':'')+'</span><span style="display:grid;gap:.4rem;justify-items:end">'+kbadge(c.status)+(locked?'':btn(ic('upload')+(c.status?'Send again':'Upload'),'kycUp',d[0],'pri'))+'</span></li>'}).join('');
+  return head('Verification','Send the documents below so ChowBuy can verify your business. If you need help, our team can upload them for you.',pill(state[1],state[0]))+
+  '<div class="grid g3"><div class="card pad"><small class="muted">Approved</small><b class="mono" style="font-size:1.6rem;display:block">'+ap+' / '+req.length+'</b></div><div class="card pad"><small class="muted">In review</small><b class="mono" style="font-size:1.6rem;display:block">'+pe+'</b></div><div class="card pad"><small class="muted">Need your attention</small><b class="mono" style="font-size:1.6rem;display:block">'+(de+req.length-ap-pe-de)+'</b></div></div>'+
+  '<div class="card pad" style="margin-top:1rem"><ul class="feed">'+rows+'</ul></div>'+
+  '<div class="card pad" style="margin-top:1rem"><h3>Need help?</h3><p class="muted">Message merchant success on WhatsApp or call us and we can upload your documents for you and answer questions. You can keep selling-setup steps going while documents are being reviewed.</p><div class="acts"><a class="btn pri sm" href="https://wa.me/2347002469289" target="_blank" rel="noopener">Chat on WhatsApp</a><a class="btn sm" href="tel:+2347002469289">Call us</a></div></div>'+
+  '<p class="muted" style="margin-top:1rem;font-size:.82rem">Demo mode: files stay in this browser. Real uploads and ChowBuy’s approval sync once your account is connected to the live backend.</p>';
+}
+A.kycUp=function(el){var id=el.getAttribute('data-id'),d=mdocs().filter(function(x){return x[0]===id})[0];if(!d)return;
+  openM('<h3>'+esc(d[1])+'</h3><p class="muted">'+esc(d[2])+'. A clear photo or PDF, up to 8 MB.</p><div class="f"><label for="kfile">File</label><input id="kfile" name="file" type="file" accept="image/*,application/pdf"></div>'+mfoot('Send for review'),function(){
+    var f=document.querySelector('#mf [name=file]').files[0];
+    if(!f)return 'Choose a file first.';
+    if(!/^(image\/|application\/pdf)/.test(f.type))return 'Use a photo (JPG, PNG) or a PDF.';
+    if(f.size>8*1024*1024)return 'That file is larger than 8 MB.';
+    ensureKyc();S.kyc[id]={status:'pending',file:f.name,note:''};log(d[1]+' sent for review','bell');save();refresh();toast(d[1]+' sent. We will review it shortly.')})};
+
 /* ---------- routes ---------- */
 var ROUTES=[
  {p:'',n:'Dashboard',i:'grid',g:'Operate',f:vDash},
@@ -956,6 +985,7 @@ var ROUTES=[
  {p:'service-areas',n:'Service Areas',i:'map',g:'Business & Management',f:vAreas,roles:['owner','manager']},
  {p:'staff',n:'Staff & Permissions',i:'users',g:'Business & Management',f:vStaff,roles:['owner']},
  {p:'settings',n:'Store Settings',i:'settings',g:'Business & Management',f:vSettings,roles:['owner']},
+ {p:'verification',n:'Verification (KYC)',i:'shield',g:'Business & Management',f:vVerify,roles:['owner']},
  {p:'onboarding',n:'Onboarding',i:'sparkles',g:'Business & Management',f:vOnboard,roles:['owner']},
  {p:'support',n:'Support',i:'help',g:'Business & Management',f:vSupport}
 ];
