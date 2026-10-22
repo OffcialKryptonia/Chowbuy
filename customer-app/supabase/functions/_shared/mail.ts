@@ -86,3 +86,51 @@ async function need(key: string): Promise<string> {
   if (!v) throw new Error(`The ${key.replace(/_/g, ' ')} is not saved yet. Add it in Admin, Settings, Email.`);
   return v;
 }
+
+/**
+ * Sends an enabled Admin-managed template. Missing settings/templates are a no-op so
+ * email configuration never blocks a verified payment or other business transaction.
+ * Template variables are escaped for HTML; action_url is restricted to HTTPS.
+ */
+export async function sendTemplateEmail(
+  templateId: string,
+  to: string | null | undefined,
+  variables: Record<string, string | number | null | undefined> = {},
+): Promise<'sent' | 'skipped'> {
+  if (!to || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(to)) return 'skipped';
+  const { admin } = await import('./util.ts');
+  const db = admin();
+  const [{ data: settingsRow, error: settingsError }, { data: templatesRow, error: templatesError }] = await Promise.all([
+    db.from('platform_settings').select('value').eq('key', 'email').maybeSingle(),
+    db.from('platform_settings').select('value').eq('key', 'email_templates').maybeSingle(),
+  ]);
+  if (settingsError || templatesError) throw new Error('Email settings could not be loaded.');
+  const settings = settingsRow?.value as EmailSettings | undefined;
+  const templates = templatesRow?.value as { items?: Array<{ id: string; subject: string; html: string; text: string; enabled: boolean }> } | undefined;
+  const template = templates?.items?.find((item) => item.id === templateId);
+  if (!settings?.provider || !settings.fromEmail || !template?.enabled) return 'skipped';
+
+  const values: Record<string, string> = {};
+  for (const [key, value] of Object.entries(variables)) {
+    let str = value == null ? '' : String(value);
+    if (key === 'action_url') {
+      try { const url = new URL(str); str = url.protocol === 'https:' ? url.toString() : ''; }
+      catch { str = ''; }
+    }
+    values[key] = str;
+  }
+  const replace = (source: string, html: boolean) => source.replace(/\\{\\{([a-zA-Z0-9_]+)\\}\\}/g, (_match, key: string) => {
+    const value = values[key] ?? '';
+    return html ? esc(value) : value;
+  });
+  const message: Mail = {
+    to,
+    subject: replace(template.subject, false).slice(0, 180),
+    text: replace(template.text, false).slice(0, 10000),
+    html: replace(template.html, true).slice(0, 30000),
+  };
+  const sender = await makeSender(settings);
+  try { await sender.send(message); }
+  finally { await sender.close(); }
+  return 'sent';
+}
