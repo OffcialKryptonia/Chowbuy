@@ -40,3 +40,9 @@ Still needs a real-device check: Android 12+ splash hand-off, a tablet, an unfol
 ## Admin additions (this release)
 
 Admin → **Customers** (wallet top-up/deduct with reason, points adjust, history), **Points** (earn rate, value, tiers, cost calculator) and Riders → **Pay** (Fleet salary, Partner per ride). Database: `customer-app/supabase/migrations/20261021000001_admin_customers_points.sql` (not yet applied to the live project; apply it via the Supabase SQL editor or `supabase db push`).
+
+## Delivery map preview
+
+- `app/map.tsx` adds a Google map preview with sample Lekki pickup/drop-off markers, a route line, and foreground device location.
+- Set the GitHub Actions repository secret `GOOGLE_MAPS_ANDROID_KEY` to a restricted Android Maps SDK key. Without it, the APK can build but Google map tiles may not render.
+- The map is currently a UI/location preview. Live order assignment, live route geometry, and delivery status require the backend integration phase; the screen labels this clearly.
