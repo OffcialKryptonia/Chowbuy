@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, Switch, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Check, MapPinned, Play } from 'lucide-react-native';
+import { Check, Play } from 'lucide-react-native';
 import { Button, Page, Txt, tap } from '@/components/ui';
 import { useTheme } from '@/lib/theme';
 import { RINGS, DEFAULT_RING, isRingId, previewRing, type RingId } from '@/lib/rings';
