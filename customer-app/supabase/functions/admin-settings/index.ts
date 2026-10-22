@@ -19,7 +19,8 @@ Deno.serve(handle(async (req) => {
   const db = admin();
   if (req.method === 'GET') {
     const { data } = await db.from('platform_secrets').select('key,hint,updated_at');
-    return json({ hints: Object.fromEntries((data ?? []).map((r) => [r.key, { hint: r.hint, updatedAt: r.updated_at }])) });
+    const { data: templateRow } = await db.from('platform_settings').select('value,updated_at').eq('key', 'email_templates').maybeSingle();
+    return json({ hints: Object.fromEntries((data ?? []).map((r) => [r.key, { hint: r.hint, updatedAt: r.updated_at }])), templates: templateRow?.value ?? null, templatesUpdatedAt: templateRow?.updated_at ?? null });
   }
   const b = await req.json().catch(() => ({}));
   if (b.public && typeof b.public === 'object') {
@@ -33,6 +34,16 @@ Deno.serve(handle(async (req) => {
     if (!['smtp', 'resend', 'sendgrid', 'brevo', 'mailgun', 'postmark', 'ses'].includes(e.provider)) throw new HttpError(400, 'Choose an email provider.');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e.fromEmail ?? ''))) throw new HttpError(400, 'Enter a valid sender email address.');
     await db.from('platform_settings').upsert({ key: 'email', value: e, updated_at: new Date().toISOString() });
+  }
+  if (b.emailTemplates && typeof b.emailTemplates === 'object') {
+    const templates = b.emailTemplates;
+    if (!Array.isArray(templates.items) || templates.items.length > 100) throw new HttpError(400, 'Email template collection is invalid.');
+    for (const t of templates.items) {
+      if (!t || typeof t.id !== 'string' || typeof t.subject !== 'string' || typeof t.html !== 'string' || typeof t.text !== 'string' || typeof t.enabled !== 'boolean') throw new HttpError(400, 'Each template requires id, subject, HTML, text and enabled status.');
+      if (t.subject.length > 180 || t.html.length > 30000 || t.text.length > 10000) throw new HttpError(400, 'A template exceeds the allowed length.');
+    }
+    const { error } = await db.from('platform_settings').upsert({ key: 'email_templates', value: templates, updated_at: new Date().toISOString() });
+    if (error) throw new HttpError(500, 'Could not save email templates.');
   }
   const saved: string[] = [];
   for (const [k, v] of Object.entries(b.secrets ?? {})) {
