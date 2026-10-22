@@ -6,8 +6,9 @@ import { ArrowLeft, Crosshair, MapPin, Navigation, Store } from 'lucide-react-na
 import { useRouter } from 'expo-router';
 import { Button, Page, Txt, tap } from '@/components/ui';
 import { useTheme } from '@/lib/theme';
-import { darkMapStyle, lightMapStyle } from '@/lib/mapStyle';
-import type { LatLng } from '@/lib/types';
+type LatLng = { latitude: number; longitude: number };
+const darkMapStyle = [{ elementType: 'geometry', stylers: [{ color: '#18202d' }] }, { elementType: 'labels.text.fill', stylers: [{ color: '#aeb8c8' }] }, { elementType: 'labels.text.stroke', stylers: [{ color: '#18202d' }] }, { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#303a4c' }] }];
+const lightMapStyle = [{ elementType: 'geometry', stylers: [{ color: '#f3f5f8' }] }, { elementType: 'labels.text.fill', stylers: [{ color: '#525e70' }] }, { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] }];
 
 const pickup: LatLng = { latitude: 6.4312, longitude: 3.4241 }; // Lekki Phase 1 demo location
 const dropoff: LatLng = { latitude: 6.4281, longitude: 3.4219 };
@@ -19,7 +20,6 @@ export default function RiderMap() {
   const map = useRef<MapView>(null);
   const [rider, setRider] = useState<LatLng | null>(null);
   const [locationState, setLocationState] = useState<'loading' | 'ready' | 'denied' | 'unavailable'>('loading');
-  const [follow, setFollow] = useState(false);
 
   const route = useMemo(() => rider ? [rider, pickup, dropoff] : [pickup, dropoff], [rider]);
 
@@ -100,7 +100,7 @@ export default function RiderMap() {
       </View>
 
       <View style={{ padding: 14, borderRadius: 16, backgroundColor: p.surface, borderWidth: 1, borderColor: p.line, gap: 8 }}>
-        <Txt size={15} weight="bold"><Navigation size={16} color={p.brand} />  Demo route preview</Txt>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><Navigation size={16} color={p.brand} /><Txt size={15} weight="bold">Demo route preview</Txt></View>
         <Txt size={13} color={p.mute}>This map currently uses sample pickup and drop-off points. Live order routing and dispatch will be connected in the backend integration phase.</Txt>
         <Txt size={12} color={locationState === 'ready' ? p.ok : p.mute}>{locationState === 'ready' ? 'Device location available' : locationState === 'denied' ? 'Location permission denied — tap the crosshair to retry' : locationState === 'unavailable' ? 'Could not read device location' : 'Checking device location…'}</Txt>
       </View>
