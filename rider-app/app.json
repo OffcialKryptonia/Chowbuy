@@ -17,7 +17,12 @@
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "ng.chowbuy.rider"
+      "bundleIdentifier": "ng.chowbuy.rider",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "ChowBuy Rider uses your location to guide deliveries and let customers follow your order.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "ChowBuy Rider keeps tracking your delivery while the screen is off.",
+        "NSMicrophoneUsageDescription": "Used to record voice notes to customers."
+      }
     },
     "android": {
       "package": "ng.chowbuy.rider",
@@ -26,7 +31,13 @@
         "backgroundColor": "#FFFFFF"
       },
       "permissions": [
-        "VIBRATE"
+        "VIBRATE",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "RECORD_AUDIO"
       ],
       "splash": {
         "backgroundColor": "#FFFFFF",
@@ -39,7 +50,15 @@
       }
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "locationAlwaysAndWhenInUsePermission": "ChowBuy Rider keeps tracking your delivery while the screen is off."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": false

@@ -10,6 +10,8 @@ import { isRingId, DEFAULT_RING, ring } from '@/lib/rings';
 import { type StopReason } from '@/lib/ring-controller';
 import { usePrefs } from '@/stores/prefs';
 import { useApply } from '@/stores/apply';
+import { useRider } from '@/stores/rider';
+import { demoDelivery } from '@/lib/offer';
 
 type Phase = 'ringing' | 'accepted' | 'declined' | 'expired';
 
@@ -23,11 +25,17 @@ export default function Offer() {
   const offer = useMemo(() => demoOffer(), []);
   const view = offerView(type, offer);
   const [phase, setPhase] = useState<Phase>('ringing');
+  const [blocked, setBlocked] = useState<string | null>(null);
+  useEffect(() => { if (!useRider.getState().offer) useRider.getState().setOffer(demoDelivery()); }, []);
   const [left, setLeft] = useState(OFFER_SECONDS);
   const phaseRef = useRef<Phase>('ringing');
 
   const finish = useCallback((next: Exclude<Phase, 'ringing'>, reason: StopReason) => {
     if (phaseRef.current !== 'ringing') return;
+    if (next === 'accepted') {
+      const res = useRider.getState().accept(useApply.getState().type);
+      if (!res.ok) { void ring.stop('declined'); phaseRef.current = 'declined'; setBlocked(res.reason ?? 'This order cannot be accepted.'); setPhase('declined'); return; }
+    } else useRider.getState().setOffer(null);
     phaseRef.current = next;
     void ring.stop(reason);               // silence first, then update the screen
     setPhase(next);
@@ -44,11 +52,11 @@ export default function Offer() {
 
   const done = phase !== 'ringing';
   const title = phase === 'accepted' ? 'Order accepted' : phase === 'declined' ? 'Order declined' : phase === 'expired' ? 'Offer expired' : 'New order';
-  const sub = phase === 'accepted' ? `Head to ${offer.merchant} to pick up.` : phase === 'declined' ? 'It will go to another rider.' : phase === 'expired' ? 'You did not respond in time, so it went to another rider.' : `${left}s to respond`;
+  const sub = phase === 'accepted' ? `Head to ${offer.merchant} to pick up.` : phase === 'declined' ? (blocked ?? 'It will go to another rider.') : phase === 'expired' ? 'You did not respond in time, so it went to another rider.' : `${left}s to respond`;
 
   return (
     <Page back={false} footer={done
-      ? <Button label="Back" onPress={() => r.back()} />
+      ? <Button label={phase === 'accepted' ? 'Start the delivery' : 'Back'} onPress={() => (phase === 'accepted' ? r.replace('/delivery/active') : r.back())} />
       : <><Button label="Accept order" variant="brand" onPress={() => finish('accepted', 'accepted')} /><Button label="Decline" variant="soft" onPress={() => finish('declined', 'declined')} /></>}>
       <View style={{ alignItems: 'center', gap: 6, paddingVertical: 8 }}>
         <View style={{ width: 96, height: 96, borderRadius: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: phase === 'accepted' ? p.ok : phase === 'ringing' ? p.brand : p.fill }}>

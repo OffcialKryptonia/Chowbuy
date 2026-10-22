@@ -8,6 +8,7 @@ import { Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '@/lib/theme';
+import '@/lib/location-task';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
