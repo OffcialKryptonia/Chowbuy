@@ -26,6 +26,7 @@ jobs:
         working-directory: rider-app
     env:
       CI: '1'
+      GOOGLE_MAPS_ANDROID_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_KEY }}
     steps:
       - name: Free disk space
         working-directory: /
