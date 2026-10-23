@@ -8,8 +8,21 @@ var find=function(a,id){for(var i=0;i<a.length;i++)if(a[i].id===id)return a[i]};
 
 /* ---------- state ---------- */
 function load(){
-  try{var j=localStorage.getItem(KEY);if(j){var o=JSON.parse(j);if(o&&o.v===1&&o.s&&o.s.orders)return o.s}}catch(e){}
-  return window.CB_SEED();
+  var seed=window.CB_SEED();
+  try{
+    var j=localStorage.getItem(KEY);
+    if(j){
+      var o=JSON.parse(j);
+      if(o&&o.v===1&&o.s&&o.s.orders){
+        /* Preserve saved records while filling fields added by newer Admin versions. */
+        Object.keys(seed).forEach(function(k){
+          if(typeof o.s[k]==='undefined')o.s[k]=clone(seed[k]);
+        });
+        return o.s;
+      }
+    }
+  }catch(e){}
+  return seed;
 }
 var S=load();
 try{var mt=localStorage.getItem('cb-mail-templates');if(mt)U=U||{};}catch(e){}
