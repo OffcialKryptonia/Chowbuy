@@ -461,8 +461,17 @@ function buildNav(){
 function render(keep){
   var r=cur(),main=$('#view');
   document.querySelectorAll('#nav a').forEach(function(a){var on=r&&a.getAttribute('data-p')===r.p;a.classList.toggle('on',!!on);if(on)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
-  if(r){main.innerHTML=r.v();document.title=(r.p?r.n+' · ':'')+'ChowBuy Admin'}
-  else{main.innerHTML=head('Page not found','That admin page does not exist.')+'<div class="card">'+empty('search','Nothing here','Head back to the dashboard.','<a class="btn pri" href="#/">Go to dashboard</a>')+'</div>';document.title='Not found · ChowBuy Admin'}
+  if(r){
+    try{
+      main.innerHTML=r.v();
+      document.title=(r.p?r.n+' · ':'')+'ChowBuy Admin';
+    }catch(err){
+      console.error('ChowBuy Admin render failed:',err);
+      main.innerHTML=head('Dashboard could not render','The Admin encountered a JavaScript error while building this view.')+
+        '<div class="card pad"><h3>Diagnostic details</h3><p class="sub">Please share this message with support.</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere;color:var(--red)">'+esc((err&&err.name?err.name+': ':'')+(err&&err.message?err.message:String(err)))+'</pre></div>';
+      document.title='Admin render error · ChowBuy Admin';
+    }
+  }else{main.innerHTML=head('Page not found','That admin page does not exist.')+'<div class="card">'+empty('search','Nothing here','Head back to the dashboard.','<a class="btn pri" href="#/">Go to dashboard</a>')+'</div>';document.title='Not found · ChowBuy Admin'}
   $('#crumb').textContent=r&&r.p?r.n:'Dashboard';
   var un=S.notifs.filter(function(n){return!n.read}).length,d=$('#nbadge');d.textContent=un;d.style.display=un?'':'none';
   $('#notifList').innerHTML=S.notifs.map(function(n){return '<button type="button" class="it'+(n.read?'':' unread')+'" data-act="readN" data-id="'+n.id+'" style="width:100%;text-align:left">'+ic(n.read?'check':'bell')+'<span>'+esc(n.t)+'</span></button>'}).join('');
