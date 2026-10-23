@@ -13,6 +13,8 @@ import { validContacts } from '@/lib/sos';
 import { usePrefs } from '@/stores/prefs';
 import { useApply } from '@/stores/apply';
 import { useRider } from '@/stores/rider';
+import { LIVE } from '@/lib/config';
+import { endSession } from '@/lib/live-session';
 
 export default function Profile() {
   const p = useTheme();
@@ -31,7 +33,7 @@ export default function Profile() {
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 110, gap: 14, maxWidth: 640, width: '100%', alignSelf: 'center' }}>
         <Txt size={24} weight="display">Profile</Txt>
         <Card>
-          <Txt size={18} weight="bold">{email || 'ChowBuy rider'}</Txt>
+          <Txt size={18} weight="bold">{(LIVE ? apply.name : '') || email || 'ChowBuy rider'}</Txt>{LIVE && email ? <Txt size={13} color={p.mute}>{email}</Txt> : null}
           <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
             <Pill label={fleet ? 'Fleet · salaried' : 'Partner · per ride'} color={p.brand} soft />
             {vehicle ? <Pill label={vehicle[0].toUpperCase() + vehicle.slice(1)} color={p.info} soft /> : null}
@@ -75,8 +77,8 @@ export default function Profile() {
           </View>
         </Card>
 
-        <Button label="Sign out" variant="soft" onPress={() => { reset(); apply.set({ verified: false }); r.replace('/'); }} />
-        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6 }}><LogOut size={14} color={p.mute} /><Txt size={12} color={p.mute}>Signing out clears this phone’s demo data.</Txt></View>
+        <Button label="Sign out" variant="soft" onPress={() => { if (LIVE) { void endSession().then(() => r.replace('/')); return; } reset(); apply.set({ verified: false }); r.replace('/'); }} />
+        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6 }}><LogOut size={14} color={p.mute} /><Txt size={12} color={p.mute}>{LIVE ? 'Signing out takes you offline.' : 'Signing out clears this phone’s demo data.'}</Txt></View>
       </ScrollView>
       <SosButton bottom={20} />
     </SafeAreaView>

@@ -12,6 +12,8 @@ import { usePrefs } from '@/stores/prefs';
 import { useApply } from '@/stores/apply';
 import { useRider } from '@/stores/rider';
 import { demoDelivery } from '@/lib/offer';
+import { LIVE } from '@/lib/config';
+import { declineOffer } from '@/lib/live-sync';
 
 type Phase = 'ringing' | 'accepted' | 'declined' | 'expired';
 
@@ -22,24 +24,37 @@ export default function Offer() {
   const ringId = usePrefs((s) => s.ring);
   const vibrate = usePrefs((s) => s.vibrate);
   const type = useApply((s) => s.type);
-  const offer = useMemo(() => demoOffer(), []);
+  const stored = useRider.getState().offer;   // live: the order the backend is offering (snapshot so the card stays after accepting)
+  const offer = useMemo(() => (LIVE && stored
+    ? { id: stored.id, merchant: stored.merchant, pickup: stored.pickup, drop: stored.drop, km: stored.km, items: (stored as { itemCount?: number }).itemCount ?? stored.items.length, cod: stored.cod, fare: stored.fare }
+    : demoOffer()), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [busy, setBusy] = useState(false);
   const view = offerView(type, offer);
   const [phase, setPhase] = useState<Phase>('ringing');
   const [blocked, setBlocked] = useState<string | null>(null);
-  useEffect(() => { if (!useRider.getState().offer) useRider.getState().setOffer(demoDelivery()); }, []);
+  useEffect(() => { if (!LIVE && !useRider.getState().offer) useRider.getState().setOffer(demoDelivery()); if (LIVE && !useRider.getState().offer) r.back(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [left, setLeft] = useState(OFFER_SECONDS);
   const phaseRef = useRef<Phase>('ringing');
 
   const finish = useCallback((next: Exclude<Phase, 'ringing'>, reason: StopReason) => {
     if (phaseRef.current !== 'ringing') return;
+    if (next === 'accepted' && LIVE) {
+      phaseRef.current = 'declined';   // locks the buttons while the backend answers
+      setBusy(true); void ring.stop('accepted');
+      void useRider.getState().liveAccept().then((res) => {
+        setBusy(false);
+        if (res.ok) { phaseRef.current = 'accepted'; setPhase('accepted'); } else { setBlocked(res.reason ?? 'This order is no longer available.'); setPhase('declined'); }
+      });
+      return;
+    }
     if (next === 'accepted') {
       const res = useRider.getState().accept(useApply.getState().type);
       if (!res.ok) { void ring.stop('declined'); phaseRef.current = 'declined'; setBlocked(res.reason ?? 'This order cannot be accepted.'); setPhase('declined'); return; }
-    } else useRider.getState().setOffer(null);
+    } else { if (LIVE) declineOffer(offer.id); useRider.getState().setOffer(null); }
     phaseRef.current = next;
     void ring.stop(reason);               // silence first, then update the screen
     setPhase(next);
-  }, []);
+  }, [offer.id]);
 
   useEffect(() => {
     void ring.start(isRingId(ringId) ? ringId : DEFAULT_RING, { vibrate });
@@ -57,7 +72,7 @@ export default function Offer() {
   return (
     <Page back={false} footer={done
       ? <Button label={phase === 'accepted' ? 'Start the delivery' : 'Back'} onPress={() => (phase === 'accepted' ? r.replace('/delivery/active') : r.back())} />
-      : <><Button label="Accept order" variant="brand" onPress={() => finish('accepted', 'accepted')} /><Button label="Decline" variant="soft" onPress={() => finish('declined', 'declined')} /></>}>
+      : <><Button label={busy ? 'Accepting…' : 'Accept order'} variant="brand" disabled={busy} onPress={() => finish('accepted', 'accepted')} /><Button label="Decline" variant="soft" disabled={busy} onPress={() => finish('declined', 'declined')} /></>}>
       <View style={{ alignItems: 'center', gap: 6, paddingVertical: 8 }}>
         <View style={{ width: 96, height: 96, borderRadius: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: phase === 'accepted' ? p.ok : phase === 'ringing' ? p.brand : p.fill }}>
           <Txt size={phase === 'ringing' ? 34 : 18} weight="displayX" color={phase === 'ringing' || phase === 'accepted' ? '#fff' : p.mute}>{phase === 'ringing' ? String(Math.max(left, 0)) : phase === 'accepted' ? '✓' : '–'}</Txt>
@@ -69,7 +84,7 @@ export default function Offer() {
       <View style={{ borderRadius: 18, borderWidth: 1.5, borderColor: p.line, padding: 16, gap: 14 }}>
         <Row2 icon={Package} title={offer.merchant} note={`${offer.items} items · Order ${offer.id}`} />
         <Row2 icon={Navigation} title={`Pick up: ${offer.pickup}`} note={`${offer.km.toFixed(1)} km trip`} />
-        <Row2 icon={MapPin} title={`Drop off: ${offer.drop}`} note="Customer details appear after you accept" />
+        <Row2 icon={MapPin} title={`Drop off: ${offer.drop}`} note="Street address and customer details appear after you accept" />
         {offer.cod > 0 ? <Row2 icon={Banknote} title={`Collect ${naira(offer.cod)} cash`} note="Cash on delivery" /> : null}
       </View>
 

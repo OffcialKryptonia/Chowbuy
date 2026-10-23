@@ -9,6 +9,10 @@ import type { DocId, DocStatus } from '@/lib/kyc';
 import type { EmergencyContact } from '@/lib/sos';
 import type { Txn } from '@/lib/wallet';
 import type { RiderType } from '@/lib/validation';
+import { LIVE } from '@/lib/config';
+import * as live from '@/lib/live';
+import { activeToOrder, backendStageFor, docStatuses, offerToOrder, stageFromBackend, type LiveMe, type LiveOffer, type LiveOrder } from '@/lib/live-map';
+import { msg } from '@/lib/supabase';
 
 export interface ChatMsg { id: string; from: 'rider' | 'customer'; text: string; at: number; receipt: Receipt; voice?: number; flags?: FlagKind[] }
 export interface Active {
@@ -30,7 +34,16 @@ interface RiderState {
   active: Active | null; history: Done[]; offer: DemoOrder | null;
   kyc: Partial<Record<DocId, DocStatus>>; contacts: EmergencyContact[]; settings: Settings; sos: SosEvent[];
   lastPos: { lat: number; lng: number; at: number } | null;
+  /** Live mode only: the signed-in rider's backend profile. */
+  me: LiveMe | null;
 
+  hydrateMe: (m: LiveMe) => void;
+  hydrateActive: (o: LiveOrder | null) => void;
+  showOffer: (o: LiveOffer) => void;
+  liveAccept: () => Promise<{ ok: boolean; reason?: string }>;
+  liveStep: (pin: string | undefined, type: RiderType | null) => Promise<{ ok: boolean; reason?: string }>;
+  liveSend: (text: string) => Promise<{ ok: boolean; reason?: string }>;
+  liveMessages: (rows: live.ChatRow[]) => void;
   setOnline: (v: boolean) => void;
   startShift: (s: 'morning' | 'evening' | 'night') => void;
   endShift: () => void;
@@ -67,7 +80,7 @@ const initial = {
   ] as Txn[],
   payoutBank: '', payoutNuban: '', active: null, history: [] as Done[], offer: null,
   kyc: {} as Partial<Record<DocId, DocStatus>>, contacts: [{ name: '', phone: '' }, { name: '', phone: '' }] as EmergencyContact[],
-  settings: { autoGreeting: true, navApp: 'google' } as Settings, sos: [] as SosEvent[], lastPos: null,
+  settings: { autoGreeting: true, navApp: 'google' } as Settings, sos: [] as SosEvent[], lastPos: null, me: null as LiveMe | null,
 };
 
 export const useRider = create<RiderState>()(
@@ -96,7 +109,7 @@ export const useRider = create<RiderState>()(
       step: (pin, type) => {
         const s = get(); const a = s.active;
         if (!a) return { ok: false, reason: 'No active delivery.' };
-        const ctx: AdvanceContext = { checklist: a.checklist, items: a.order.items, pin, expectedPin: a.order.pin, supervisorApproved: a.supervisorApproved };
+        const ctx: AdvanceContext = { checklist: a.checklist, items: a.order.items, pin, expectedPin: a.order.pin || pin, supervisorApproved: a.supervisorApproved };
         const r = advance(a.stage, ctx);
         if (!r.ok) return r;
         let next: Active = { ...a, stage: r.stage, progress: r.stage === 'to_restaurant' || r.stage === 'to_customer' ? 0 : a.progress };
@@ -107,10 +120,10 @@ export const useRider = create<RiderState>()(
         const o = a.order, now = Date.now(), net = type === 'fleet' ? 0 : partnerPayout(o.fare);
         const cash = o.cod > 0 ? collectCash({ type, amount: o.cod, walletBalance: s.balance, unremitted: s.unremitted }) : { walletBalance: s.balance, unremitted: s.unremitted };
         const txns: Txn[] = [...s.txns];
-        if (o.cod > 0 && type !== 'fleet') txns.unshift({ id: id(), kind: 'cod_collected', title: `Cash collected ${o.id}`, amount: -o.cod, at: now });
-        if (net > 0) txns.unshift({ id: id(), kind: 'ride', title: `Delivery ${o.id}`, amount: net, at: now });
+        if (!LIVE && o.cod > 0 && type !== 'fleet') txns.unshift({ id: id(), kind: 'cod_collected', title: `Cash collected ${o.id}`, amount: -o.cod, at: now });
+        if (!LIVE && net > 0) txns.unshift({ id: id(), kind: 'ride', title: `Delivery ${o.id}`, amount: net, at: now });
         set({
-          active: null, deliveriesToday: s.deliveriesToday + 1, unremitted: cash.unremitted, balance: cash.walletBalance + net, txns,
+          active: null, deliveriesToday: s.deliveriesToday + 1, unremitted: LIVE ? s.unremitted : cash.unremitted, balance: LIVE ? s.balance : cash.walletBalance + net, txns,
           history: [{ id: o.id, merchant: o.merchant, drop: o.drop, at: now, km: o.km, net, cod: o.cod, tip: 0, minutes: Math.max(1, Math.round((now - a.acceptedAt) / 60000)) }, ...s.history].slice(0, 50),
         });
         return { ok: true };
@@ -133,6 +146,50 @@ export const useRider = create<RiderState>()(
       payout: (amount) => set((s) => ({ balance: s.balance - amount, txns: [{ id: id(), kind: 'payout', title: `Payout to ${s.payoutBank || 'bank'}`, amount: -amount, at: Date.now() }, ...s.txns] })),
       logSos: (e) => set((s) => ({ sos: [e, ...s.sos].slice(0, 20) })),
       setPos: (lat, lng) => set({ lastPos: { lat, lng, at: Date.now() } }),
+      hydrateMe: (m) => set((s) => ({
+        me: m, online: m.online, hub: s.hub, rating: (m.rating ?? 95) / 20, onTimePct: s.onTimePct, deliveriesToday: m.deliveriesToday,
+        balance: m.wallet + (m.earnings ?? 0), kyc: docStatuses(m) as RiderState['kyc'], contacts: m.contacts.length >= 2 ? m.contacts : s.contacts,
+        // sample demo history and balances must never show in a real account
+        txns: s.me ? s.txns : [], history: s.me ? s.history : [], unremitted: s.me ? s.unremitted : 0,
+      })),
+      hydrateActive: (o) => set((s) => {
+        if (!o) return s.active && s.active.order.id && LIVE ? { active: null } : s;
+        if (s.active && s.active.order.id === o.id) return s;
+        return { active: { order: activeToOrder(o), stage: stageFromBackend(o.stage), checklist: {}, acceptedAt: Date.now(), greetingSent: false, messages: [], unreachableSince: null, photo: null, supervisorApproved: false, progress: 0 }, offer: null };
+      }),
+      showOffer: (o) => set({ offer: offerToOrder(o) }),
+      liveAccept: async () => {
+        const s = get();
+        if (!s.offer) return { ok: false, reason: 'This order is no longer available.' };
+        if (s.active) return { ok: false, reason: 'Finish your current delivery first.' };
+        try {
+          await live.accept(s.offer.id);
+          get().hydrateActive(await live.activeOrder());
+          set({ offer: null });
+          return { ok: true };
+        } catch (e) { set({ offer: null }); return { ok: false, reason: msg(e) }; }
+      },
+      liveStep: async (pin, type) => {
+        const a = get().active;
+        if (!a) return { ok: false, reason: 'No active delivery.' };
+        // local rules first (items checked, 4-digit PIN format); the server checks the code itself
+        const pre = advance(a.stage, { checklist: a.checklist, items: a.order.items, pin, expectedPin: pin ?? '', supervisorApproved: false });
+        if (!pre.ok) return pre;
+        try {
+          const sb = backendStageFor(pre.stage);
+          if (sb) await live.setStage(a.order.id, sb);
+          if (pre.stage === 'completed') await live.complete(a.order.id, pin ?? '');
+        } catch (e) { return { ok: false, reason: msg(e) }; }
+        const r = get().step(pin, type);
+        if (pre.stage === 'completed') void live.me().then((m) => m && get().hydrateMe(m)).catch(() => {});
+        return r;
+      },
+      liveSend: async (text) => {
+        const a = get().active;
+        if (!a) return { ok: false, reason: 'No active delivery.' };
+        try { await live.sendChat(a.order.id, text); return { ok: true }; } catch (e) { return { ok: false, reason: msg(e) }; }
+      },
+      liveMessages: (rows) => set((s) => (s.active ? { active: { ...s.active, messages: rows.map((m) => ({ id: m.id, from: m.sender_role === 'rider' ? 'rider' as const : 'customer' as const, text: m.body, at: Date.parse(m.created_at), receipt: 'read' as const })) } } : s)),
       reset: () => set({ ...initial }),
     }),
     { name: 'cb-rider-state', storage: createJSONStorage(() => AsyncStorage), version: 1 },

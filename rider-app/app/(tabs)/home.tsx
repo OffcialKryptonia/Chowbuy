@@ -15,6 +15,7 @@ import { codPaused } from '@/lib/cod';
 import { useTracking } from '@/lib/tracking';
 import { useRider } from '@/stores/rider';
 import { useApply } from '@/stores/apply';
+import { LIVE } from '@/lib/config';
 
 const ZONES = [
   { label: 'Victoria Island', mult: 1.5, at: { lat: 6.4281, lng: 3.4219 } },
@@ -48,10 +49,17 @@ export default function Home() {
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View>
             <Txt size={24} weight="display">{fleet ? 'ChowBuy Fleet' : 'ChowBuy Partner'}</Txt>
-            <Txt size={13} color={p.mute}>{fleet ? s.hub : s.city}{verified ? ' · Verified demo rider' : ''}</Txt>
+            <Txt size={13} color={p.mute}>{fleet ? s.hub : s.city}{verified ? (LIVE ? ' · Verified' : ' · Verified demo rider') : ''}</Txt>
           </View>
           <Pill label={!s.online ? 'Offline' : s.onBreak ? 'On break' : a ? 'On delivery' : 'Online'} color={!s.online ? p.mute : s.onBreak ? p.warn : a ? p.info : p.ok} />
         </View>
+
+        {LIVE && !verified ? (
+          <Card style={{ borderColor: p.warn }}>
+            <Txt size={16} weight="bold">Waiting for approval</Txt>
+            <Txt size={13} color={p.mute}>ChowBuy is reviewing your application. Add your documents in Profile, Documents and verification. You can go online as soon as you are approved.</Txt>
+          </Card>
+        ) : null}
 
         {fleet ? (
           <Card>
@@ -80,7 +88,7 @@ export default function Home() {
                 <Txt size={16} weight="bold">{s.online ? 'You are online' : 'You are offline'}</Txt>
                 <Txt size={13} color={p.mute}>{s.online ? 'New orders can ring you now.' : 'Go online to receive orders.'}</Txt>
               </View>
-              <Switch value={s.online} onValueChange={s.setOnline} trackColor={{ true: p.ok, false: p.line }} accessibilityLabel="Go online" />
+              <Switch value={s.online} disabled={LIVE && !verified} onValueChange={s.setOnline} trackColor={{ true: p.ok, false: p.line }} accessibilityLabel="Go online" />
             </View>
             {s.online ? <Button label={s.onBreak ? 'End break' : 'Take a break (stops tracking)'} variant="soft" onPress={s.toggleBreak} /> : null}
           </Card>
@@ -119,8 +127,8 @@ export default function Home() {
           </>
         ) : null}
 
-        <Button label="Simulate an incoming order" variant="brand" onPress={simulate} />
-        <Txt size={12} color={p.mute} align="center">Preview build: orders are simulated until the rider backend is connected.</Txt>
+        {LIVE ? null : <Button label="Simulate an incoming order" variant="brand" onPress={simulate} />}
+        {LIVE ? null : <Txt size={12} color={p.mute} align="center">Preview build: orders are simulated until the rider backend is connected.</Txt>}
       </ScrollView>
       <SosButton bottom={20} />
     </SafeAreaView>

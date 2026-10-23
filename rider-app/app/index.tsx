@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -7,6 +7,9 @@ import { Check, ChevronDown } from 'lucide-react-native';
 import { RiderClip } from '@/components/art/RiderClip';
 import { Button, Txt, tap } from '@/components/ui';
 import { useTheme } from '@/lib/theme';
+import { LIVE } from '@/lib/config';
+import * as live from '@/lib/live';
+import { startSession } from '@/lib/live-session';
 
 /** Welcome screen: the animated rider, a country picker, Sign in and Apply now. */
 export default function Welcome() {
@@ -14,6 +17,12 @@ export default function Welcome() {
   const r = useRouter();
   const { width, height } = useWindowDimensions();
   const [open, setOpen] = useState(false);
+  useEffect(() => { // live mode: a rider who is still signed in goes straight to Home
+    if (!LIVE) return;
+    let off = false;
+    void live.session().then((sess) => (sess ? startSession().then(() => { if (!off) r.replace('/home'); }) : null)).catch(() => {});
+    return () => { off = true; };
+  }, [r]);
   // Tablets, unfolded foldables and landscape phones get two columns; phones in portrait stack the scene above the actions.
   const wide = width >= 720;
   const sceneW = wide ? Math.min(width * 0.46, ((height - 48) * 836) / 768, 560) : Math.min(width - 32, 560);

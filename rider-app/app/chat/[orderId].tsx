@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, Pressable, TextInput, View } from 'react-native';
+import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Check, CheckCheck, Mic, Send } from 'lucide-react-native';
@@ -7,6 +7,8 @@ import { Txt } from '@/components/ui';
 import { useTheme } from '@/lib/theme';
 import { GREETING_DELAY_SECONDS, VOICE_NOTE_MAX_SECONDS, greeting, isUrgent, quickReplies } from '@/lib/chat';
 import { useRider } from '@/stores/rider';
+import { LIVE } from '@/lib/config';
+import * as live from '@/lib/live';
 
 export default function Chat() {
   const p = useTheme();
@@ -16,14 +18,27 @@ export default function Chat() {
   const [text, setText] = useState('');
   const [rec, setRec] = useState<number | null>(null);
   const list = useRef<FlatList>(null);
+  const orderId = a?.order.id;
+  const refresh = React.useCallback(async () => { if (!LIVE || !orderId) return; try { useRider.getState().liveMessages(await live.chatMessages(orderId)); } catch { /* keep what is on screen */ } }, [orderId]);
+  useEffect(() => { // live: load the conversation and check for new messages every few seconds
+    if (!LIVE) return;
+    void refresh();
+    const t = setInterval(refresh, 4000);
+    return () => clearInterval(t);
+  }, [refresh]);
+  const post = (t: string, voice?: number) => {
+    if (!LIVE) { send(t, 'rider', voice); return; }
+    void useRider.getState().liveSend(t).then((res) => { if (!res.ok) Alert.alert('Message not sent', res.reason); else void refresh(); });
+  };
 
   useEffect(() => { // demo receipts: sent → delivered → read
+    if (LIVE) return;
     const t1 = setTimeout(markReceipts, 1200), t2 = setTimeout(markReceipts, 3500);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [a?.messages.length, markReceipts]);
   useEffect(() => { // greeting is sent for the rider once they are on their way, unless already sent
     if (!a || a.greetingSent || a.stage !== 'to_customer') return;
-    const t = setTimeout(sendGreeting, GREETING_DELAY_SECONDS * 1000);
+    const t = setTimeout(() => { if (LIVE) { useRider.setState((st) => (st.active ? { active: { ...st.active, greetingSent: true } } : st)); post(greeting(a.order.customer, a.order.merchant)); } else sendGreeting(); }, GREETING_DELAY_SECONDS * 1000);
     return () => clearTimeout(t);
   }, [a?.stage, a?.greetingSent, sendGreeting]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (rec == null) return; const t = setInterval(() => setRec((s) => (s == null ? s : s + 1)), 1000); return () => clearInterval(t); }, [rec == null]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -31,7 +46,7 @@ export default function Chat() {
 
   if (!a) return <SafeAreaView style={{ flex: 1, backgroundColor: p.bg }}><Txt size={16} align="center" style={{ marginTop: 80 }}>No active delivery.</Txt></SafeAreaView>;
   const msgs = a.messages;
-  const doSend = () => { const t = text.trim(); if (!t) return; send(t); setText(''); setTimeout(() => list.current?.scrollToEnd(), 50); };
+  const doSend = () => { const t = text.trim(); if (!t) return; post(t); setText(''); setTimeout(() => list.current?.scrollToEnd(), 50); };
   const urgent = msgs.some((m) => m.flags && isUrgent(m.flags));
 
   return (
@@ -43,7 +58,7 @@ export default function Chat() {
       {urgent ? <View style={{ backgroundColor: p.bad, padding: 10 }}><Txt size={13} weight="bold" color="#fff">A supervisor has been alerted about this conversation.</Txt></View> : null}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <FlatList ref={list} data={msgs} keyExtractor={(m) => m.id} contentContainerStyle={{ padding: 14, gap: 8 }}
-          ListEmptyComponent={<View style={{ padding: 16, gap: 8 }}><Txt size={14} color={p.mute}>No messages yet. This greeting is ready for you:</Txt><Pressable onPress={() => send(greeting(a.order.customer, a.order.merchant))} style={{ padding: 12, borderRadius: 14, backgroundColor: p.fill }}><Txt size={14}>{greeting(a.order.customer, a.order.merchant)}</Txt></Pressable></View>}
+          ListEmptyComponent={<View style={{ padding: 16, gap: 8 }}><Txt size={14} color={p.mute}>No messages yet. This greeting is ready for you:</Txt><Pressable onPress={() => post(greeting(a.order.customer, a.order.merchant))} style={{ padding: 12, borderRadius: 14, backgroundColor: p.fill }}><Txt size={14}>{greeting(a.order.customer, a.order.merchant)}</Txt></Pressable></View>}
           renderItem={({ item: m }) => {
             const mine = m.from === 'rider';
             return (
@@ -54,14 +69,14 @@ export default function Chat() {
             );
           }} />
         <FlatList horizontal data={quickReplies(8)} keyExtractor={(q) => q.id} showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: 12, gap: 8, paddingVertical: 8 }}
-          renderItem={({ item }) => <Pressable accessibilityRole="button" onPress={() => send(item.text)} style={{ maxWidth: 260, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, borderWidth: 1.5, borderColor: p.brand }}><Txt size={12} color={p.brandInk}>{item.text}</Txt></Pressable>} />
+          renderItem={({ item }) => <Pressable accessibilityRole="button" onPress={() => post(item.text)} style={{ maxWidth: 260, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, borderWidth: 1.5, borderColor: p.brand }}><Txt size={12} color={p.brandInk}>{item.text}</Txt></Pressable>} />
         <View style={{ flexDirection: 'row', gap: 8, padding: 12, alignItems: 'center' }}>
           {rec != null ? (
-            <Pressable accessibilityRole="button" onPress={() => { send('Voice note', 'rider', Math.max(1, rec)); setRec(null); }} style={{ flex: 1, height: 48, borderRadius: 24, backgroundColor: p.bad, alignItems: 'center', justifyContent: 'center' }}><Txt size={14} weight="bold" color="#fff">Recording {rec}s / {VOICE_NOTE_MAX_SECONDS}s. Tap to send</Txt></Pressable>
+            <Pressable accessibilityRole="button" onPress={() => { post('Voice note', Math.max(1, rec)); setRec(null); }} style={{ flex: 1, height: 48, borderRadius: 24, backgroundColor: p.bad, alignItems: 'center', justifyContent: 'center' }}><Txt size={14} weight="bold" color="#fff">Recording {rec}s / {VOICE_NOTE_MAX_SECONDS}s. Tap to send</Txt></Pressable>
           ) : (
             <>
               <TextInput value={text} onChangeText={setText} placeholder="Message" placeholderTextColor={p.mute} accessibilityLabel="Message" style={{ flex: 1, height: 48, borderRadius: 24, paddingHorizontal: 16, backgroundColor: p.fill, color: p.ink }} />
-              <Pressable accessibilityRole="button" accessibilityLabel="Record voice note" onPress={() => setRec(0)} style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: p.fill, alignItems: 'center', justifyContent: 'center' }}><Mic size={20} color={p.ink} /></Pressable>
+              {LIVE ? null : <Pressable accessibilityRole="button" accessibilityLabel="Record voice note" onPress={() => setRec(0)} style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: p.fill, alignItems: 'center', justifyContent: 'center' }}><Mic size={20} color={p.ink} /></Pressable>}
               <Pressable accessibilityRole="button" accessibilityLabel="Send" onPress={doSend} style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: p.brand, alignItems: 'center', justifyContent: 'center' }}><Send size={20} color="#fff" /></Pressable>
             </>
           )}

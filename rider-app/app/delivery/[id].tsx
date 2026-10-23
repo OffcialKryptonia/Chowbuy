@@ -13,6 +13,7 @@ import { STAGES, STEPS, stageIndex, unreachableReady, UNREACHABLE_WAIT_SECONDS }
 import { useTracking } from '@/lib/tracking';
 import { useRider } from '@/stores/rider';
 import { useApply } from '@/stores/apply';
+import { LIVE } from '@/lib/config';
 
 const navUrl = (app: 'google' | 'apple' | 'waze', lat: number, lng: number) =>
   app === 'waze' ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`
@@ -31,6 +32,7 @@ export default function Delivery() {
   const [pin, setPin] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [busy, setBusy] = useState(false);
   useTracking(a?.stage === 'at_restaurant');
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
 
@@ -50,9 +52,12 @@ export default function Delivery() {
   const unreach = unreachableReady({ waitedSeconds: waited, hasPhoto: !!a.photo });
   const rider = lastPos ? { lat: lastPos.lat, lng: lastPos.lng } : null;
 
-  const go = () => {
+  const go = async () => {
     tap();
-    const res = step(a.stage === 'at_customer' ? pin : undefined, type);
+    if (busy) return;
+    const arg = a.stage === 'at_customer' ? pin : undefined;
+    let res: { ok: boolean; reason?: string };
+    if (LIVE) { setBusy(true); res = await useRider.getState().liveStep(arg, type); setBusy(false); } else res = step(arg, type);
     if (!res.ok) { setErr(res.reason ?? 'Cannot continue.'); return; }
     setErr(null); setPin('');
     if (a.stage === 'at_customer') r.replace('/home');
@@ -108,7 +113,7 @@ export default function Delivery() {
             <Txt size={15} weight="bold">Customer’s 4-digit PIN</Txt>
             <TextInput value={pin} onChangeText={(t) => setPin(t.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" maxLength={4} placeholder="••••" placeholderTextColor={p.mute} accessibilityLabel="Delivery PIN"
               style={{ height: 64, borderRadius: 14, borderWidth: 1.5, borderColor: p.line, color: p.ink, fontSize: 30, letterSpacing: 12, textAlign: 'center', backgroundColor: p.surface }} />
-            <Txt size={12} color={p.mute}>Demo PIN for this order: {o.pin}. In the live app only the customer sees it.</Txt>
+            {LIVE ? <Txt size={12} color={p.mute}>Only the customer can see the PIN. Five wrong tries lock the order for ChowBuy support.</Txt> : <Txt size={12} color={p.mute}>Demo PIN for this order: {o.pin}. In the live app only the customer sees it.</Txt>}
           </Card>
         ) : null}
 
@@ -121,8 +126,8 @@ export default function Delivery() {
               <>
                 <Txt size={13} color={p.mute}>{waited < UNREACHABLE_WAIT_SECONDS ? `Waiting ${Math.floor(waited / 60)}:${String(waited % 60).padStart(2, '0')} of 5:00. Keep calling and messaging.` : 'Wait complete.'}</Txt>
                 <Button label={a.photo ? 'Photo added' : 'Take a photo of the spot'} variant="soft" onPress={() => setPhoto('demo-photo')} />
-                <Button label={a.supervisorApproved ? 'Supervisor approved' : 'Ask a supervisor to approve'} variant="soft" disabled={!unreach.ok || a.supervisorApproved}
-                  onPress={() => supervisorApprove()} />
+                {LIVE ? <Txt size={13} color={p.mute}>Call ChowBuy support now. A supervisor can complete or cancel this order for you.</Txt> : <Button label={a.supervisorApproved ? 'Supervisor approved' : 'Ask a supervisor to approve'} variant="soft" disabled={!unreach.ok || a.supervisorApproved}
+                  onPress={() => supervisorApprove()} />}
                 {!unreach.ok ? <Txt size={12} color={p.bad}>{unreach.reason}</Txt> : null}
                 {a.supervisorApproved ? <Txt size={12} color={p.ok}>Approved. You can complete the delivery without the PIN. (Demo: approval is simulated.)</Txt> : null}
               </>
@@ -132,7 +137,7 @@ export default function Delivery() {
         {err ? <Txt size={14} color={p.bad} weight="bold">{err}</Txt> : null}
       </ScrollView>
       <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: 16, backgroundColor: p.bg, borderTopWidth: 1, borderTopColor: p.line }}>
-        {st.action ? <Button label={a.stage === 'at_customer' && a.supervisorApproved ? 'Complete delivery' : st.action} variant="brand" onPress={go} /> : null}
+        {st.action ? <Button label={busy ? 'Please wait…' : a.stage === 'at_customer' && a.supervisorApproved ? 'Complete delivery' : st.action} variant="brand" disabled={busy} onPress={go} /> : null}
       </View>
       <SosButton bottom={100} />
     </SafeAreaView>

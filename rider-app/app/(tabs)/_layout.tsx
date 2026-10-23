@@ -3,10 +3,12 @@ import { Tabs } from 'expo-router';
 import { Home, ListChecks, Wallet, UserRound } from 'lucide-react-native';
 import { useTheme, fonts } from '@/lib/theme';
 import { useApply } from '@/stores/apply';
+import { useLiveSync } from '@/lib/live-sync';
 
 export default function TabsLayout() {
   const p = useTheme();
   const type = useApply((s) => s.type);
+  useLiveSync();
   return (
     <Tabs screenOptions={{
       headerShown: false, tabBarActiveTintColor: p.brand, tabBarInactiveTintColor: p.mute,
