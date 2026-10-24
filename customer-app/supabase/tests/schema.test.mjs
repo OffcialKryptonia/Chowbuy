@@ -20,6 +20,7 @@ await db.exec(fs.readFileSync(root + 'migrations/20261029000001_rider_app.sql', 
 await db.exec(fs.readFileSync(root + 'migrations/20261030000001_admin_live.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261031000001_admin_profile_team.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261031000002_rider_positions.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261031000003_admin_finance.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -378,6 +379,39 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
   await as(ADM, async () => {
     const off = (await q(`select admin_riders() r`))[0].r.find(r => r.id === rid);
     ok('an offline rider is never located', off.status === 'offline' && off.lat === null && off.lng === null && off.seen_at === null, JSON.stringify(off));
+  });
+}
+// ---- Admin finance and wallet transfers
+{
+  await as(A, async () => {
+    await throws('customers cannot read finance', () => db.query(`select admin_finance(30)`), 'Admins only');
+    await throws('customers cannot read the transfer trail', () => db.query(`select admin_wallet_transfers('', 10, 0)`), 'Admins only');
+    await throws('customers cannot read transfers directly', () => db.query(`select * from wallet_transfers`), 'permission denied');
+  });
+  await as(ADM, async () => {
+    const f = (await q(`select admin_finance(30) f`))[0].f;
+    const dv = (await q(`select coalesce(sum(total),0)::int t, coalesce(sum(delivery_fee),0)::int d, coalesce(sum(service_fee),0)::int s, count(*)::int n from orders where stage='delivered' and created_at >= now() - interval '30 days'`))[0];
+    ok('finance gmv equals delivered order totals', f.gmv === dv.t && f.delivered === dv.n, JSON.stringify(f).slice(0, 300));
+    ok('finance fees equal delivered order fees', f.deliveryFees === dv.d && f.serviceFees === dv.s);
+    ok('finance wallet float equals wallet balances', f.walletFloat === (await q(`select coalesce(sum(balance),0)::int s from wallets`))[0].s);
+    ok('finance rider totals equal recorded earnings', f.riderNet === (await q(`select coalesce(sum(net),0)::int s from rider_earnings`))[0].s);
+    ok('finance lists merchants and riders as arrays', Array.isArray(f.merchants) && Array.isArray(f.riders));
+    ok('finance payment methods add up to gmv', Object.values(f.byMethod).reduce((a, b) => a + Number(b), 0) === f.gmv);
+  });
+  // a real transfer is recorded
+  const before = (await q(`select count(*)::int n from wallet_transfers`))[0].n;
+  await db.exec(`select set_config('request.jwt.claim.sub','${A}', false)`);
+  await db.exec(`update wallets set balance = 5000 where user_id = '${A}'`);
+  const other = (await q(`select phone from profiles where id <> '${A}' and phone is not null limit 1`))[0].phone;
+  await as(A, async () => { await q(`select wallet_send('${other}', 700)`); });
+  ok('wallet_send records the transfer', (await q(`select count(*)::int n from wallet_transfers`))[0].n === before + 1);
+  await as(ADM, async () => {
+    const t = (await q(`select admin_wallet_transfers('', 10, 0) t`))[0].t;
+    const row = t.rows[0];
+    ok('transfer trail shows reference, parties and amount', /^WT-\d+$/.test(row.id) && row.amount === 700 && row.fee === 0 && row.status === 'completed' && row.from && row.to, JSON.stringify(row));
+    ok('transfer totals add up', t.volume >= 700 && t.count === before + 1);
+    const none = (await q(`select admin_wallet_transfers('zzzz-none', 10, 0) t`))[0].t;
+    ok('transfer search with no match returns nothing', none.total === 0 && none.rows.length === 0);
   });
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
