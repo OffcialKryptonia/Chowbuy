@@ -19,6 +19,7 @@ await db.exec(fs.readFileSync(root + 'migrations/20261022000001_kyc_emergency.sq
 await db.exec(fs.readFileSync(root + 'migrations/20261029000001_rider_app.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261030000001_admin_live.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261031000001_admin_profile_team.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261031000002_rider_positions.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -347,6 +348,36 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
     ok('admin can update own name and phone', after.name === 'New Name' && after.phone === '+2348031234567', JSON.stringify(after));
     await throws('bad phone is rejected', () => db.query(`select admin_update_profile('New Name', '123')`), 'valid Nigerian phone');
     await throws('short name is rejected', () => db.query(`select admin_update_profile('A', '')`), 'full name');
+  });
+}
+// ---- Real rider positions
+{
+  const rid = (await q(`select user_id from riders where verified order by user_id limit 1`))[0]?.user_id;
+  ok('there is a verified rider to test with', !!rid);
+  await as(A, async () => {
+    await throws('customers cannot ping', () => db.query(`select rider_ping(6.5, 3.4)`), 'Go online first');
+    await throws('customers cannot list riders', () => db.query(`select admin_riders()`), 'Admins only');
+    await throws('customers cannot read locations directly', () => db.query(`select * from rider_locations`), 'permission denied');
+  });
+  await db.exec(`update riders set online=false where user_id='${rid}'`);
+  await as(rid, async () => { await throws('offline rider cannot ping', () => db.query(`select rider_ping(6.5, 3.4)`), 'Go online first'); });
+  await db.exec(`update riders set online=true where user_id='${rid}'`);
+  await as(rid, async () => {
+    await throws('bad latitude is rejected', () => db.query(`select rider_ping(95, 3.4)`), 'Invalid position');
+    await throws('riders cannot read locations directly', () => db.query(`select * from rider_locations`), 'permission denied');
+    await q(`select rider_ping(6.4281, 3.4219)`); await q(`select rider_ping(6.4300, 3.4300)`);
+  });
+  await as(ADM, async () => {
+    const rs = (await q(`select admin_riders() r`))[0].r;
+    const me = rs.find(r => r.id === rid);
+    ok('admin sees the latest position once, not a trail', me && me.lat === 6.43 && me.lng === 3.43 && rs.filter(r => r.id === rid).length === 1, JSON.stringify(me));
+    ok('every rider has a valid status', rs.every(r => ['pending', 'offline', 'idle', 'delivering'].includes(r.status)));
+    ok('unverified riders are pending and not shown as online', rs.filter(r => !r.verified).every(r => r.status === 'pending'));
+  });
+  await db.exec(`update riders set online=false where user_id='${rid}'`);
+  await as(ADM, async () => {
+    const off = (await q(`select admin_riders() r`))[0].r.find(r => r.id === rid);
+    ok('an offline rider is never located', off.status === 'offline' && off.lat === null && off.lng === null && off.seen_at === null, JSON.stringify(off));
   });
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

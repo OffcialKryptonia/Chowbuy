@@ -22,6 +22,7 @@ export const apply = (v: { name: string; plate: string; vehicle: 'Bike' | 'Car';
   rpc<void>('rider_apply', { p_name: v.name, p_plate: v.plate, p_vehicle: v.vehicle, p_phone: v.phone });
 export const me = () => rpc<LiveMe | null>('rider_me');
 export const setOnline = (v: boolean) => rpc<void>('rider_set_online', { p_online: v });
+export const ping = (lat: number, lng: number) => rpc<void>('rider_ping', { p_lat: lat, p_lng: lng });
 export const openOrders = () => rpc<LiveOffer[]>('rider_open_orders');
 export const activeOrder = () => rpc<LiveOrder | null>('rider_active_order');
 export const accept = (id: string) => rpc<void>('rider_accept', { p_order: id });

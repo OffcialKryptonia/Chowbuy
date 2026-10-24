@@ -255,7 +255,58 @@ function openAddBrand(){
     upd(function(){S.brands.push({id:'B'+Date.now(),name:n,vertical:v.vertical,products:p,merchants:m,featured:false});log('Brand "'+n+'" added','settings')});toast('Brand "'+n+'" added')});
 }
 
+var LFL={state:0,q:[]};
+function loadLeaflet(cb){
+  if(window.L&&window.L.map)return cb();
+  LFL.q.push(cb);if(LFL.state)return;LFL.state=1;
+  var c=document.createElement('link');c.rel='stylesheet';c.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';document.head.appendChild(c);
+  var j=document.createElement('script');j.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+  j.onload=function(){LFL.state=2;var q=LFL.q;LFL.q=[];q.forEach(function(f){f()})};
+  j.onerror=function(){LFL.state=0;LFL.q=[];var m=$('#lmap');if(m)m.innerHTML='<div class="pad muted">The map could not load. Check your connection and reload.</div>'};
+  document.head.appendChild(j);
+}
+var RSC={idle:'#12A150',delivering:'#7C3AED',offline:'#94A3B8',pending:'#F59E0B'};
+var RSN={idle:'Online · free',delivering:'On a delivery',offline:'Offline',pending:'Awaiting approval'};
+function ago(ts){if(!ts)return 'never';var m=Math.max(0,Math.round((Date.now()-new Date(ts).getTime())/60000));return m<1?'just now':m<60?m+' min ago':Math.round(m/60)+' h ago'}
+function fresh(r){return !!r.seen_at&&Date.now()-new Date(r.seen_at).getTime()<180000}
+function initLiveMap(){
+  var el=$('#lmap');if(!el||!L.riders)return;
+  loadLeaflet(function(){
+    var el2=$('#lmap');if(!el2||el2.getAttribute('data-ready'))return;el2.setAttribute('data-ready','1');
+    var Lf=window.L,pts=L.riders.filter(function(r){return r.lat!=null&&r.lng!=null&&(T('rdM','all')==='all'||r.status===T('rdM','all'))});
+    var map=Lf.map(el2,{scrollWheelZoom:false}).setView(U.lmv?U.lmv.c:[9.08,8.68],U.lmv?U.lmv.z:6);
+    Lf.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+    var b=[];
+    pts.forEach(function(r){
+      var col=fresh(r)?RSC[r.status]||'#12A150':'#94A3B8',ini=initials(r.name);
+      var ic2=Lf.divIcon({className:'',iconSize:[34,34],iconAnchor:[17,17],html:'<div style="width:34px;height:34px;border-radius:'+(r.model==='fleet'?'8px':'50%')+';background:'+col+';color:#fff;font:800 12px/34px sans-serif;text-align:center;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4)">'+esc(ini)+'</div>'});
+      Lf.marker([r.lat,r.lng],{icon:ic2}).addTo(map).bindPopup('<b>'+esc(r.name)+'</b><br>'+esc(RSN[r.status]||r.status)+(r.active_order?' · '+esc(r.active_order):'')+'<br>'+esc(r.vehicle)+' · '+esc(r.plate)+'<br>Seen '+esc(ago(r.seen_at))+(fresh(r)?'':' (position may be out of date)'));
+      b.push([r.lat,r.lng]);
+    });
+    if(!U.lmv&&b.length)map.fitBounds(b,{padding:[40,40],maxZoom:15});
+    map.on('moveend',function(){var c=map.getCenter();U.lmv={c:[c.lat,c.lng],z:map.getZoom()}});
+    setTimeout(function(){map.invalidateSize()},50);
+  });
+}
+function ridersLoad(){
+  if(!beOn())return Promise.resolve();
+  return beReq('/rest/v1/rpc/admin_riders','POST',{}).then(function(r){L.riders=r},function(){}).then(function(){refresh()});
+}
+function vRidersLive(){
+  var R=L.riders||[],ok2=R.filter(function(r){return r.verified}),c=function(st){return R.filter(function(r){return r.status===st}).length};
+  var mv=T('rdM','all'),located=R.filter(function(r){return r.lat!=null&&r.lng!=null}).length;
+  var rows=R.map(function(r){
+    return '<tr><td><div class="who"><span class="tile" style="background:'+(r.model==='fleet'?'#0F172A':'#FF8A00')+'">'+esc(initials(r.name))+'</span><div><b>'+esc(r.name)+'</b><small>'+esc(r.vehicle)+' · '+esc(r.plate)+'</small></div></div></td><td>'+tbadge(r.model==='fleet'?'FLEET':'PARTNER')+'</td>'+
+     '<td><span class="pill" style="background:'+RSC[r.status]+'22;color:'+RSC[r.status]+'">'+esc(RSN[r.status]||r.status)+'</span></td><td class="muted nw">'+(r.status==='offline'||r.status==='pending'?'—':esc(ago(r.seen_at)))+'</td><td>'+(r.active_order?'<span class="mono">'+esc(r.active_order)+'</span>':'—')+'</td><td class="r mono">'+num(r.trips30)+'</td><td class="r mono">'+(r.rating_count?esc(r.rating_pct)+'%':'—')+'</td><td class="muted">'+esc(r.phone||'')+'</td></tr>'}).join('');
+  return head('Riders & fleet','Real riders, where they are right now, and what they are doing.','<span class="pill info">'+ok2.filter(function(r){return r.model==='fleet'}).length+' fleet</span><span class="pill acc">'+ok2.filter(function(r){return r.model!=='fleet'}).length+' partner</span>'+btn(ic('refresh')+'Refresh','ridersReload'))+liveBar()+
+   '<div class="grid g3">'+kpi('Online now',num(c('idle')+c('delivering')),'','bike','g',c('idle')+' free · '+c('delivering')+' delivering')+kpi('Offline',num(c('offline')),'','ban')+kpi('Awaiting approval',num(c('pending')),'','clock','n','Approve under KYC review')+'</div>'+
+   '<div class="card"><div class="bar" style="gap:1rem"><div style="margin-right:auto"><h3>Live rider map</h3><p class="sub">'+located+' rider'+(located===1?'':'s')+' sharing their location. Updates every 20 seconds. Map data &copy; OpenStreetMap contributors.</p></div><span class="pill ok"><i class="pulse"></i>Live</span></div>'+
+   '<div class="bar"><div class="tabs sm" role="group" aria-label="Map filter">'+[['all','All'],['idle','Free'],['delivering','On delivery']].map(function(o){return '<button type="button" data-act="tab" data-k="rdM" data-v="'+o[0]+'" aria-pressed="'+(mv===o[0])+'">'+o[1]+'</button>'}).join('')+'</div></div>'+
+   '<div class="pad"><div id="lmap" style="height:26rem;border-radius:1rem;overflow:hidden;background:var(--card)"></div>'+(located?'':'<p class="sub" style="margin-top:.8rem">No rider is sharing a location right now. A rider appears here when they are online in the ChowBuy Rider app with location allowed. Riders on the older app build will not appear until they update.</p>')+'<div class="acts" style="margin-top:.8rem;gap:1rem;font-size:.8rem"><span class="muted"><b style="color:#12A150">Green</b> free · <b style="color:#7C3AED">purple</b> on a delivery · <b style="color:#94A3B8">grey</b> not seen for 3+ minutes · square = fleet, round = partner</span></div></div></div>'+
+   '<div class="card"><div class="bar"><h3 style="margin-right:auto">All riders ('+R.length+')</h3></div>'+(R.length?'<div class="tw"><table class="t" style="min-width:56rem"><thead><tr><th>Rider</th><th>Model</th><th>Status</th><th>Last seen</th><th>Current order</th><th class="r">Trips (30d)</th><th class="r">Rating</th><th>Phone</th></tr></thead><tbody>'+rows+'</tbody></table></div>':empty('bike','No riders yet','Riders appear here after they apply in the ChowBuy Rider app.',''))+'</div>';
+}
 function vRiders(){
+  if(liveOn()&&L.riders)return vRidersLive();
   var tv=T('rdT','all'),ts=T('rdS','all'),q=(U.q.riders||'').trim().toLowerCase();
   var list=S.riders.filter(function(r){return(tv==='all'||r.type===tv)&&(ts==='all'||r.status===ts)&&(!q||(r.name+' '+r.city).toLowerCase().indexOf(q)>-1)});
   var rows=list.map(function(r){
@@ -495,6 +546,7 @@ function render(keep){
     }
   }else{main.innerHTML=head('Page not found','That admin page does not exist.')+'<div class="card">'+empty('search','Nothing here','Head back to the dashboard.','<a class="btn pri" href="#/">Go to dashboard</a>')+'</div>';document.title='Not found · ChowBuy Admin'}
   $('#crumb').textContent=r&&r.p?r.n:'Dashboard';
+  if(r&&r.p==='riders'&&liveOn()&&L.riders)initLiveMap();
   var un=S.notifs.filter(function(n){return!n.read}).length,d=$('#nbadge');d.textContent=un;d.style.display=un?'':'none';
   $('#notifList').innerHTML=S.notifs.map(function(n){return '<button type="button" class="it'+(n.read?'':' unread')+'" data-act="readN" data-id="'+n.id+'" style="width:100%;text-align:left">'+ic(n.read?'check':'bell')+'<span>'+esc(n.t)+'</span></button>'}).join('');
   var av=$('#avTop');if(av){av.innerHTML=avHtml();av.setAttribute('style',avStyle())}
@@ -519,6 +571,7 @@ var A={
  clear:function(el){var k=el.getAttribute('data-id');U.q[k]='';U.page={};if(k==='orders'){U.tab.ordV='all';U.tab.ordS='all'}if(k==='merch')U.tab.merV='all';if(k==='riders'){U.tab.rdT='all';U.tab.rdS='all'}if(k==='wt')U.tab.wtS='ALL';refresh()},
  range:function(){U.range=(U.range+1)%3;refresh();toast('Showing '+RANGES[U.range][0].toLowerCase());if(beOn())liveLoad()},
  liveReload:function(){liveLoad()},
+ ridersReload:function(){ridersLoad()},
  order:function(el){openOrder(el.getAttribute('data-id'))},
  csvOrders:function(){csv('chowbuy-orders.csv',[['Reference','Placed','Vertical','Merchant','Customer','City','Total NGN','Commission NGN','Status','Rider']].concat((liveOn()?L.orders.rows:S.orders).map(function(o){return[o.id,fdt(o.placed),V[o.vertical],o.merchant,o.customer,o.city,o.total,o.commission,o.status,o.rider]})));toast('Exported '+S.orders.length+' orders to CSV')},
  csvWt:function(){csv('chowbuy-wallet-transfers.csv',[['Reference','Time','Sender','Recipient','Amount NGN','Fee NGN','Status']].concat(S.transfers.map(function(t){return[t.id,fdt(t.ts),t.from,t.to,t.amount,t.fee,t.status]})));toast('Exported '+S.transfers.length+' ledger entries to CSV')},
@@ -1392,16 +1445,16 @@ function beConnect(url,anon,email,pw){
     U.hist=r[1];save();
   });
 }
-function beDisconnect(){BE.tok='';beSaveLocal();U.hist=null;L.dash=L.orders=L.merchants=L.me=L.team=L.sessions=null}
+function beDisconnect(){BE.tok='';beSaveLocal();U.hist=null;L.dash=L.orders=L.merchants=L.me=L.team=L.sessions=L.riders=null}
 
 /* ---- live numbers: once connected, the dashboard, orders and merchants show the real backend instead of sample data ---- */
-var L={dash:null,orders:null,merchants:null,me:null,team:null,sessions:null,err:'',busy:false};
+var L={dash:null,orders:null,merchants:null,me:null,team:null,sessions:null,riders:null,err:'',busy:false};
 function rangeDays(){var m=String(RANGES[U.range][0]).match(/\d+/);return m?+m[0]:30}
 function liveLoad(){
   if(!beOn())return Promise.resolve();
   L.busy=true;L.err='';
   return Promise.all([beReq('/rest/v1/rpc/admin_dashboard','POST',{p_days:rangeDays()}),beReq('/rest/v1/rpc/admin_orders','POST',{p_status:'all',p_search:'',p_limit:200,p_offset:0}),beReq('/rest/v1/rpc/admin_merchants','POST',{})])
-   .then(function(r){L.dash=r[0];L.orders=r[1];L.merchants=r[2];return Promise.all([beReq('/rest/v1/rpc/admin_me','POST',{}),beReq('/rest/v1/rpc/admin_team','POST',{}),beReq('/rest/v1/rpc/admin_my_sessions','POST',{})].map(function(q){return q.catch(function(){return null})})).then(function(x){L.me=x[0];L.team=x[1];L.sessions=x[2];if(L.me&&!U.pf){S.profile.name=L.me.name||S.profile.name;S.profile.email=L.me.email||S.profile.email;S.profile.phone=L.me.phone||''}})},function(e){L.err=/JWT|expired|401/i.test(e.message)?'Your session ended. Sign in again.':e.message})
+   .then(function(r){L.dash=r[0];L.orders=r[1];L.merchants=r[2];return Promise.all([beReq('/rest/v1/rpc/admin_me','POST',{}),beReq('/rest/v1/rpc/admin_team','POST',{}),beReq('/rest/v1/rpc/admin_my_sessions','POST',{}),beReq('/rest/v1/rpc/admin_riders','POST',{})].map(function(q){return q.catch(function(){return null})})).then(function(x){L.me=x[0];L.team=x[1];L.sessions=x[2];L.riders=x[3];if(L.me&&!U.pf){S.profile.name=L.me.name||S.profile.name;S.profile.email=L.me.email||S.profile.email;S.profile.phone=L.me.phone||''}})},function(e){L.err=/JWT|expired|401/i.test(e.message)?'Your session ended. Sign in again.':e.message})
    .then(function(){L.busy=false;refresh()});
 }
 function liveOn(){return beOn()&&!!L.orders}
@@ -1415,7 +1468,7 @@ function liveBar(){
   if(L.err)return '<div class="card pad" style="border-color:var(--red)"><b>Could not load your live data.</b> <span class="muted">'+esc(L.err)+'</span> <span class="acts" style="display:inline-flex;margin-left:.6rem">'+btn('Try again','liveReload')+'</span></div>';
   return '';
 }
-var SAMPLE_ROUTES=['categories','brands','riders','chats','locations','finance','wallet-transfers','group-orders','smart-cart'];
+var SAMPLE_ROUTES=['categories','brands','chats','locations','finance','wallet-transfers','group-orders','smart-cart'];
 function sampleBar(){return '<div class="card pad" style="border-color:var(--warn,#F59E0B);margin-bottom:1rem"><b>Sample data.</b> <span class="muted">This page is not connected to your backend yet, so the names and numbers on it are examples, not your real business.'+(cur()&&cur().p==='riders'?' Approve real riders under KYC review.':'')+'</span></div>'}
 function liveBars(vals,labels,fmt){
   var W=600,H=190,pl=8,pb=22,pt=10,max=Math.max.apply(0,vals.concat([1])),bw=(W-pl*2)/vals.length;
@@ -1964,4 +2017,5 @@ if(mq.addEventListener)mq.addEventListener('change',function(e){if(!savedTheme)s
 render(false);
 if(beOn())liveLoad();
 setInterval(function(){var r=cur();if(beOn()&&document.visibilityState==='visible'&&r&&(r.p===''||r.p==='orders'||r.p==='merchants'))liveLoad()},60000);
+setInterval(function(){var r=cur();if(beOn()&&document.visibilityState==='visible'&&r&&r.p==='riders')ridersLoad()},20000);
 })();

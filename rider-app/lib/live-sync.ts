@@ -10,6 +10,7 @@ const declined = new Set<string>();
 export const declineOffer = (id: string) => declined.add(id);
 let lastRemoteOnline: boolean | null = null;
 let lastMoveAt = 0;
+let lastPingAt = 0;
 
 /**
  * Keeps the app and the backend in step while a rider is signed in (live mode only):
@@ -69,6 +70,15 @@ export function useLiveSync() {
     const t = setInterval(look, 6000);
     return () => clearInterval(t);
   }, [online, onBreak, active, hasOffer, verified, r]);
+
+  // position -> Admin map: while online and verified, tell the backend where the rider is (at most every 20 seconds)
+  useEffect(() => {
+    if (!LIVE || !online || onBreak || !verified || !lastPos) return;
+    const now = Date.now();
+    if (now - lastPingAt < 20000) return;
+    lastPingAt = now;
+    live.ping(lastPos.lat, lastPos.lng).catch(() => { lastPingAt = 0; });
+  }, [lastPos, online, onBreak, verified]);
 
   // position -> customer
   useEffect(() => {
