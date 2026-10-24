@@ -5,7 +5,8 @@ const db = new PGlite({ extensions: { pgcrypto } });
 const root = new URL('../', import.meta.url).pathname;
 await db.exec(`
  create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
- create schema auth; create table auth.users (id uuid primary key default gen_random_uuid(), email text, raw_user_meta_data jsonb default '{}');
+ create schema auth; create table auth.users (id uuid primary key default gen_random_uuid(), email text, raw_user_meta_data jsonb default '{}', last_sign_in_at timestamptz);
+ create table auth.sessions (id uuid primary key default gen_random_uuid(), user_id uuid, user_agent text, ip inet, created_at timestamptz default now(), updated_at timestamptz, refreshed_at timestamptz);
  create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
  grant usage on schema public, auth to anon, authenticated, service_role;
  grant all on all tables in schema public to service_role;
@@ -17,6 +18,7 @@ await db.exec(fs.readFileSync(root + 'migrations/20261021000001_admin_customers_
 await db.exec(fs.readFileSync(root + 'migrations/20261022000001_kyc_emergency.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261029000001_rider_app.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261030000001_admin_live.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261031000001_admin_profile_team.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -322,6 +324,29 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
     ok('search with no match returns nothing', none.total === 0 && none.rows.length === 0);
     const ms = (await q(`select admin_merchants() m`))[0].m;
     ok('admin merchants lists merchants with 30 day numbers', ms.length >= 1 && ms.every(m => typeof m.orders30 === 'number' && typeof m.gmv30 === 'number'));
+  });
+}
+// ---- Admin profile and team
+{
+  await as(A, async () => {
+    await throws('customers cannot read admin profile', () => db.query(`select admin_me()`), 'Admins only');
+    await throws('customers cannot list the team', () => db.query(`select admin_team()`), 'Admins only');
+    await throws('customers cannot list sessions', () => db.query(`select admin_my_sessions()`), 'Admins only');
+    await throws('customers cannot edit an admin profile', () => db.query(`select admin_update_profile('X Y', '')`), 'Admins only');
+  });
+  await db.exec(`insert into auth.sessions (user_id, user_agent, ip) values ('${ADM}', 'Safari on iPhone', '105.112.33.44'), ('${A}', 'Other user', '1.2.3.4')`);
+  await as(ADM, async () => {
+    const me = (await q(`select admin_me() m`))[0].m;
+    ok('admin_me returns the signed-in admin only', me.id === ADM && me.role === 'admin' && me.email.includes('@'));
+    const team = (await q(`select admin_team() t`))[0].t;
+    ok('team lists admins only and flags the caller', team.length >= 1 && team.every(t => t.email) && team.filter(t => t.me).length === 1 && team.find(t => t.me).id === ADM);
+    const ss = (await q(`select admin_my_sessions() s`))[0].s;
+    ok('sessions are the caller own and the IP is masked', ss.length === 1 && ss[0].agent === 'Safari on iPhone' && ss[0].ip === '105.112.***.***');
+    await q(`select admin_update_profile('  New Name ', '08031234567')`);
+    const after = (await q(`select admin_me() m`))[0].m;
+    ok('admin can update own name and phone', after.name === 'New Name' && after.phone === '+2348031234567', JSON.stringify(after));
+    await throws('bad phone is rejected', () => db.query(`select admin_update_profile('New Name', '123')`), 'valid Nigerian phone');
+    await throws('short name is rejected', () => db.query(`select admin_update_profile('A', '')`), 'full name');
   });
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

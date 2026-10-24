@@ -425,7 +425,15 @@ Object.assign(A,{
  beFn('admin-settings',{emailTemplates:{version:1,items:items}}).then(function(){toast('Mail templates saved to the ChowBuy backend.');audit('Mail templates updated');},function(e){toast(e.message,'err')})}
 });
 }
+function vTeamLive(){
+  var T=L.team||[];
+  var rows=T.map(function(t){return '<tr><td><div class="who"><span class="av" style="width:2.4rem;height:2.4rem;font-size:.75rem">'+initials(t.name||t.email)+'</span><div><b>'+esc(t.name||t.email)+(t.me?' <span class="pill acc">You</span>':'')+'</b><small>'+esc(t.email)+'</small></div></div></td><td>Admin</td><td class="muted">'+esc(t.phone||'Not set')+'</td><td class="muted nw">'+(t.last_sign_in?fdt(t.last_sign_in):'Never')+'</td></tr>'}).join('');
+  return head('Team & permissions','Everyone who can sign in to this Admin Console.')+liveBar()+
+  '<div class="card"><div class="tw"><table class="t" style="min-width:40rem"><thead><tr><th>Member</th><th>Role</th><th>Phone</th><th>Last sign-in</th></tr></thead><tbody>'+(rows||'<tr><td colspan="4" class="muted">No admins found.</td></tr>')+'</tbody></table></div><div class="foot"><span>'+T.length+' admin'+(T.length===1?'':'s')+'</span></div></div>'+
+  '<div class="card pad"><p class="sub">Admin access is granted in the backend by setting a person\'s role to admin. Inviting people and changing roles from this page is not available yet.</p></div>';
+}
 function vTeam(){
+  if(liveOn()&&L.team)return vTeamLive();
   var rows=S.team.map(function(t){var me=t.id==='T0';
     return '<tr><td><div class="who"><span class="av" style="width:2.4rem;height:2.4rem;font-size:.75rem">'+initials(t.name)+'</span><div><b>'+esc(t.name)+(me?' <span class="pill acc">You</span>':'')+'</b><small>'+esc(t.email)+'</small></div></div></td><td>'+esc(t.role)+'</td><td>'+esc(t.scope)+'</td><td>'+pill(t.status)+'</td><td class="muted nw">'+esc(t.last)+'</td><td class="r"><div class="rowact">'+btn(ic('edit')+'Role','editT',t.id)+(t.status==='pending'?btn('Resend invite','resend',t.id,'pri'):t.status==='active'?btn('Suspend','suspendT',t.id,'danger',me?' disabled title="You cannot suspend yourself"':''):btn('Reinstate','suspendT',t.id))+'</div></td></tr>'}).join('');
   return head('Team & permissions','Operations staff and what each person can do.',btn(ic('plus')+'Invite team member','invite',null,'pri'))+
@@ -869,7 +877,7 @@ function ensureExt(){
     {id:'s4',device:'Edge on Windows',ip:'41.58.***.***',loc:'Port Harcourt, Nigeria',ts:b-3600e3*76}]}
 }
 U.reveal={};U.conn={};U.pdraft=null;U.mdraft=null;U.pf=null;U.rad={city:'all',dist:'all',st:'all',ty:'all',sel:null};
-var ROLEL={super_admin:'Super Admin',operations:'Operations Lead',finance:'Finance Controller'};
+var ROLEL={admin:'Admin',super_admin:'Super Admin',operations:'Operations Lead',finance:'Finance Controller'};
 var AVG=[['#FF5A1F','#FF8A00'],['#0F172A','#334155'],['#12A150','#34D399'],['#2563EB','#60A5FA'],['#7C3AED','#C084FC'],['#DB2777','#FB7185']];
 function avHtml(){var P=S.profile,g=AVG[P.avatarColor%6];return P.avatarUrl?'<img src="'+P.avatarUrl+'" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover">':esc(initials(P.name))}
 function avStyle(){var g=AVG[S.profile.avatarColor%6];return S.profile.avatarUrl?'padding:0;overflow:hidden':'background:linear-gradient(135deg,'+g[0]+','+g[1]+')'}
@@ -886,17 +894,18 @@ function vProfile(){
   if(tab==='details'){
     body='<div class="grid g2" style="align-items:start"><div class="card pad"><h3>Profile photo</h3><p class="sub">JPEG, PNG or WebP up to 5 MB. Photos are cropped to a square.</p><div class="acts" style="margin-top:1rem;gap:1.2rem;align-items:center"><div class="av" style="width:5.5rem;height:5.5rem;font-size:1.6rem;'+avStyle()+'">'+avHtml()+'</div><div style="display:grid;gap:.5rem"><button type="button" class="btn" data-act="avPick">'+ic('upload')+'Upload photo</button>'+(P.avatarUrl?btn(ic('trash')+'Remove photo','avRemove',null,'danger'):'')+'<input type="file" hidden id="avFile" data-avatar="1" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"></div></div>'+
       '<div style="margin-top:1.4rem"><b style="font-size:.85rem">Or choose a badge</b><div class="chips" style="margin-top:.6rem">'+AVG.map(function(g,i){return '<button type="button" data-act="avColor" data-id="'+i+'" aria-label="Badge colour '+(i+1)+'" aria-pressed="'+(!P.avatarUrl&&P.avatarColor===i)+'" style="width:2.6rem;height:2.6rem;border-radius:50%;background:linear-gradient(135deg,'+g[0]+','+g[1]+');color:#fff;font:800 .75rem var(--display);outline:'+(!P.avatarUrl&&P.avatarColor===i?'3px solid var(--fg)':'0')+';outline-offset:2px">'+esc(initials(pf.name))+'</button>'}).join('')+'</div></div></div>'+
-      '<div class="card pad"><h3>Account details</h3><form data-form="profile" style="display:grid;gap:.9rem;margin-top:1rem" novalidate><div class="f"><label for="pf-name">Full name</label><input id="pf-name" data-fid="pf-name" data-in="pf:name" value="'+esc(pf.name)+'" maxlength="60"></div><div class="f"><label for="pf-email">Admin email</label><input id="pf-email" type="email" data-fid="pf-email" data-in="pf:email" value="'+esc(pf.email)+'" placeholder="admin@chowbuy.ng"></div><div class="f"><label for="pf-phone">Phone number</label><input id="pf-phone" inputmode="tel" data-fid="pf-phone" data-in="pf:phone" value="'+esc(pf.phone)+'" placeholder="+234 80… or 080…"><small>Nigerian format: +234 80… or 080…</small></div><div class="f"><label>Role</label><div><span class="pill acc">'+ic('shield')+ROLEL[P.role]+'</span> <small class="muted">Read-only. Ask a Super Admin to change roles.</small></div></div><div class="acts"><button class="btn pri" type="submit">'+ic('check')+'Save profile</button></div></form></div></div>';
+      '<div class="card pad"><h3>Account details</h3><form data-form="profile" style="display:grid;gap:.9rem;margin-top:1rem" novalidate><div class="f"><label for="pf-name">Full name</label><input id="pf-name" data-fid="pf-name" data-in="pf:name" value="'+esc(pf.name)+'" maxlength="60"></div><div class="f"><label for="pf-email">Admin email</label><input id="pf-email" type="email"'+(liveOn()?' readonly':'')+' data-fid="pf-email" data-in="pf:email" value="'+esc(pf.email)+'" placeholder="admin@chowbuy.ng"></div><div class="f"><label for="pf-phone">Phone number</label><input id="pf-phone" inputmode="tel" data-fid="pf-phone" data-in="pf:phone" value="'+esc(pf.phone)+'" placeholder="+234 80… or 080…"><small>Nigerian format: +234 80… or 080…</small></div><div class="f"><label>Role</label><div><span class="pill acc">'+ic('shield')+(ROLEL[P.role]||'Admin')+'</span> <small class="muted">Read-only. Ask a Super Admin to change roles.</small></div></div><div class="acts"><button class="btn pri" type="submit">'+ic('check')+'Save profile</button></div></form></div></div>';
   }else if(tab==='security'){
     var eye=function(id){return '<button type="button" class="ib" style="width:2.4rem;height:2.4rem;flex:none" data-act="eye" data-id="'+id+'" aria-label="Show or hide password">'+ic('eye')+'</button>'};
-    body='<div class="grid g2" style="align-items:start"><div class="card pad"><h3>Change password</h3><form data-form="pw" style="display:grid;gap:.9rem;margin-top:1rem" novalidate autocomplete="off"><div class="f"><label for="pw0">Current password</label><div class="acts" style="flex-wrap:nowrap"><input id="pw0" type="password" autocomplete="current-password">'+eye('pw0')+'</div></div><div class="f"><label for="pw1">New password</label><div class="acts" style="flex-wrap:nowrap"><input id="pw1" type="password" autocomplete="new-password">'+eye('pw1')+'</div><div class="meter" aria-hidden="true"><i id="pwBar"></i></div><small id="pwLbl" class="muted">Strength: enter a password</small><ul id="pwRules" class="rules">'+pwRules('').map(function(r){return '<li>'+ic('x')+r[0]+'</li>'}).join('')+'</ul></div><div class="f"><label for="pw2">Confirm new password</label><div class="acts" style="flex-wrap:nowrap"><input id="pw2" type="password" autocomplete="new-password">'+eye('pw2')+'</div><small id="pwMatch" class="muted"></small></div><label class="acts" style="gap:.6rem;flex-wrap:nowrap"><input type="checkbox" id="pwOut" style="width:auto" checked> Log out of all other active sessions</label><div class="acts"><button class="btn pri" type="submit">'+ic('shield')+'Update password</button></div><small class="muted">Demo only: passwords are validated here but never stored or sent anywhere.</small></form></div>'+
+    body='<div class="grid g2" style="align-items:start"><div class="card pad"><h3>Change password</h3><form data-form="pw" style="display:grid;gap:.9rem;margin-top:1rem" novalidate autocomplete="off"><div class="f"><label for="pw0">Current password</label><div class="acts" style="flex-wrap:nowrap"><input id="pw0" type="password" autocomplete="current-password">'+eye('pw0')+'</div></div><div class="f"><label for="pw1">New password</label><div class="acts" style="flex-wrap:nowrap"><input id="pw1" type="password" autocomplete="new-password">'+eye('pw1')+'</div><div class="meter" aria-hidden="true"><i id="pwBar"></i></div><small id="pwLbl" class="muted">Strength: enter a password</small><ul id="pwRules" class="rules">'+pwRules('').map(function(r){return '<li>'+ic('x')+r[0]+'</li>'}).join('')+'</ul></div><div class="f"><label for="pw2">Confirm new password</label><div class="acts" style="flex-wrap:nowrap"><input id="pw2" type="password" autocomplete="new-password">'+eye('pw2')+'</div><small id="pwMatch" class="muted"></small></div>'+(liveOn()?'':'<label class="acts" style="gap:.6rem;flex-wrap:nowrap"><input type="checkbox" id="pwOut" style="width:auto" checked> Log out of all other active sessions</label>')+'<div class="acts"><button class="btn pri" type="submit">'+ic('shield')+'Update password</button></div>'+(liveOn()?'<small class="muted">Changes the password of your real admin account.</small>':'<small class="muted">Demo only: passwords are validated here but never stored or sent anywhere.</small>')+'</form></div>'+
       '<div class="card pad"><h3>Two-factor authentication</h3><p class="sub">Require a 6-digit code from an authenticator app (TOTP) at sign-in.</p><div class="trow" style="margin-top:.8rem"><div><b>Authenticator app</b><small>'+(P.twoFactor?'Enabled. Your account has an extra layer of protection.':'Not enabled. We strongly recommend turning this on.')+'</small></div>'+sw(P.twoFactor,'tfa','x','Authenticator app 2FA')+'</div>'+(P.twoFactor?'<div style="margin-top:.8rem"><span class="pill ok">'+ic('shield')+'2FA active</span></div>':'')+'</div></div>';
   }else{
+    var live=liveOn()&&L.sessions;
     var feed=S.audit.slice(0,6).map(function(a){return '<div class="it"><span class="ico">'+ic('shield')+'</span><div><div>'+esc(a.t)+'</div><small>'+fdt(a.ts)+'</small></div></div>'}).join('');
-    body='<div class="card"><div class="pad" style="padding-bottom:.5rem"><h3>Active sessions</h3><p class="sub">Devices currently signed in to this admin account.</p></div><div class="tw"><table class="t" style="min-width:44rem"><thead><tr><th>Device</th><th>IP address</th><th>Location</th><th>Last active</th><th></th></tr></thead><tbody>'+S.sessions.map(function(s){return '<tr><td><b>'+esc(s.device)+'</b>'+(s.cur?' <span class="pill ok">This device</span>':'')+'</td><td class="mono">'+esc(s.ip)+'</td><td>'+esc(s.loc)+'</td><td class="muted nw">'+(s.cur?'Active now':fdt(s.ts))+'</td><td class="r">'+(s.cur?'':btn('Revoke session','revoke',s.id,'danger'))+'</td></tr>'}).join('')+'</tbody></table></div></div>'+
+    body='<div class="card"><div class="pad" style="padding-bottom:.5rem"><h3>Active sessions</h3><p class="sub">Devices currently signed in to this admin account.</p></div><div class="tw"><table class="t" style="min-width:44rem"><thead><tr><th>Device</th><th>IP address</th><th>Location</th><th>Last active</th><th></th></tr></thead><tbody>'+(live?(L.sessions.length?L.sessions.map(function(s){return '<tr><td><b>'+esc(s.agent||'Unknown device')+'</b>'+(s.current?' <span class="pill ok">This device</span>':'')+'</td><td class="mono">'+esc(s.ip||'Hidden')+'</td><td class="muted">Not recorded</td><td class="muted nw">'+(s.current?'Active now':fdt(s.last_active))+'</td><td></td></tr>'}).join(''):'<tr><td colspan="5" class="muted">No sessions found.</td></tr>'):S.sessions.map(function(s){return '<tr><td><b>'+esc(s.device)+'</b>'+(s.cur?' <span class="pill ok">This device</span>':'')+'</td><td class="mono">'+esc(s.ip)+'</td><td>'+esc(s.loc)+'</td><td class="muted nw">'+(s.cur?'Active now':fdt(s.ts))+'</td><td class="r">'+(s.cur?'':btn('Revoke session','revoke',s.id,'danger'))+'</td></tr>'}).join(''))+'</tbody></table></div></div>'+
       '<div class="card pad"><h3>Recent security activity</h3>'+(feed?'<div class="feed" style="margin-top:.6rem">'+feed+'</div>':'<p class="sub" style="margin-top:.5rem">Changes you make to your profile and security settings will appear here.</p>')+'</div>';
   }
-  return head('My profile','Your admin identity, password and sign-in security.','<span class="pill acc">'+ic('shield')+ROLEL[P.role]+'</span>')+tb+body;
+  return head('My profile','Your admin identity, password and sign-in security.','<span class="pill acc">'+ic('shield')+(ROLEL[P.role]||'Admin')+'</span>')+tb+body;
 }
 function pwLive(){
   var f=$('[data-form=pw]');if(!f)return;var v=$('#pw1').value,r=pwRules(v),sc=r.filter(function(x){return x[1]}).length;
@@ -1091,6 +1100,7 @@ Object.assign(A,{
 Object.assign(FORMS,{
  profile:function(f){var pf=U.pf||S.profile,n=(pf.name||'').trim(),e=(pf.email||'').trim(),ph=String(pf.phone||'').replace(/[\s-]/g,'');
    if(n.length<2){toast('Enter your full name.','err');return}
+   if(liveOn()){beReq('/rest/v1/rpc/admin_update_profile','POST',{p_name:n,p_phone:ph}).then(function(){U.pf=null;return liveLoad()}).then(function(){toast('Profile saved to the backend.')},function(e){toast(e.message,'err')});return}
    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)){toast('Enter a valid email address.','err');return}
    if(!/^(\+234|0)[789][01]\d{8}$/.test(ph)){toast('Use a Nigerian number like +234 803 555 0142 or 0803 555 0142.','err');return}
    upd(function(){S.profile.name=n;S.profile.email=e;S.profile.phone=pf.phone;U.pf=null;audit('Profile details updated')});toast('Profile saved.')},
@@ -1099,6 +1109,7 @@ Object.assign(FORMS,{
    if(pwRules(v).some(function(r){return!r[1]})){toast('New password does not meet all the requirements.','err');return}
    if(v===c){toast('Choose a password different from your current one.','err');return}
    if(v!==m){toast('The two new passwords do not match.','err');return}
+   if(liveOn()){beReq('/auth/v1/token?grant_type=password','POST',{email:BE.who,password:c},BE.anon).then(function(){return beReq('/auth/v1/user','PUT',{password:v})}).then(function(){toast('Password updated.');var f=$('[data-form=pw]');if(f)f.reset();pwLive()},function(e){toast(/invalid/i.test(e.message)?'Your current password is not correct.':e.message,'err')});return}
    var out=$('#pwOut').checked,n=S.sessions.filter(function(s){return!s.cur}).length;
    upd(function(){if(out)S.sessions=S.sessions.filter(function(s){return s.cur});audit('Password changed'+(out?'. '+n+' other session'+(n===1?'':'s')+' signed out':''))});
    toast('Password updated'+(out&&n?'. '+n+' other session'+(n===1?'':'s')+' signed out.':'.'))}
@@ -1381,16 +1392,16 @@ function beConnect(url,anon,email,pw){
     U.hist=r[1];save();
   });
 }
-function beDisconnect(){BE.tok='';beSaveLocal();U.hist=null;L.dash=L.orders=L.merchants=null}
+function beDisconnect(){BE.tok='';beSaveLocal();U.hist=null;L.dash=L.orders=L.merchants=L.me=L.team=L.sessions=null}
 
 /* ---- live numbers: once connected, the dashboard, orders and merchants show the real backend instead of sample data ---- */
-var L={dash:null,orders:null,merchants:null,err:'',busy:false};
+var L={dash:null,orders:null,merchants:null,me:null,team:null,sessions:null,err:'',busy:false};
 function rangeDays(){var m=String(RANGES[U.range][0]).match(/\d+/);return m?+m[0]:30}
 function liveLoad(){
   if(!beOn())return Promise.resolve();
   L.busy=true;L.err='';
   return Promise.all([beReq('/rest/v1/rpc/admin_dashboard','POST',{p_days:rangeDays()}),beReq('/rest/v1/rpc/admin_orders','POST',{p_status:'all',p_search:'',p_limit:200,p_offset:0}),beReq('/rest/v1/rpc/admin_merchants','POST',{})])
-   .then(function(r){L.dash=r[0];L.orders=r[1];L.merchants=r[2]},function(e){L.err=/JWT|expired|401/i.test(e.message)?'Your session ended. Sign in again.':e.message})
+   .then(function(r){L.dash=r[0];L.orders=r[1];L.merchants=r[2];return Promise.all([beReq('/rest/v1/rpc/admin_me','POST',{}),beReq('/rest/v1/rpc/admin_team','POST',{}),beReq('/rest/v1/rpc/admin_my_sessions','POST',{})].map(function(q){return q.catch(function(){return null})})).then(function(x){L.me=x[0];L.team=x[1];L.sessions=x[2];if(L.me&&!U.pf){S.profile.name=L.me.name||S.profile.name;S.profile.email=L.me.email||S.profile.email;S.profile.phone=L.me.phone||''}})},function(e){L.err=/JWT|expired|401/i.test(e.message)?'Your session ended. Sign in again.':e.message})
    .then(function(){L.busy=false;refresh()});
 }
 function liveOn(){return beOn()&&!!L.orders}
@@ -1404,7 +1415,7 @@ function liveBar(){
   if(L.err)return '<div class="card pad" style="border-color:var(--red)"><b>Could not load your live data.</b> <span class="muted">'+esc(L.err)+'</span> <span class="acts" style="display:inline-flex;margin-left:.6rem">'+btn('Try again','liveReload')+'</span></div>';
   return '';
 }
-var SAMPLE_ROUTES=['categories','brands','riders','chats','locations','finance','wallet-transfers','group-orders','smart-cart','team'];
+var SAMPLE_ROUTES=['categories','brands','riders','chats','locations','finance','wallet-transfers','group-orders','smart-cart'];
 function sampleBar(){return '<div class="card pad" style="border-color:var(--warn,#F59E0B);margin-bottom:1rem"><b>Sample data.</b> <span class="muted">This page is not connected to your backend yet, so the names and numbers on it are examples, not your real business.'+(cur()&&cur().p==='riders'?' Approve real riders under KYC review.':'')+'</span></div>'}
 function liveBars(vals,labels,fmt){
   var W=600,H=190,pl=8,pb=22,pt=10,max=Math.max.apply(0,vals.concat([1])),bw=(W-pl*2)/vals.length;
@@ -1528,8 +1539,8 @@ Object.assign(A,{authsw:function(el){
 }});
 
 /* ---- Broadcast email / Push promotions ---- */
-var ROLEL=[['customer','Customers'],['rider','Drivers'],['merchant','Merchants']];
-function bcRoles(s){return ROLEL.filter(function(r){return s.roles[r[0]]}).map(function(r){return r[0]})}
+var BCROLES=[['customer','Customers'],['rider','Drivers'],['merchant','Merchants']];
+function bcRoles(s){return BCROLES.filter(function(r){return s.roles[r[0]]}).map(function(r){return r[0]})}
 function demoCount(role,kind){
   var base={customer:kind==='email'?9310:7420,rider:S.riders?S.riders.length:0,merchant:S.merchants?S.merchants.length:0};return base[role]||0}
 function bcCount(kind){
@@ -1537,14 +1548,14 @@ function bcCount(kind){
   if(!roles.length){return}
   if(!beOn()){var c={};roles.forEach(function(r){c[r]=demoCount(r,kind)});s.counts=c;s.demo=true;return}
   s.demo=false;var tick=(s.tick=(s.tick||0)+1);
-  Promise.all(ROLEL.map(function(r){return beReq('/rest/v1/rpc/admin_audience_count','POST',{p_roles:[r[0]],p_kind:kind}).then(function(n){return[r[0],n]})})).then(function(a){
+  Promise.all(BCROLES.map(function(r){return beReq('/rest/v1/rpc/admin_audience_count','POST',{p_roles:[r[0]],p_kind:kind}).then(function(n){return[r[0],n]})})).then(function(a){
     if(s.tick!==tick)return;var c={};a.forEach(function(x){c[x[0]]=Number(x[1])||0});s.counts=c;refresh()},function(e){if(s.tick===tick){s.counts=null;s.err=e.message;refresh()}});
 }
 function bcTotal(kind){var s=U.bc[kind];if(!s.counts)return null;return bcRoles(s).reduce(function(t,r){return t+(s.counts[r]||0)},0)}
 function vBroadcast(kind){
   var s=U.bc[kind],em=kind==='email',total=bcTotal(kind),roles=bcRoles(s),all=roles.length===3;
   if(s.counts===null&&roles.length&&!s.busy&&!s.loaded){s.loaded=true;setTimeout(function(){bcCount(kind);refresh()},0)}
-  var picker='<div class="tabs sm" role="group" aria-label="Recipients"><button type="button" data-act="bcAll" data-id="'+kind+'" aria-pressed="'+all+'">Select all</button>'+ROLEL.map(function(r){return '<button type="button" data-act="bcRole" data-id="'+kind+':'+r[0]+'" aria-pressed="'+!!s.roles[r[0]]+'">'+r[1]+(s.counts&&s.counts[r[0]]!=null?' · '+num(s.counts[r[0]]):'')+'</button>'}).join('')+'</div>';
+  var picker='<div class="tabs sm" role="group" aria-label="Recipients"><button type="button" data-act="bcAll" data-id="'+kind+'" aria-pressed="'+all+'">Select all</button>'+BCROLES.map(function(r){return '<button type="button" data-act="bcRole" data-id="'+kind+':'+r[0]+'" aria-pressed="'+!!s.roles[r[0]]+'">'+r[1]+(s.counts&&s.counts[r[0]]!=null?' · '+num(s.counts[r[0]]):'')+'</button>'}).join('')+'</div>';
   var limitS=em?150:65,limitB=em?20000:178;
   var prev=em?'<div style="background:#FFF8F3;border-radius:1rem;padding:1rem;color:#1F1A17"><div style="background:#FF5A1F;color:#fff;padding:.7rem 1rem;border-radius:.7rem .7rem 0 0;font-weight:800">ChowBuy</div><div style="background:#fff;padding:1rem;border-radius:0 0 .7rem .7rem"><b style="font-size:1.05rem">'+esc(s.subject||'Your subject line')+'</b><div style="margin-top:.7rem;white-space:pre-wrap;line-height:1.5;font-size:.92rem">'+esc((s.body||'Your message appears here.').replace(/\{\{first_name\}\}/g,'Ada'))+'</div></div></div>'
      :'<div style="background:linear-gradient(160deg,#1e293b,#0f172a);border-radius:1.4rem;padding:1.2rem"><div style="background:rgba(255,255,255,.92);color:#111;border-radius:1rem;padding:.8rem .9rem;display:flex;gap:.7rem"><span style="flex:none;width:2.2rem;height:2.2rem;border-radius:.55rem;background:#FF5A1F;color:#fff;display:grid;place-items:center;font-weight:800">C</span><div style="min-width:0"><div style="font-size:.72rem;opacity:.6">CHOWBUY · now</div><b style="display:block;font-size:.9rem">'+esc(s.subject||'Notification title')+'</b><span style="font-size:.85rem;line-height:1.35;display:block;word-break:break-word">'+esc((s.body||'Notification text appears here.').replace(/\{\{first_name\}\}/g,'Ada'))+'</span></div></div></div>';
@@ -1566,10 +1577,10 @@ Object.assign(INP,{bc:function(k,v){var p=k.split('.');U.bc[p[0]][p[1]]=v;refres
 function bcToggle(kind,role){var s=U.bc[kind];s.roles[role]=!s.roles[role];s.counts=null;s.err='';s.loaded=false;s.prog=null;refresh()}
 Object.assign(A,{
  bcRole:function(el){var p=el.getAttribute('data-id').split(':');bcToggle(p[0],p[1])},
- bcAll:function(el){var k=el.getAttribute('data-id'),s=U.bc[k],all=bcRoles(s).length===3;ROLEL.forEach(function(r){s.roles[r[0]]=!all});if(all)s.roles.customer=false;s.counts=null;s.err='';s.loaded=false;s.prog=null;refresh()},
+ bcAll:function(el){var k=el.getAttribute('data-id'),s=U.bc[k],all=bcRoles(s).length===3;BCROLES.forEach(function(r){s.roles[r[0]]=!all});if(all)s.roles.customer=false;s.counts=null;s.err='';s.loaded=false;s.prog=null;refresh()},
  bcTest:function(el){bcRun(el.getAttribute('data-id'),true)},
  bcSend:function(el){
-   var kind=el.getAttribute('data-id'),s=U.bc[kind],roles=bcRoles(s),names=ROLEL.filter(function(r){return s.roles[r[0]]}).map(function(r){return r[1].toLowerCase()}),t=bcTotal(kind);
+   var kind=el.getAttribute('data-id'),s=U.bc[kind],roles=bcRoles(s),names=BCROLES.filter(function(r){return s.roles[r[0]]}).map(function(r){return r[1].toLowerCase()}),t=bcTotal(kind);
    confirmM('Send to '+(t==null?'everyone selected':num(t)+' people')+'?','This '+(kind==='email'?'email':'push notification')+' goes to '+names.join(', ')+(beOn()?'. It cannot be recalled once sent.':' as a demo. Nothing will actually be sent.'),'Send now',function(){bcRun(kind,false)});
  }
 });
