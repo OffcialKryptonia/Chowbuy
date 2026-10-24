@@ -58,6 +58,12 @@
           "isAndroidForegroundServiceEnabled": true,
           "locationAlwaysAndWhenInUsePermission": "ChowBuy Rider keeps tracking your delivery while the screen is off."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "ChowBuy Rider needs your photos so you can send your documents for verification."
+        }
       ]
     ],
     "experiments": {

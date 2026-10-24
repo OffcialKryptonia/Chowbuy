@@ -1,8 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Bike, Building2, Car, Check, Truck, UserRound, type LucideIcon } from 'lucide-react-native';
-import { Button, Page, Txt, tap } from '@/components/ui';
+import { Alert } from 'react-native';
+import { Button, Field, Page, Txt, tap } from '@/components/ui';
+import { LIVE } from '@/lib/config';
+import * as live from '@/lib/live';
+import { msg } from '@/lib/supabase';
+import { toBackendVehicle } from '@/lib/live-map';
 import { useTheme } from '@/lib/theme';
 import { VEHICLES, type RiderType, type Vehicle } from '@/lib/validation';
 import { useApply } from '@/stores/apply';
@@ -34,9 +39,21 @@ export default function ApplyType() {
   const r = useRouter();
   const a = useApply();
   const vehicles = a.type ? VEHICLES[a.type] : [];
-  const ok = !!a.type && !!a.vehicle && vehicles.some((v) => v.id === a.vehicle);
+  const [busy, setBusy] = useState(false);
+  const plateOk = !LIVE || a.vehicle === 'bicycle' || a.plate.trim().length >= 3;
+  const ok = !!a.type && !!a.vehicle && vehicles.some((v) => v.id === a.vehicle) && plateOk && !busy;
+  const submit = async () => {
+    if (!LIVE) { a.set({ submitted: true }); r.replace('/apply/done'); return; }
+    setBusy(true);
+    try {
+      const session = await live.signUp({ email: a.email, password: a.password, name: a.name, phone: a.phone });
+      if (session) await live.apply({ name: a.name, plate: a.vehicle === 'bicycle' ? 'BICYCLE' : a.plate, vehicle: toBackendVehicle(a.vehicle), phone: a.phone });
+      a.set({ submitted: true, password: '' });
+      r.replace(session ? '/apply/done' : { pathname: '/apply/done', params: { confirm: '1' } });
+    } catch (e) { Alert.alert('Could not create your account', msg(e)); } finally { setBusy(false); }
+  };
   return (
-    <Page footer={<Button label="Submit application" disabled={!ok} onPress={() => { a.set({ submitted: true }); r.replace('/apply/done'); }} />}>
+    <Page footer={<Button label={busy ? 'Submitting…' : 'Submit application'} disabled={!ok} onPress={submit} />}>
       <Txt size={26} weight="display">How will you ride with ChowBuy?</Txt>
       <View style={{ gap: 12 }}>
         {TYPES.map((t) => <Choice key={t.id} selected={a.type === t.id} icon={t.icon} title={t.title} note={t.body} onPress={() => a.set({ type: t.id, vehicle: a.vehicle && VEHICLES[t.id].some((v) => v.id === a.vehicle) ? a.vehicle : null })} />)}
@@ -49,6 +66,7 @@ export default function ApplyType() {
           </View>
         </>
       ) : <Txt size={14} color={p.mute}>Pick a rider type to see the vehicles you can use.</Txt>}
+      {LIVE && a.type && a.vehicle && a.vehicle !== 'bicycle' ? <Field label="Plate number" value={a.plate} onChangeText={(v) => a.set({ plate: v })} autoCapitalize="characters" autoCorrect={false} /> : null}
     </Page>
   );
 }

@@ -13,18 +13,49 @@ export interface Mail { to: string; subject: string; text: string; html: string 
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
+/** Where the email logo files are served from (site/assets/email). Override with the EMAIL_ASSET_BASE environment variable. */
+const assetBase = () => (Deno.env.get('EMAIL_ASSET_BASE') || 'https://chowbuy.ng').replace(/\/+$/, '');
+
+/**
+ * Branded email frame: logo header (light and dark variants), orange accent rule, content, footer.
+ * `inner` must already be safe HTML. Dark mode swaps the logo and colours in clients that support
+ * prefers-color-scheme; every other client shows the light version.
+ */
+export function brandEmail(inner: string, footer: string): string {
+  const base = assetBase();
+  const logoLight = `${base}/assets/email/chowbuy-logo-light.png`, logoDark = `${base}/assets/email/chowbuy-logo-dark.png`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><title>ChowBuy</title>
+<style>
+.cb-content h1{margin:0 0 14px;font-size:22px;line-height:1.3}.cb-content p{margin:0 0 14px;line-height:1.55}.cb-content a{color:#D94A0F}
+.cb-dark{display:none;max-height:0;overflow:hidden;mso-hide:all}
+@media (prefers-color-scheme:dark){
+ body,.cb-page{background:#0B0B0C!important}.cb-card{background:#141415!important}.cb-head{background:#141415!important}
+ .cb-light{display:none!important;max-height:0!important;mso-hide:all}.cb-dark{display:block!important;max-height:none!important;overflow:visible!important}
+ .cb-content,.cb-content h1,.cb-content p{color:#F3F1EF!important}.cb-content a{color:#FF8A57!important}.cb-foot{color:#A8A19B!important;border-color:#2A2A2C!important}
+}
+</style></head><body style="margin:0;background:#F6F3F0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1F1A17">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="cb-page" style="background:#F6F3F0"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" class="cb-card" style="width:100%;max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden">
+<tr><td class="cb-head" style="background:#ffffff;padding:26px 32px 20px">
+<img class="cb-light" src="${logoLight}" width="190" height="45" alt="ChowBuy" style="display:block;border:0;outline:none;height:auto;max-width:190px">
+<img class="cb-dark" src="${logoDark}" width="190" height="48" alt="" style="display:none;border:0;outline:none;height:auto;max-width:190px">
+</td></tr>
+<tr><td style="height:4px;line-height:4px;font-size:0;background:#FF5A1F">&nbsp;</td></tr>
+<tr><td class="cb-content" style="padding:28px 32px 12px;font-size:16px;color:#1F1A17">${inner}</td></tr>
+<tr><td class="cb-foot" style="padding:18px 32px 26px;border-top:1px solid #EADFD7;color:#6B625D;font-size:12px;line-height:1.5">${footer}</td></tr>
+</table></td></tr></table></body></html>`;
+}
+
 /** Plain text in, branded HTML out. Everything is escaped; blank lines become paragraphs. */
 export function renderEmail(subject: string, body: string, footer: string): { html: string; text: string } {
-  const paras = body.trim().split(/\n{2,}/).map((p) => `<p style="margin:0 0 14px;line-height:1.55">${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
-  const html = `<!doctype html><html><body style="margin:0;background:#FFF8F3;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1F1A17">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">
-<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden">
-<tr><td style="background:#FF5A1F;color:#fff;padding:18px 24px;font-size:22px;font-weight:800">ChowBuy</td></tr>
-<tr><td style="padding:24px"><h1 style="margin:0 0 16px;font-size:20px">${esc(subject)}</h1>${paras}</td></tr>
-<tr><td style="padding:16px 24px;border-top:1px solid #EADFD7;color:#6B625D;font-size:12px;line-height:1.5">${esc(footer)}</td></tr>
-</table></td></tr></table></body></html>`;
+  const paras = body.trim().split(/\n{2,}/).map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
+  const html = brandEmail(`<h1>${esc(subject)}</h1>${paras}`, esc(footer));
   return { html, text: `${body.trim()}\n\n--\n${footer}` };
 }
+
+/** Template bodies are fragments; wrap them in the branded frame unless an admin supplied a complete HTML document. */
+const wrapIfFragment = (html: string) => (/<html[\s>]/i.test(html) ? html : brandEmail(html, 'ChowBuy · Fast. Fresh. Reliable.'));
 
 type Sender = (m: Mail) => Promise<void>;
 
@@ -126,7 +157,7 @@ export async function sendTemplateEmail(
     to,
     subject: replace(template.subject, false).slice(0, 180),
     text: replace(template.text, false).slice(0, 10000),
-    html: replace(template.html, true).slice(0, 30000),
+    html: wrapIfFragment(replace(template.html, true).slice(0, 30000)),
   };
   const sender = await makeSender(settings);
   try { await sender.send(message); }

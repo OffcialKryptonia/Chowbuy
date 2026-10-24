@@ -6,6 +6,8 @@ import { useTheme } from '@/lib/theme';
 import { emergencyNumbers, smsUrl, sosSms, validContacts } from '@/lib/sos';
 import { useRider } from '@/stores/rider';
 import { useApply } from '@/stores/apply';
+import { LIVE } from '@/lib/config';
+import * as live from '@/lib/live';
 
 /** Floating SOS button. One tap opens a 5 second countdown (cancel any time), then sends the alert. */
 export function SosButton({ bottom = 24 }: { bottom?: number }) {
@@ -32,6 +34,7 @@ export function SosButton({ bottom = 24 }: { bottom?: number }) {
     const body = sosSms({ riderName: name, lat, lng, battery, orderId: active?.order.id ?? null, at: new Date() });
     const phones = validContacts(contacts).map((c) => c.phone);
     logSos({ at: Date.now(), lat, lng, orderId: active?.order.id ?? null, sent: phones });
+    if (LIVE) live.sos(active?.order.id ?? null, lat, lng).catch(() => {});   // the Safety Command Centre in Admin sees it; the SMS below still opens if this fails
     setSent(true);
     if (phones.length) Linking.openURL(smsUrl(phones, body)).catch(() => {});
   };

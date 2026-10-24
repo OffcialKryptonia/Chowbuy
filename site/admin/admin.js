@@ -160,6 +160,10 @@ function barChart(vals,start){
 /* ---------- views ---------- */
 var RANGES=[['Last 7 days',.23],['Last 30 days',1],['Last 90 days',2.86]];
 function vDash(){
+  if(beOn())return vDashLive();
+  return vDashDemo().replace('<div class="grid g4">',signInCard()+'<div class="grid g4">');
+}
+function vDashDemo(){
   var r=RANGES[U.range],f=r[1],lb=r[0].replace('Last ','').replace(' days','d');
   var tidy=function(v){return Math.round(v/1000)*1000};
   var cities=[['Lagos',68400],['Abuja',26100],['Ibadan',14900],['Port Harcourt',11300],['Kano',7700]];
@@ -182,11 +186,11 @@ function vDash(){
 }
 
 function vOrders(){
-  var q=(U.q.orders||'').trim().toLowerCase(),tv=T('ordV','all'),ts=T('ordS','all');
-  var list=S.orders.filter(function(o){return(tv==='all'||o.vertical===tv)&&(ts==='all'||o.status===ts)&&(!q||(o.id+' '+o.customer+' '+o.merchant+' '+o.rider).toLowerCase().indexOf(q)>-1)});
+  var q=(U.q.orders||'').trim().toLowerCase(),tv=T('ordV','all'),ts=T('ordS','all'),live=liveOn();
+  var list=(live?L.orders.rows:S.orders).filter(function(o){return(tv==='all'||o.vertical===tv)&&(ts==='all'||o.status===ts)&&(!q||(o.id+' '+o.customer+' '+o.merchant+' '+o.rider).toLowerCase().indexOf(q)>-1)});
   var pg=paged(list,'orders',12);
-  var rows=pg.rows.map(function(o){return '<tr><td class="mono nw"><b>'+esc(o.id)+'</b></td><td class="nw muted">'+fdt(o.placed)+'</td><td>'+vbadge(o.vertical)+'</td><td>'+esc(o.merchant)+'</td><td>'+esc(o.customer)+'</td><td>'+esc(o.city)+'</td><td class="r mono">'+ngn(o.total)+'</td><td class="r mono">'+ngn(o.commission)+'</td><td>'+pill(o.status)+'</td><td>'+(o.rider?esc(o.rider):'<span class="muted">Unassigned</span>')+'</td><td class="r">'+btn(ic('edit')+'Manage','order',o.id)+'</td></tr>'}).join('');
-  return head('Orders','Every order across restaurants, super marts, pharmacies and packages.',btn(ic('down')+'Export CSV','csvOrders',null,'')) +
+  var rows=pg.rows.map(function(o){return '<tr><td class="mono nw"><b>'+esc(o.id)+'</b></td><td class="nw muted">'+fdt(o.placed)+'</td><td>'+vbadge(o.vertical)+'</td><td>'+esc(o.merchant)+'</td><td>'+esc(o.customer)+'</td><td>'+esc(o.city)+'</td><td class="r mono">'+ngn(o.total)+'</td><td class="r mono">'+ngn(o.commission)+'</td><td>'+pill(o.status)+'</td><td>'+(o.rider?esc(o.rider):'<span class="muted">'+(live&&o.status==='completed'?'—':'Unassigned')+'</span>')+'</td><td class="r">'+(live?'':btn(ic('edit')+'Manage','order',o.id))+'</td></tr>'}).join('');
+  return head('Orders',live?'Real orders from your backend (latest 200).':'Every order across restaurants, super marts, pharmacies and packages.',btn(ic('down')+'Export CSV','csvOrders',null,'')) +liveBar()+
   '<div class="card"><div class="bar">'+search('orders','Search ref, customer, merchant or rider')+'</div><div class="bar" style="gap:1rem">'+tabs('ordV',[['all','All'],['restaurant','Restaurants'],['grocery','Super Marts'],['pharmacy','Pharmacies'],['package','Packages']],1)+tabs('ordS',[['all','All'],['processing','Processing'],['completed','Completed'],['pending','Pending'],['cancelled','Cancelled']],1)+'</div>'+
   (list.length?'<div class="tw"><table class="t" style="min-width:68rem"><thead><tr><th>Reference</th><th>Placed</th><th>Vertical</th><th>Merchant</th><th>Customer</th><th>City</th><th class="r">Total</th><th class="r">Commission</th><th>Status</th><th>Rider</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+pager(pg,'orders'):empty('search','No orders match','Try a different search or clear the filters.',btn('Clear filters','clear','orders','pri')))+'</div>';
 }
@@ -208,13 +212,14 @@ function openOrder(id){
 }
 
 function vMerchants(){
+  var live=liveOn(),SRC=live?L.merchants.map(function(m){return{id:m.id,name:m.name,city:m.city,vertical:m.vertical,status:m.active?'active':'pending',branches:1,joined:null,orders30:m.orders30,gmv30:m.gmv30,rate:m.rating_pct,kyc:m.docs_ok>0?'verified':m.docs_pending>0?'in review':'pending'}}):S.merchants;
   var q=(U.q.merch||'').trim().toLowerCase(),tv=T('merV','all');
-  var list=S.merchants.filter(function(m){return(tv==='all'||m.vertical===tv)&&(!q||(m.name+' '+m.city).toLowerCase().indexOf(q)>-1)});
-  var pend=S.merchants.filter(function(m){return m.status==='pending'}).length;
+  var list=SRC.filter(function(m){return(tv==='all'||m.vertical===tv)&&(!q||(m.name+' '+m.city).toLowerCase().indexOf(q)>-1)});
+  var pend=SRC.filter(function(m){return m.status==='pending'}).length;
   var rows=list.map(function(m){
-    var act=m.status==='pending'?btn(ic('check')+'Approve','approveM',m.id,'pri'):m.status==='active'?btn(ic('ban')+'Suspend','suspendM',m.id,'danger'):btn(ic('refresh')+'Reinstate','suspendM',m.id);
-    return '<tr><td><div class="who">'+tile(m.name,m.vertical)+'<div><b>'+esc(m.name)+'</b><small>'+esc(m.city)+' · '+m.branches+' branch'+(m.branches>1?'es':'')+' · Joined '+fdate(m.joined)+'</small></div></div></td><td>'+vbadge(m.vertical)+'</td><td class="r mono">'+num(m.orders30)+'</td><td class="r mono">'+ngn(m.gmv30)+'</td><td class="r mono">'+m.rate+'%</td><td>'+pill(m.kyc,null,m.kyc==='verified'?'shield':'')+'</td><td>'+pill(m.status)+'</td><td class="r">'+act+'</td></tr>'}).join('');
-  return head('Merchants','Approve onboarding, review KYC and control who can sell on ChowBuy.',pend?'<span class="badge-un">'+pend+' awaiting approval</span>':'')+
+    var act=live?'':m.status==='pending'?btn(ic('check')+'Approve','approveM',m.id,'pri'):m.status==='active'?btn(ic('ban')+'Suspend','suspendM',m.id,'danger'):btn(ic('refresh')+'Reinstate','suspendM',m.id);
+    return '<tr><td><div class="who">'+tile(m.name,m.vertical)+'<div><b>'+esc(m.name)+'</b><small>'+esc(m.city)+' · '+m.branches+' branch'+(m.branches>1?'es':'')+(m.joined?' · Joined '+fdate(m.joined):'')+'</small></div></div></td><td>'+vbadge(m.vertical)+'</td><td class="r mono">'+num(m.orders30)+'</td><td class="r mono">'+ngn(m.gmv30)+'</td><td class="r mono">'+m.rate+'%</td><td>'+pill(m.kyc,null,m.kyc==='verified'?'shield':'')+'</td><td>'+pill(m.status)+'</td><td class="r">'+act+'</td></tr>'}).join('');
+  return head('Merchants',live?'Real merchants from your backend. Approve them under KYC review.':'Approve onboarding, review KYC and control who can sell on ChowBuy.',pend?'<span class="badge-un">'+pend+' '+(live?'not live yet':'awaiting approval')+'</span>':'')+liveBar()+
   '<div class="card"><div class="bar">'+search('merch','Search by business name or city')+tabs('merV',[['all','All'],['restaurant','Restaurant'],['grocery','Grocery'],['pharmacy','Pharmacy'],['package','Package']],1)+'</div>'+
   (list.length?'<div class="tw"><table class="t" style="min-width:60rem"><thead><tr><th>Merchant</th><th>Vertical</th><th class="r">Orders (30d)</th><th class="r">GMV (30d)</th><th class="r">Commission</th><th>KYC</th><th>Status</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="foot"><span>'+list.length+' merchant'+(list.length>1?'s':'')+'</span></div>':empty('building','No merchants found','Adjust your filters to see more.',btn('Clear filters','clear','merch','pri')))+'</div>';
 }
@@ -392,17 +397,19 @@ var MAIL_DEFAULTS=[{"id":"welcome","name":"Welcome / email confirmation","subjec
 function mailTemplates(){if(U.mailTemplates)return U.mailTemplates;var saved=[];try{var raw=localStorage.getItem('cb-mail-templates');if(raw){var j=JSON.parse(raw);if(Array.isArray(j))saved=j}}catch(e){}
   /* One live list: edits mutate it, saved copies override defaults, and templates added later still appear. */
   U.mailTemplates=MAIL_DEFAULTS.map(function(d){var m=saved.filter(function(x){return x&&x.id===d.id})[0];return m&&typeof m.subject==='string'&&typeof m.text==='string'&&typeof m.html==='string'?m:clone(d)});return U.mailTemplates}
+function mailFrame(t,mode){var d=mode==='dark',bg=d?'#141415':'#fff',fg=d?'#F3F1EF':'#1D1D1F',mu=d?'#A8A19B':'#6B7280';
+  return '<div style="border-radius:12px;overflow:hidden;background:'+bg+'"><div style="padding:1rem 1.2rem;background:'+bg+'"><img src="../assets/email/chowbuy-logo-'+(d?'dark':'light')+'.png" alt="ChowBuy" width="190" style="display:block;height:auto;max-width:190px"></div><div style="height:4px;background:#FF5A1F"></div><div style="padding:1.2rem;background:'+bg+';color:'+fg+'"><b>'+esc(t.subject)+'</b><div style="margin-top:.7rem;line-height:1.6">'+esc(t.text).replace(/\n/g,'<br>')+'</div><small style="display:block;margin-top:1rem;padding-top:.8rem;border-top:1px solid '+(d?'#2A2A2C':'#EADFD7')+';color:'+mu+'">ChowBuy · Fast. Fresh. Reliable.</small></div></div>'}
 function vMailTemplates(){
  var list=mailTemplates(),active=U.mailEdit||list[0].id,t=list.filter(function(x){return x.id===active})[0]||list[0];
- return head('Mail templates','Manage branded transactional email content and activation. Changes are saved to the admin settings backend.',btn(ic('check')+'Save all templates','mailSave',null,'pri'))+
- '<div class="grid g2" style="align-items:start"><div class="card"><div class="bar"><b>Template library</b><span class="pill">'+list.filter(function(x){return x.enabled}).length+' enabled</span></div><div style="padding:.5rem">'+list.map(function(x){return '<button type="button" class="it'+(x.id===active?' unread':'')+'" data-act="mailSelect" data-id="'+esc(x.id)+'" style="width:100%;text-align:left;display:flex;justify-content:space-between;gap:.6rem"><span><b>'+esc(x.name)+'</b><small style="display:block;color:var(--muted)">'+esc(x.category)+'</small></span>'+pill(x.enabled?'Enabled':'Disabled',x.enabled?'ok':'warn')+'</button>'}).join('')+'</div></div>'+
+ return head('Mail templates','Manage branded transactional email content and activation. '+(beOn()?'Saving writes to your ChowBuy backend, where the mail sender reads them.':'Demo mode: saving keeps changes in this browser only. Connect the backend (Messaging) to save them for the whole team.'),btn(ic('check')+'Save all templates','mailSave',null,'pri'))+
+ '<div class="grid g2" style="align-items:start"><div class="card"><div class="bar"><b>Template library</b><span class="pill">'+list.filter(function(x){return x.enabled}).length+' enabled</span></div><div style="padding:.5rem">'+list.map(function(x){return '<button type="button" class="it'+(x.id===active?' unread':'')+'" data-act="mailSelect" data-id="'+esc(x.id)+'" style="width:100%;text-align:left;display:flex;justify-content:space-between;align-items:center;gap:.6rem"><span style="flex:1;min-width:0"><b>'+esc(x.name)+'</b><small style="display:block;color:var(--muted)">'+esc(x.category)+'</small></span>'+'<span style="flex:0 0 auto">'+pill(x.enabled?'Enabled':'Disabled',x.enabled?'ok':'warn')+'</span></button>'}).join('')+'</div></div>'+
  '<div class="card pad"><h3>'+esc(t.name)+'</h3><p class="sub">Use approved placeholders such as {{recipient_name}}, {{amount}}, {{currency}}, {{transaction_reference}}, {{sender_name}}, {{recipient_name}}, {{decline_reason}}, and {{action_url}}.</p>'+
  '<div class="f" style="margin-top:1rem"><label for="mailSubject">Email subject</label><input id="mailSubject" data-in="mail:subject" value="'+esc(t.subject)+'" maxlength="180"></div>'+
  '<div class="f" style="margin-top:.8rem"><label for="mailText">Plain-text body</label><textarea id="mailText" data-in="mail:text" rows="6" maxlength="10000">'+esc(t.text)+'</textarea></div>'+
  '<div class="f" style="margin-top:.8rem"><label for="mailHtml">HTML body</label><textarea id="mailHtml" data-in="mail:html" rows="8" maxlength="30000">'+esc(t.html)+'</textarea><small class="muted">HTML is editable. Use {{action_url}} for action links; avoid putting sensitive identity or payment data in email.</small></div>'+
  '<div class="f" style="margin-top:.8rem"><label for="mail-enabled">Template status</label><select id="mail-enabled" data-ch="mail:enabled"><option value="true"'+(t.enabled?' selected':'')+'>Enabled</option><option value="false"'+(!t.enabled?' selected':'')+'>Disabled</option></select></div>'+
  '<div class="acts" style="margin-top:1rem">'+btn(ic('eye')+'Preview','mailPreview',t.id)+' '+btn('Reset this template','mailReset',t.id)+'</div>'+
- '<div class="card" style="margin-top:1rem;overflow:hidden"><div style="background:#FF6A00;color:white;text-align:center;padding:1rem"><b style="font-size:1.25rem">ChowBuy</b><div style="font-size:.8rem">Fast. Fresh. Reliable.</div></div><div style="padding:1.2rem;background:white;color:#1D1D1F"><b>'+esc(t.subject)+'</b><div style="margin-top:.7rem;line-height:1.6">'+esc(t.text).replace(/\n/g,'<br>')+'</div><small style="display:block;margin-top:1rem;color:#6B7280">Fast. Fresh. Reliable. · ChowBuy</small></div></div>'+
+ '<div style="margin-top:1rem"><div class="acts" style="justify-content:space-between;margin-bottom:.6rem"><b>Email preview</b>'+tabs('mailMode',[['light','Light'],['dark','Dark']],1)+'</div>'+mailFrame(t,T('mailMode','light'))+'</div>'+
  '<p class="sub" style="margin-top:1rem">Important: this library controls saved template content. Live sending still requires event handlers to call the mail sender after verified events; saving a template does not itself send emails.</p></div></div>';
 }
 /* Registered after INP, CHG and A are created further down (calling Object.assign on them here crashed the whole Admin). */
@@ -411,7 +418,7 @@ Object.assign(INP,{mail:function(k,v){var t=mailTemplates().filter(function(x){r
 Object.assign(CHG,{mail:function(k,v){var t=mailTemplates().filter(function(x){return x.id===(U.mailEdit||MAIL_DEFAULTS[0].id)})[0];if(t)t[k]=v==='on'||v===true||v==='true';U.mailTemplates=mailTemplates();refresh()}});
 Object.assign(A,{
  mailSelect:function(el){U.mailEdit=el.getAttribute('data-id');refresh()},
- mailPreview:function(el){var t=mailTemplates().filter(function(x){return x.id===el.getAttribute('data-id')})[0];if(t)openM('<h3>Preview: '+esc(t.name)+'</h3><div style="background:#FFF7F2;padding:1rem;color:#1D1D1F"><div style="background:#FF6A00;color:#fff;text-align:center;padding:1rem;font-weight:bold">ChowBuy<br><small>Fast. Fresh. Reliable.</small></div><div style="background:white;padding:1rem"><b>'+esc(t.subject)+'</b><p>'+esc(t.text).replace(/\n/g,'<br>')+'</p><small>Fast. Fresh. Reliable. · ChowBuy</small></div></div><div class="ft"><button type="button" class="btn pri" data-m="x">Close preview</button></div>')},
+ mailPreview:function(el){var t=mailTemplates().filter(function(x){return x.id===el.getAttribute('data-id')})[0];if(t)openM('<h3>Preview: '+esc(t.name)+'</h3>'+mailFrame(t,T('mailMode','light'))+'<p class="muted" style="font-size:.8rem">Showing the '+T('mailMode','light')+' version. Switch light or dark on the page. Placeholders such as {{recipient_name}} are filled in when the email is sent.</p><div class="ft"><button type="button" class="btn pri" data-m="x">Close preview</button></div>')},
  mailReset:function(el){var id=el.getAttribute('data-id'),d=MAIL_DEFAULTS.filter(function(x){return x.id===id})[0];if(d){U.mailTemplates=mailTemplates().map(function(x){return x.id===id?clone(d):x});refresh();toast('Template reset to default. Save to apply.','warn')}},
  mailSave:function(){var items=mailTemplates();if(items.some(function(t){return !t.subject.trim()||!t.text.trim()||!t.html.trim()})){toast('Every template needs a subject, text and HTML body.','err');return}
  if(!beOn()){try{localStorage.setItem('cb-mail-templates',JSON.stringify(items));toast('Saved in this browser only. Connect the live admin backend to persist templates for the team.','warn')}catch(e){toast('Could not save templates in this browser.','err')}return}
@@ -470,6 +477,7 @@ function render(keep){
   if(r){
     try{
       main.innerHTML=r.v();
+      if(beOn()&&SAMPLE_ROUTES.indexOf(r.p)>-1){var h1=main.querySelector('.ph');if(h1)h1.insertAdjacentHTML('afterend',sampleBar());else main.insertAdjacentHTML('afterbegin',sampleBar())}
       document.title=(r.p?r.n+' · ':'')+'ChowBuy Admin';
     }catch(err){
       console.error('ChowBuy Admin render failed:',err);
@@ -501,9 +509,10 @@ var A={
  tab:function(el){U.tab[el.getAttribute('data-k')]=el.getAttribute('data-v');U.page={};refresh()},
  pg:function(el){var k=el.getAttribute('data-id');U.page[k]=(U.page[k]||1)+Number(el.getAttribute('data-d'));refresh()},
  clear:function(el){var k=el.getAttribute('data-id');U.q[k]='';U.page={};if(k==='orders'){U.tab.ordV='all';U.tab.ordS='all'}if(k==='merch')U.tab.merV='all';if(k==='riders'){U.tab.rdT='all';U.tab.rdS='all'}if(k==='wt')U.tab.wtS='ALL';refresh()},
- range:function(){U.range=(U.range+1)%3;refresh();toast('Showing '+RANGES[U.range][0].toLowerCase())},
+ range:function(){U.range=(U.range+1)%3;refresh();toast('Showing '+RANGES[U.range][0].toLowerCase());if(beOn())liveLoad()},
+ liveReload:function(){liveLoad()},
  order:function(el){openOrder(el.getAttribute('data-id'))},
- csvOrders:function(){csv('chowbuy-orders.csv',[['Reference','Placed','Vertical','Merchant','Customer','City','Total NGN','Commission NGN','Status','Rider']].concat(S.orders.map(function(o){return[o.id,fdt(o.placed),V[o.vertical],o.merchant,o.customer,o.city,o.total,o.commission,o.status,o.rider]})));toast('Exported '+S.orders.length+' orders to CSV')},
+ csvOrders:function(){csv('chowbuy-orders.csv',[['Reference','Placed','Vertical','Merchant','Customer','City','Total NGN','Commission NGN','Status','Rider']].concat((liveOn()?L.orders.rows:S.orders).map(function(o){return[o.id,fdt(o.placed),V[o.vertical],o.merchant,o.customer,o.city,o.total,o.commission,o.status,o.rider]})));toast('Exported '+S.orders.length+' orders to CSV')},
  csvWt:function(){csv('chowbuy-wallet-transfers.csv',[['Reference','Time','Sender','Recipient','Amount NGN','Fee NGN','Status']].concat(S.transfers.map(function(t){return[t.id,fdt(t.ts),t.from,t.to,t.amount,t.fee,t.status]})));toast('Exported '+S.transfers.length+' ledger entries to CSV')},
  approveM:function(el){var m=find(S.merchants,el.getAttribute('data-id'));upd(function(){m.status='active';m.kyc='verified';log(m.name+' approved and verified','kyc')});toast(m.name+' approved. KYC marked verified.')},
  suspendM:function(el){var m=find(S.merchants,el.getAttribute('data-id')),on=m.status==='active';upd(function(){m.status=on?'suspended':'active';log(m.name+(on?' suspended':' reinstated'),on?'warn':'kyc')});toast(m.name+(on?' suspended. Their store is hidden from customers.':' reinstated and live again.'),on?'warn':'')},
@@ -1340,8 +1349,10 @@ function ed(){return U.edraft||S.msg.email}
 function eDirty(){return !!U.edraft&&JSON.stringify(U.edraft)!==JSON.stringify(S.msg.email)}
 
 /* ---- backend connection (Supabase). Without it everything here runs as a demo on this browser only. ---- */
+var DEFAULT_URL='https://nhaxcyfkbrbwlqbpizjo.supabase.co',DEFAULT_ANON='sb_publishable_fEoqE8u49jwFe1v36CacDg_seaMgyUS';   /* publishable by design: every table is behind row-level security */
 var BE={url:'',anon:'',tok:'',who:''};
 try{var _b=JSON.parse(localStorage.getItem('cb-admin-be')||'{}');BE.url=_b.url||'';BE.anon=_b.anon||'';BE.who=_b.who||''}catch(e){}
+if(!BE.url)BE.url=DEFAULT_URL;if(!BE.anon)BE.anon=DEFAULT_ANON;
 try{BE.tok=sessionStorage.getItem('cb-admin-tok')||''}catch(e){}
 function beOn(){return !!(BE.url&&BE.anon&&BE.tok)}
 function beSaveLocal(){try{localStorage.setItem('cb-admin-be',JSON.stringify({url:BE.url,anon:BE.anon,who:BE.who}))}catch(e){}try{if(BE.tok)sessionStorage.setItem('cb-admin-tok',BE.tok);else sessionStorage.removeItem('cb-admin-tok')}catch(e){}}
@@ -1370,7 +1381,59 @@ function beConnect(url,anon,email,pw){
     U.hist=r[1];save();
   });
 }
-function beDisconnect(){BE.tok='';beSaveLocal();U.hist=null}
+function beDisconnect(){BE.tok='';beSaveLocal();U.hist=null;L.dash=L.orders=L.merchants=null}
+
+/* ---- live numbers: once connected, the dashboard, orders and merchants show the real backend instead of sample data ---- */
+var L={dash:null,orders:null,merchants:null,err:'',busy:false};
+function rangeDays(){var m=String(RANGES[U.range][0]).match(/\d+/);return m?+m[0]:30}
+function liveLoad(){
+  if(!beOn())return Promise.resolve();
+  L.busy=true;L.err='';
+  return Promise.all([beReq('/rest/v1/rpc/admin_dashboard','POST',{p_days:rangeDays()}),beReq('/rest/v1/rpc/admin_orders','POST',{p_status:'all',p_search:'',p_limit:200,p_offset:0}),beReq('/rest/v1/rpc/admin_merchants','POST',{})])
+   .then(function(r){L.dash=r[0];L.orders=r[1];L.merchants=r[2]},function(e){L.err=/JWT|expired|401/i.test(e.message)?'Your session ended. Sign in again.':e.message})
+   .then(function(){L.busy=false;refresh()});
+}
+function liveOn(){return beOn()&&!!L.orders}
+function signInCard(){
+  return '<div class="card pad" style="border-color:var(--warn,#F59E0B)"><h3>Demo data '+'<span class="pill warn">Not signed in</span></h3><p class="sub">The numbers below are examples. Sign in with your admin account to see your real ChowBuy numbers.</p>'+
+   '<form data-form="beConnect" style="display:grid;gap:.8rem;margin-top:.8rem"><input type="hidden" name="be-url" id="be-url" value="'+esc(BE.url)+'"><input type="hidden" name="be-anon" id="be-anon" value="'+esc(BE.anon)+'"><div class="frow">'+inp('be-em','Admin email',BE.who,'type="email" autocomplete="username"')+inp('be-pw','Password','','type="password" autocomplete="current-password"')+'</div>'+
+   '<div class="acts"><button type="submit" class="btn pri sm"'+(U.beBusy?' disabled':'')+'>'+(U.beBusy?'Signing in…':'Sign in')+'</button><small class="muted" role="status">'+esc(U.beMsg)+'</small></div></form></div>';
+}
+function liveBar(){
+  if(!beOn())return signInCard();
+  if(L.err)return '<div class="card pad" style="border-color:var(--red)"><b>Could not load your live data.</b> <span class="muted">'+esc(L.err)+'</span> <span class="acts" style="display:inline-flex;margin-left:.6rem">'+btn('Try again','liveReload')+'</span></div>';
+  return '';
+}
+var SAMPLE_ROUTES=['categories','brands','riders','chats','locations','finance','wallet-transfers','group-orders','smart-cart','team'];
+function sampleBar(){return '<div class="card pad" style="border-color:var(--warn,#F59E0B);margin-bottom:1rem"><b>Sample data.</b> <span class="muted">This page is not connected to your backend yet, so the names and numbers on it are examples, not your real business.'+(cur()&&cur().p==='riders'?' Approve real riders under KYC review.':'')+'</span></div>'}
+function liveBars(vals,labels,fmt){
+  var W=600,H=190,pl=8,pb=22,pt=10,max=Math.max.apply(0,vals.concat([1])),bw=(W-pl*2)/vals.length;
+  var b=vals.map(function(v,i){var h=(H-pb-pt)*v/max;return '<rect x="'+(pl+i*bw+2)+'" y="'+(H-pb-h)+'" width="'+Math.max(2,bw-4)+'" height="'+Math.max(h,v?2:0)+'" rx="3" style="fill:var(--accent)"><title>'+labels[i]+': '+fmt(v)+'</title></rect>'+(i%Math.ceil(vals.length/7)===0?'<text x="'+(pl+i*bw+bw/2)+'" y="'+(H-6)+'" text-anchor="middle">'+labels[i]+'</text>':'')}).join('');
+  return '<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Daily totals">'+b+'</svg>';
+}
+function vDashLive(){
+  var d=L.dash;
+  if(!d)return head('Platform overview','Loading your real numbers…')+liveBar()+(L.err?'':'<div class="card pad"><p class="sub">Loading…</p></div>');
+  var lb=d.days+'d',vl={restaurant:'Restaurants',grocery:'Super Marts',pharmacy:'Pharmacies',package:'Packages'};
+  var rate=d.orders?(d.cancelled/d.orders*100).toFixed(1)+'%':'0%';
+  var tot=d.verticals.reduce(function(a,x){return a+x.orders},0);
+  var share=d.verticals.map(function(x){return[vl[x.vertical]||x.vertical,tot?Math.round(x.orders/tot*100):0]});
+  var amax=Math.max.apply(0,d.areas.map(function(a){return a.orders}).concat([1]));
+  var days=d.daily.map(function(x){return new Date(x.day+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'})});
+  var feed=d.activity.map(function(a){return '<div class="it"><span class="ico">'+ic('sparkles')+'</span><div><div>'+esc(a.action)+'</div><small>'+fdt(a.at)+'</small></div></div>'}).join('');
+  var none='<p class="sub" style="margin-top:1rem">No orders yet in this period.</p>';
+  return head('Platform overview','Real numbers from your ChowBuy backend. Nothing here is sample data.',
+    '<button type="button" class="btn" data-act="range" aria-label="Change time range, currently '+RANGES[U.range][0]+'">'+ic('clock')+RANGES[U.range][0]+'</button><button type="button" class="btn" data-act="liveReload">'+ic('refresh')+'Refresh</button>')+liveBar()+
+  '<div class="grid g4">'+
+   kpi('Delivered order value ('+lb+')',ngn(d.gmv),'','wallet')+kpi('Orders ('+lb+')',num(d.orders),'','list','n',num(d.delivered)+' delivered · '+num(d.open)+' in progress')+kpi('Platform revenue',ngn(d.fees+d.riderCommission),'','trend','g','Service fees and rider commission')+kpi('Merchants live',num(d.merchants.live),'','building','n',num(d.merchants.pending)+' not live yet')+'</div>'+
+  '<div class="grid g6">'+
+   mini('Riders online',num(d.riders.online),num(d.riders.verified)+' approved · '+num(d.riders.waiting)+' waiting','bike')+mini('Average order value',ngn(d.aov),'Delivered orders','bag')+mini('Cancellation rate',rate,num(d.cancelled)+' cancelled','xc')+mini('Open SOS alerts',num(d.openSos),d.openSos?'Needs attention now':'None open','alert')+mini('Documents to review',num(d.pendingDocs),'KYC review','shield')+mini('Customers',num(d.customers),num(d.newCustomers)+' new in '+lb,'users')+'</div>'+
+  '<div class="grid g2"><div class="card pad"><h3>Orders per day</h3><p class="sub">Last '+d.daily.length+' days</p>'+(d.orders?liveBars(d.daily.map(function(x){return x.orders}),days,num):none)+'</div>'+
+   '<div class="card pad"><h3>Delivered value per day</h3><p class="sub">Last '+d.daily.length+' days</p>'+(d.gmv?liveBars(d.daily.map(function(x){return x.gmv}),days,ngn):'<p class="sub" style="margin-top:1rem">No delivered orders yet in this period.</p>')+'</div></div>'+
+  '<div class="grid g2"><div class="card pad"><h3>Vertical distribution</h3><p class="sub">Share of orders ('+lb+')</p>'+(tot?donut(share,[num(tot),'orders']):none)+'</div>'+
+   '<div class="card pad"><h3>Busiest areas</h3><p class="sub">Orders by delivery area ('+lb+')</p>'+(d.areas.length?'<div class="hb" style="margin-top:1rem">'+d.areas.map(function(a){return '<div class="row"><span>'+esc(a.area)+'</span><div class="trk"><i style="width:'+(a.orders/amax*100)+'%"></i></div><b>'+num(a.orders)+'</b></div>'}).join('')+'</div>':none)+'</div></div>'+
+  '<div class="card pad"><div class="acts" style="justify-content:space-between"><div><h3>Recent activity</h3><p class="sub">Audit trail of operational changes</p></div></div><div class="feed" style="margin-top:.6rem">'+(feed||'<p class="sub">Nothing yet.</p>')+'</div></div>';
+}
 function beCard(){
   if(beOn())return '<div class="card pad"><div class="acts" style="justify-content:space-between"><div><h3>Backend connected '+'<span class="pill ok">'+ic('checkc')+'Live</span></h3><p class="sub">Signed in as '+esc(BE.who)+'. Saving here writes to your Supabase project; broadcasts reach real users.</p></div>'+btn('Disconnect','beOff',null,'')+'</div></div>';
   return '<div class="card pad" style="border-color:var(--warn,#F59E0B)"><h3>Demo mode '+'<span class="pill warn">Not connected</span></h3><p class="sub">Nothing here reaches a real server or real users until you connect your Supabase project. Sign in with an admin account (a profile whose role is <code>admin</code>).</p>'+
@@ -1379,7 +1442,7 @@ function beCard(){
 }
 FORMS.beConnect=function(f){
   var v=fd(f);U.beBusy=true;U.beMsg='';refresh();
-  beConnect(v['be-url'],v['be-anon'],v['be-em'],v['be-pw']).then(function(){U.beBusy=false;U.beMsg='';refresh();toast('Connected to your backend.')},function(e){U.beBusy=false;U.beMsg=e.message;refresh();toast(e.message,'err')});
+  beConnect(v['be-url'],v['be-anon'],v['be-em'],v['be-pw']).then(function(){U.beBusy=false;U.beMsg='';refresh();toast('Connected to your backend.');liveLoad()},function(e){U.beBusy=false;U.beMsg=e.message;refresh();toast(e.message,'err')});
 };
 
 /* ---- Settings: Email ---- */
@@ -1888,4 +1951,6 @@ $('#ctxIcon').innerHTML=ic('shield');$('#extIcon').innerHTML=ic('ext');
 setTheme(savedTheme||(mq.matches?'dark':'light'));
 if(mq.addEventListener)mq.addEventListener('change',function(e){if(!savedTheme)setTheme(e.matches?'dark':'light')});
 render(false);
+if(beOn())liveLoad();
+setInterval(function(){var r=cur();if(beOn()&&document.visibilityState==='visible'&&r&&(r.p===''||r.p==='orders'||r.p==='merchants'))liveLoad()},60000);
 })();

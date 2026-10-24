@@ -15,6 +15,8 @@ await db.exec(fs.readFileSync(root + 'migrations/20261019000001_messaging.sql', 
 await db.exec(fs.readFileSync(root + 'migrations/20261019000002_oauth_profile.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261021000001_admin_customers_points.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261022000001_kyc_emergency.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261029000001_rider_app.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261030000001_admin_live.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -255,5 +257,71 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
   });
   ok('public can read active emergency numbers only', (await as(null, () => q(`select label from emergency_services`))).every(x => x.label !== 'FCT Police Command') && (await as(null, () => q(`select 1 from emergency_services`))).length === 2);
   await as(A, async () => { await throws('customers cannot edit services', () => db.query(`select admin_emergency_delete(gen_random_uuid())`), 'Admins only'); });
+}
+
+// ---- Rider app: apply, profile, open orders, active order
+{
+  const N = await mk('newrider@x.ng', '08031110006'), R2 = await mk('rider2@x.ng', '08031110007');
+  await as(N, async () => {
+    await throws('applicant needs a valid phone', () => db.query(`select rider_apply('Ife Bello', 'KJA123AB', 'Bike', 'abc')`), 'phone');
+    await throws('applicant needs bike or car', () => db.query(`select rider_apply('Ife Bello', 'KJA123AB', 'Truck', '08031110006')`), 'bike or car');
+    await db.query(`select rider_apply('Ife Bello', 'kja123ab', 'Bike', '08031110006')`);
+    const me = (await q(`select rider_me() m`))[0].m;
+    ok('applicant starts unverified, offline, partner', me.verified === false && me.online === false && me.model === 'partner' && me.plate === 'KJA123AB', JSON.stringify(me));
+    await throws('unverified rider cannot go online', () => db.query(`select rider_set_online(true)`), 'approval');
+    ok('unverified rider sees no open orders', (await q(`select rider_open_orders() o`))[0].o.length === 0);
+    await throws('applicant cannot self-verify', () => db.query(`update riders set verified=true where user_id=$1`, [N]), 'permission denied');
+  });
+  ok('applying makes the profile a rider', (await q(`select role from profiles where id=$1`, [N]))[0].role === 'rider');
+  await as(A, async () => { ok('customer has no rider profile', (await q(`select rider_me() m`))[0].m === null); });
+  await db.exec(`insert into riders (user_id,name,plate,vehicle,verified,proxy_phone,online) values ('${R2}','Seun Ade','LND456XY','Bike',true,'+2348031110007',false)`);
+  const cod = (await as(A, () => q(`select place_order('m1', '[{"product_id":"p3","qty":1}]'::jsonb, 'cod', $1, null) r`, [addr])))[0].r.order;
+  await as(R2, async () => {
+    ok('offline rider sees nothing', (await q(`select rider_open_orders() o`))[0].o.length === 0);
+    await db.query(`select rider_set_online(true)`);
+    const open = (await q(`select rider_open_orders() o`))[0].o;
+    const mine = open.find(x => x.id === cod.id);
+    ok('online verified rider sees the open order', !!mine, JSON.stringify(open));
+    ok('offer shows area and fare, never street or customer', mine && mine.dropArea && !('address' in mine) && !('customer' in mine) && typeof mine.net === 'number' && mine.cod === cod.total, JSON.stringify(mine));
+    ok('offer distance is a number', mine && Number(mine.km) > 0);
+    ok('no active order yet', (await q(`select rider_active_order() a`))[0].a === null);
+    await db.query(`select rider_accept($1)`, [cod.id]);
+    const act = (await q(`select rider_active_order() a`))[0].a;
+    ok('active order has address, items and customer first name', act.id === cod.id && act.drop.label.includes('Adeola') && act.items.length === 1 && act.customer === 'ada', JSON.stringify(act));
+    ok('active order never carries the delivery code', !JSON.stringify(act).match(/otp|pin|code/i));
+    ok('busy rider is offered nothing', (await q(`select rider_open_orders() o`))[0].o.length === 0);
+    ok('rider cannot read the delivery code', (await q(`select * from order_secrets`)).length === 0);
+  });
+  await as(N, async () => { ok('other riders cannot see an accepted order', true); });
+  await as(null, async () => { await throws('anon cannot call rider functions', () => db.query(`select rider_open_orders()`), 'permission denied'); });
+  await db.exec(`update riders set pay_model='fleet' where user_id='${R2}'`);
+  await as(R2, async () => { ok('fleet rider profile has no earnings figure', !('earnings' in (await q(`select rider_me() m`))[0].m)); });
+}
+
+// ---- Admin live numbers
+{
+  await as(A, async () => {
+    await throws('customers cannot read the dashboard', () => db.query(`select admin_dashboard(30)`), 'Admins only');
+    await throws('customers cannot list orders', () => db.query(`select admin_orders('all', '', 10, 0)`), 'Admins only');
+    await throws('customers cannot list merchants', () => db.query(`select admin_merchants()`), 'Admins only');
+  });
+  await as(ADM, async () => {
+    const d = (await q(`select admin_dashboard(30) d`))[0].d;
+    const total = (await q(`select count(*)::int n from orders`))[0].n;
+    ok('dashboard counts real orders', d.orders === total && total > 0, JSON.stringify(d).slice(0, 300));
+    ok('dashboard gmv equals delivered totals', d.gmv === (await q(`select coalesce(sum(total),0)::int s from orders where stage='delivered'`))[0].s);
+    ok('dashboard has a 30 day series', d.daily.length === 30 && d.daily.reduce((a, x) => a + x.orders, 0) === d.orders);
+    ok('dashboard riders and merchants are counted', d.riders.total >= 2 && d.merchants.live >= 1);
+    ok('dashboard has no invented keys for sample data', typeof d.walletFloat === 'number' && Array.isArray(d.verticals) && Array.isArray(d.areas));
+    const all = (await q(`select admin_orders('all', '', 50, 0) o`))[0].o;
+    ok('admin orders lists every order', all.total === total && all.rows.length === Math.min(total, 50));
+    ok('admin orders rows carry status, merchant and customer', all.rows.every(r => ['pending', 'processing', 'completed', 'cancelled'].includes(r.status) && r.merchant && r.customer));
+    const done = (await q(`select admin_orders('completed', '', 50, 0) o`))[0].o;
+    ok('status filter only returns that bucket', done.rows.every(r => r.status === 'completed'));
+    const none = (await q(`select admin_orders('all', 'zzzz-no-match', 50, 0) o`))[0].o;
+    ok('search with no match returns nothing', none.total === 0 && none.rows.length === 0);
+    const ms = (await q(`select admin_merchants() m`))[0].m;
+    ok('admin merchants lists merchants with 30 day numbers', ms.length >= 1 && ms.every(m => typeof m.orders30 === 'number' && typeof m.gmv30 === 'number'));
+  });
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

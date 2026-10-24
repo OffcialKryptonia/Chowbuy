@@ -2,15 +2,16 @@ import { handle, HttpError, json, requireAdmin } from '../_shared/util.ts';
 import { sendTemplateEmail } from '../_shared/mail.ts';
 
 /**
- * Admin-only, controlled test send. Intentionally restricts the recipient to the
- * project's approved test inbox until an explicit configuration mechanism exists.
+ * Admin-only, controlled test send. Always sends to the signed-in admin's own
+ * account email, never to an address supplied in the request.
  * Never accepts provider credentials from the request.
  */
-const TEST_RECIPIENT = 'longliveeldeen@gmail.com';
 
 Deno.serve(handle(async (req) => {
   if (req.method !== 'POST') throw new HttpError(405, 'Method not allowed.');
-  await requireAdmin(req);
+  const { user } = await requireAdmin(req);
+  const TEST_RECIPIENT = user.email ?? '';
+  if (!TEST_RECIPIENT) throw new HttpError(400, 'Your admin account has no email address.');
   const body = await req.json().catch(() => { throw new HttpError(400, 'Request body must be valid JSON.'); });
   const templateId = typeof body?.templateId === 'string' ? body.templateId : '';
   if (!/^[a-z0-9][a-z0-9_-]{0,79}$/.test(templateId)) throw new HttpError(400, 'Choose a valid template.');

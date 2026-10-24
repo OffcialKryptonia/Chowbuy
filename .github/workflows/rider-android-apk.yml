@@ -26,6 +26,9 @@ jobs:
         working-directory: rider-app
     env:
       CI: '1'
+      # Live build: signs riders in against the ChowBuy backend. Publishable values only (safe in an app).
+      EXPO_PUBLIC_SUPABASE_URL: https://nhaxcyfkbrbwlqbpizjo.supabase.co
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_fEoqE8u49jwFe1v36CacDg_seaMgyUS
       GOOGLE_MAPS_ANDROID_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_KEY }}
     steps:
       - name: Free disk space

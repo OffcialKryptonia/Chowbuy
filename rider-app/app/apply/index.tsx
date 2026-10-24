@@ -15,7 +15,7 @@ export default function ApplyContact() {
   const [phoneTouched, setPhoneTouched] = useState(false);
   const [emailTouched, setEmailTouched] = useState(false);
   const phoneBad = phoneTouched && a.phone.length > 0 && !isNigerianMobile(a.phone);
-  const ok = isEmail(a.email) && isNigerianMobile(a.phone);
+  const ok = a.name.trim().length >= 2 && isEmail(a.email) && isNigerianMobile(a.phone);
   return (
     <Page footer={
       <>
@@ -27,7 +27,8 @@ export default function ApplyContact() {
       </>
     }>
       <Txt size={28} weight="display">We’re excited to have you on board with <Txt size={28} weight="displayX" color={p.brand}>ChowBuy</Txt>!</Txt>
-      <Txt size={16} color={p.mute}>Enter your email and phone number to create account</Txt>
+      <Txt size={16} color={p.mute}>Enter your name, email and phone number to create account</Txt>
+      <Field label="Full name" value={a.name} onChangeText={(v) => a.set({ name: v })} autoCapitalize="words" textContentType="name" />
       <Field label="Email" value={a.email} onChangeText={(v) => a.set({ email: v })} onBlur={() => setEmailTouched(true)} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" textContentType="emailAddress"
         error={emailTouched && a.email && !isEmail(a.email) ? 'Enter a valid email address' : null} />
       <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>

@@ -11,6 +11,7 @@ import { COD_PAUSE_LIMIT } from '@/lib/cod';
 import { SHIFTS, fmtHours, minutesBetween, shiftLabel } from '@/lib/shift';
 import { useRider } from '@/stores/rider';
 import { useApply } from '@/stores/apply';
+import { LIVE } from '@/lib/config';
 
 const DAY = 86400000;
 
@@ -45,21 +46,21 @@ function PartnerWallet() {
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 110, gap: 14, maxWidth: 640, width: '100%', alignSelf: 'center' }} keyboardShouldPersistTaps="handled">
         <Txt size={24} weight="display">Wallet</Txt>
         <Card style={{ backgroundColor: p.brand, borderColor: p.brand }}>
-          <Txt size={13} color="#fff" weight="semi">Available balance</Txt>
+          <Txt size={13} color="#fff" weight="semi">{LIVE ? 'Earned with ChowBuy' : 'Available balance'}</Txt>
           <Txt size={34} weight="displayX" color="#fff">{naira(balance)}</Txt>
-          <Txt size={12} color="#fff">Keep a float to take cash orders. Tips are 100% yours.</Txt>
+          <Txt size={12} color="#fff">{LIVE ? 'Your ride earnings plus tips. Tips are 100% yours.' : 'Keep a float to take cash orders. Tips are 100% yours.'}</Txt>
         </Card>
-        <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+        {LIVE ? null : <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
           <Stat label="Today" value={naira(today.earned)} note={`${today.rides} rides`} />
           <Stat label="This week" value={naira(week.earned)} note={`${week.rides} rides`} />
           <Stat label="Tips (week)" value={naira(week.tips)} />
-        </View>
-        <Card>
+        </View>}
+        {LIVE ? null : <Card>
           <Txt size={15} weight="bold">Bonus streak</Txt>
           <View style={{ height: 10, borderRadius: 5, backgroundColor: p.fill, overflow: 'hidden' }}><View style={{ height: 10, width: `${streak * 10}%`, backgroundColor: p.brand }} /></View>
           <Txt size={13} color={p.mute}>{streak} of 10 rides this week. Reach 10 for a bonus (amount set by ChowBuy).</Txt>
-        </Card>
-        {unremitted > 0 ? (
+        </Card>}
+        {!LIVE && unremitted > 0 ? (
           <Card style={{ borderColor: unremitted > COD_PAUSE_LIMIT ? p.bad : p.line }}>
             <Txt size={15} weight="bold">Cash in hand: {naira(unremitted)}</Txt>
             <Txt size={13} color={p.mute}>Cash orders pause above {naira(COD_PAUSE_LIMIT)}.</Txt>
@@ -67,6 +68,7 @@ function PartnerWallet() {
           </Card>
         ) : null}
 
+        {LIVE ? <Card><Txt size={15} weight="bold">Payouts</Txt><Txt size={13} color={p.mute}>ChowBuy pays out your earnings. Instant bank withdrawal in the app arrives with the payments provider, and we will tell you when it is ready.</Txt></Card> : <>
         <Heading note="Instant transfer to any Nigerian bank account (NUBAN).">Cash out</Heading>
         <Card>
           <Pressable accessibilityRole="button" onPress={() => setPickBank((v) => !v)} style={{ height: 56, borderRadius: 14, borderWidth: 1.5, borderColor: p.line, justifyContent: 'center', paddingHorizontal: 14 }}>
@@ -80,10 +82,11 @@ function PartnerWallet() {
           <View style={{ flexDirection: 'row' }}><Field label="Amount (₦)" value={amount} onChangeText={(t) => setAmount(t.replace(/\D/g, ''))} keyboardType="number-pad" /></View>
           {msg ? <Txt size={13} color={msg.ok ? p.ok : p.bad}>{msg.text}</Txt> : null}
           <Button label="Withdraw" variant="brand" onPress={requestPayout} />
-        </Card>
+        </Card></>}
 
         <Heading>Activity</Heading>
         <Card>
+          {txns.length === 0 ? <Txt size={14} color={p.mute}>Your deliveries and tips will appear here.</Txt> : null}
           {txns.slice(0, 15).map((t) => (
             <View key={t.id} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
               <View style={{ flex: 1 }}><Txt size={14} weight="bold">{t.title}</Txt><Txt size={12} color={p.mute}>{new Date(t.at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })}</Txt></View>
