@@ -16,6 +16,7 @@ await db.exec(fs.readFileSync(root + 'migrations/20261019000002_oauth_profile.sq
 await db.exec(fs.readFileSync(root + 'migrations/20261021000001_admin_customers_points.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261022000001_kyc_emergency.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261029000001_rider_app.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261030000001_admin_live.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -295,5 +296,32 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
   await as(null, async () => { await throws('anon cannot call rider functions', () => db.query(`select rider_open_orders()`), 'permission denied'); });
   await db.exec(`update riders set pay_model='fleet' where user_id='${R2}'`);
   await as(R2, async () => { ok('fleet rider profile has no earnings figure', !('earnings' in (await q(`select rider_me() m`))[0].m)); });
+}
+
+// ---- Admin live numbers
+{
+  await as(A, async () => {
+    await throws('customers cannot read the dashboard', () => db.query(`select admin_dashboard(30)`), 'Admins only');
+    await throws('customers cannot list orders', () => db.query(`select admin_orders('all', '', 10, 0)`), 'Admins only');
+    await throws('customers cannot list merchants', () => db.query(`select admin_merchants()`), 'Admins only');
+  });
+  await as(ADM, async () => {
+    const d = (await q(`select admin_dashboard(30) d`))[0].d;
+    const total = (await q(`select count(*)::int n from orders`))[0].n;
+    ok('dashboard counts real orders', d.orders === total && total > 0, JSON.stringify(d).slice(0, 300));
+    ok('dashboard gmv equals delivered totals', d.gmv === (await q(`select coalesce(sum(total),0)::int s from orders where stage='delivered'`))[0].s);
+    ok('dashboard has a 30 day series', d.daily.length === 30 && d.daily.reduce((a, x) => a + x.orders, 0) === d.orders);
+    ok('dashboard riders and merchants are counted', d.riders.total >= 2 && d.merchants.live >= 1);
+    ok('dashboard has no invented keys for sample data', typeof d.walletFloat === 'number' && Array.isArray(d.verticals) && Array.isArray(d.areas));
+    const all = (await q(`select admin_orders('all', '', 50, 0) o`))[0].o;
+    ok('admin orders lists every order', all.total === total && all.rows.length === Math.min(total, 50));
+    ok('admin orders rows carry status, merchant and customer', all.rows.every(r => ['pending', 'processing', 'completed', 'cancelled'].includes(r.status) && r.merchant && r.customer));
+    const done = (await q(`select admin_orders('completed', '', 50, 0) o`))[0].o;
+    ok('status filter only returns that bucket', done.rows.every(r => r.status === 'completed'));
+    const none = (await q(`select admin_orders('all', 'zzzz-no-match', 50, 0) o`))[0].o;
+    ok('search with no match returns nothing', none.total === 0 && none.rows.length === 0);
+    const ms = (await q(`select admin_merchants() m`))[0].m;
+    ok('admin merchants lists merchants with 30 day numbers', ms.length >= 1 && ms.every(m => typeof m.orders30 === 'number' && typeof m.gmv30 === 'number'));
+  });
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
