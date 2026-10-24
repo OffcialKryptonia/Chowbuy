@@ -338,7 +338,24 @@ function vLocations(){
 }
 
 var FIN=[['Gross marketplace volume',486240000,'wallet'],['Platform commission earned',43760000,'trend'],['Delivery fees collected',28140000,'bike'],['Rider payouts',61320000,'users'],['Merchant payouts',352400000,'building'],['Customer refunds',4180000,'refresh'],['Pending bank settlements',null,'clock'],['Withholding tax (WHT)',3240000,'file']];
+function vFinanceLive(){
+  var f=L.fin;
+  if(!f)return head('Finance & settlements','Loading your real numbers…')+liveBar()+'<div class="card pad"><p class="sub">Loading…</p></div>';
+  var lb='last '+f.days+' days',mn={korapay:'Card / bank (Korapay)',pocketfi:'Bank transfer (Pocketfi)',cod:'Cash on delivery',wallet:'ChowBuy wallet'};
+  var meth=Object.keys(f.byMethod||{}).map(function(k){return '<div class="trow"><div><b>'+esc(mn[k]||k)+'</b></div><div class="mono">'+ngn(f.byMethod[k])+'</div></div>'}).join('')||'<p class="sub">No delivered orders in this period.</p>';
+  var mr=(f.merchants||[]).map(function(m){return '<tr><td><b>'+esc(m.name)+'</b></td><td class="r mono">'+num(m.orders)+'</td><td class="r mono">'+ngn(m.sales)+'</td></tr>'}).join('');
+  var rr=(f.riders||[]).map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>'+pill(r.model==='fleet'?'Fleet':'Partner',r.model==='fleet'?'info':'acc')+'</td><td class="r mono">'+num(r.deliveries)+'</td><td class="r mono">'+ngn(r.net)+'</td><td class="r mono">'+ngn(r.commission)+'</td></tr>'}).join('');
+  return head('Finance & settlements','Real money flow for the '+lb+'. Delivered orders only.',btn(ic('refresh')+'Refresh','liveReload'))+liveBar()+
+   '<div class="grid g4">'+kpi('Delivered order value',ngn(f.gmv),'','wallet','g',num(f.delivered)+' delivered order'+(f.delivered===1?'':'s'))+kpi('Platform service fees',ngn(f.serviceFees),'','trend','g')+kpi('Delivery fees collected',ngn(f.deliveryFees),'','bike')+kpi('Sales earned by merchants',ngn(f.merchantSales),'','building','','after discounts')+
+   kpi('Rider earnings (partners)',ngn(f.riderNet),'','users')+kpi('Rider commission kept',ngn(f.riderCommission),'','trend','g')+kpi('Wallet balances held',ngn(f.walletFloat),'','wallet')+kpi('Cash still to collect',ngn(f.codOwed),'','clock','n','cash-on-delivery orders not yet paid')+
+   kpi('Wallet top-ups',ngn(f.topups),'','down','g')+kpi('Paid orders cancelled',ngn(f.cancelledPaid),'','refresh','n','may need a refund')+kpi('Customer tips',ngn(f.tips),'','star')+kpi('Discounts given',ngn(f.discounts),'','tags','n')+'</div>'+
+   '<div class="card pad"><h3>How customers paid</h3><p class="sub">Delivered order value by payment method, '+lb+'.</p><div style="margin-top:.6rem">'+meth+'</div></div>'+
+   '<div style="display:grid;gap:1rem"><div class="card"><div class="pad" style="padding-bottom:.4rem"><h3>Merchant sales</h3><p class="sub">Earned in the '+lb+'. Top 20.</p></div>'+(mr?'<div class="tw"><table class="t"><thead><tr><th>Merchant</th><th class="r">Orders</th><th class="r">Sales</th></tr></thead><tbody>'+mr+'</tbody></table></div>':empty('building','No sales yet','Delivered orders will show here.',''))+'</div>'+
+   '<div class="card"><div class="pad" style="padding-bottom:.4rem"><h3>Rider earnings</h3><p class="sub">Recorded in the '+lb+'. Top 20.</p></div>'+(rr?'<div class="tw"><table class="t"><thead><tr><th>Rider</th><th>Model</th><th class="r">Trips</th><th class="r">Net</th><th class="r">Commission</th></tr></thead><tbody>'+rr+'</tbody></table></div>':empty('bike','No rider earnings yet','Completed deliveries will show here.',''))+'</div></div>'+
+   '<div class="card pad"><b>Payouts are not tracked here yet.</b> <span class="muted">Bank settlements, payout batches, refunds and withholding tax are not recorded in the backend, so there is no payout queue to run. The tables above show what merchants and riders have earned, not what has been paid out.</span></div>';
+}
 function vFinance(){
+  if(liveOn()&&L.fin)return vFinanceLive();
   var ts=T('finS','all'),list=S.settlements.filter(function(s){return ts==='all'||s.status===ts});
   var pend=S.settlements.filter(function(s){return s.status==='pending'});
   var rows=list.map(function(s){return '<tr><td><div class="who"><span class="tile" style="background:'+(s.type==='Merchant'?'#12A150':s.type==='Fleet'?'#0F172A':'#FF8A00')+'">'+initials(s.payee)+'</span><div><b>'+esc(s.payee)+'</b><small>'+esc(s.bank)+'</small></div></div></td><td>'+pill(s.type,s.type==='Merchant'?'ok':s.type==='Fleet'?'info':'acc')+'</td><td class="r mono">'+ngn(s.amount)+'</td><td>'+esc(s.cycle)+'</td><td>'+pill(s.status)+'</td><td class="r">'+(s.status==='failed'?btn(ic('refresh')+'Retry payout','retry',s.id,'pri'):'')+'</td></tr>'}).join('');
@@ -349,7 +366,19 @@ function vFinance(){
   (list.length?'<div class="tw"><table class="t" style="min-width:52rem"><thead><tr><th>Payee & bank</th><th>Type</th><th class="r">Net amount</th><th>Cycle</th><th>Status</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>':empty('wallet','Nothing in this state','No settlements match this filter.',btn('Show all','tab','', 'pri',' data-k="finS" data-v="all"')))+'</div>';
 }
 
+function vWalletLive(){
+  var w=L.wt;
+  if(!w)return head('Wallet transfers','Loading…')+liveBar()+'<div class="card pad"><p class="sub">Loading…</p></div>';
+  var q=(U.q.wt||'').trim().toLowerCase(),list=w.rows.filter(function(t){return !q||(t.id+' '+t.from+' '+t.to).toLowerCase().indexOf(q)>-1});
+  var pg=paged(list,'wt',12),icn={completed:'checkc',failed:'xc',reversed:'refresh'};
+  var rows=pg.rows.map(function(t){return '<tr><td><b class="mono">'+esc(t.id)+'</b><br><small class="muted">'+fdt(t.created_at)+'</small></td><td>'+esc(t.from)+'</td><td>'+esc(t.to)+'</td><td class="r mono">'+ngn(t.amount)+'</td><td class="r mono">'+ngn(t.fee)+'</td><td>'+pill(t.status,t.status==='completed'?'ok':'',icn[t.status])+'</td></tr>'}).join('');
+  return head('Wallet transfers','Read-only compliance trail of wallet-to-wallet transfers.',btn(ic('down')+'Export CSV','csvWt',null,''))+liveBar()+
+   '<div class="grid g3">'+kpi('Completed volume',ngn(w.volume),'','wallet','g')+kpi('Transfer fees',ngn(w.fees),'','trend')+kpi('Ledger entries',num(w.count),'','list','n')+'</div>'+
+   '<div class="card"><div class="bar">'+search('wt','Search reference, sender or recipient')+'</div>'+
+   (list.length?'<div class="tw"><table class="t" style="min-width:52rem"><thead><tr><th>Reference</th><th>Sender</th><th>Recipient</th><th class="r">Amount</th><th class="r">Fee</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+pager(pg,'wt'):empty('swap',q?'No transfers found':'No transfers yet',q?'Nothing matches your search.':'Transfers between customer wallets will appear here.',q?btn('Clear search','clear','wt','pri'):''))+'</div>';
+}
 function vWallet(){
+  if(liveOn()&&L.wt)return vWalletLive();
   var q=(U.q.wt||'').trim().toLowerCase(),ts=T('wtS','ALL');
   var done=S.transfers.filter(function(t){return t.status==='COMPLETED'});
   var list=S.transfers.filter(function(t){return(ts==='ALL'||t.status===ts)&&(!q||(t.id+' '+t.from+' '+t.to).toLowerCase().indexOf(q)>-1)});
@@ -574,7 +603,9 @@ var A={
  ridersReload:function(){ridersLoad()},
  order:function(el){openOrder(el.getAttribute('data-id'))},
  csvOrders:function(){csv('chowbuy-orders.csv',[['Reference','Placed','Vertical','Merchant','Customer','City','Total NGN','Commission NGN','Status','Rider']].concat((liveOn()?L.orders.rows:S.orders).map(function(o){return[o.id,fdt(o.placed),V[o.vertical],o.merchant,o.customer,o.city,o.total,o.commission,o.status,o.rider]})));toast('Exported '+S.orders.length+' orders to CSV')},
- csvWt:function(){csv('chowbuy-wallet-transfers.csv',[['Reference','Time','Sender','Recipient','Amount NGN','Fee NGN','Status']].concat(S.transfers.map(function(t){return[t.id,fdt(t.ts),t.from,t.to,t.amount,t.fee,t.status]})));toast('Exported '+S.transfers.length+' ledger entries to CSV')},
+
+ csvWt:function(){if(liveOn()&&L.wt){csv('chowbuy-wallet-transfers.csv',[['Reference','Time','Sender','Recipient','Amount NGN','Fee NGN','Status']].concat(L.wt.rows.map(function(t){return[t.id,fdt(t.created_at),t.from,t.to,t.amount,t.fee,t.status]})));toast('Exported '+L.wt.rows.length+' ledger entries to CSV');return}
+  csv('chowbuy-wallet-transfers.csv',[['Reference','Time','Sender','Recipient','Amount NGN','Fee NGN','Status']].concat(S.transfers.map(function(t){return[t.id,fdt(t.ts),t.from,t.to,t.amount,t.fee,t.status]})));toast('Exported '+S.transfers.length+' ledger entries to CSV')},
  approveM:function(el){var m=find(S.merchants,el.getAttribute('data-id'));upd(function(){m.status='active';m.kyc='verified';log(m.name+' approved and verified','kyc')});toast(m.name+' approved. KYC marked verified.')},
  suspendM:function(el){var m=find(S.merchants,el.getAttribute('data-id')),on=m.status==='active';upd(function(){m.status=on?'suspended':'active';log(m.name+(on?' suspended':' reinstated'),on?'warn':'kyc')});toast(m.name+(on?' suspended. Their store is hidden from customers.':' reinstated and live again.'),on?'warn':'')},
  approveR:function(el){var r=find(S.riders,el.getAttribute('data-id'));upd(function(){r.status='active';log(r.name+' approved as '+r.type.toLowerCase()+' rider','kyc')});toast(r.name+' approved and ready for dispatch.')},
@@ -1445,16 +1476,16 @@ function beConnect(url,anon,email,pw){
     U.hist=r[1];save();
   });
 }
-function beDisconnect(){BE.tok='';beSaveLocal();U.hist=null;L.dash=L.orders=L.merchants=L.me=L.team=L.sessions=L.riders=null}
+function beDisconnect(){BE.tok='';beSaveLocal();U.hist=null;L.dash=L.orders=L.merchants=L.me=L.team=L.sessions=L.riders=L.fin=L.wt=null}
 
 /* ---- live numbers: once connected, the dashboard, orders and merchants show the real backend instead of sample data ---- */
-var L={dash:null,orders:null,merchants:null,me:null,team:null,sessions:null,riders:null,err:'',busy:false};
+var L={dash:null,orders:null,merchants:null,me:null,team:null,sessions:null,riders:null,fin:null,wt:null,err:'',busy:false};
 function rangeDays(){var m=String(RANGES[U.range][0]).match(/\d+/);return m?+m[0]:30}
 function liveLoad(){
   if(!beOn())return Promise.resolve();
   L.busy=true;L.err='';
   return Promise.all([beReq('/rest/v1/rpc/admin_dashboard','POST',{p_days:rangeDays()}),beReq('/rest/v1/rpc/admin_orders','POST',{p_status:'all',p_search:'',p_limit:200,p_offset:0}),beReq('/rest/v1/rpc/admin_merchants','POST',{})])
-   .then(function(r){L.dash=r[0];L.orders=r[1];L.merchants=r[2];return Promise.all([beReq('/rest/v1/rpc/admin_me','POST',{}),beReq('/rest/v1/rpc/admin_team','POST',{}),beReq('/rest/v1/rpc/admin_my_sessions','POST',{}),beReq('/rest/v1/rpc/admin_riders','POST',{})].map(function(q){return q.catch(function(){return null})})).then(function(x){L.me=x[0];L.team=x[1];L.sessions=x[2];L.riders=x[3];if(L.me&&!U.pf){S.profile.name=L.me.name||S.profile.name;S.profile.email=L.me.email||S.profile.email;S.profile.phone=L.me.phone||''}})},function(e){L.err=/JWT|expired|401/i.test(e.message)?'Your session ended. Sign in again.':e.message})
+   .then(function(r){L.dash=r[0];L.orders=r[1];L.merchants=r[2];return Promise.all([beReq('/rest/v1/rpc/admin_me','POST',{}),beReq('/rest/v1/rpc/admin_team','POST',{}),beReq('/rest/v1/rpc/admin_my_sessions','POST',{}),beReq('/rest/v1/rpc/admin_riders','POST',{}),beReq('/rest/v1/rpc/admin_finance','POST',{p_days:rangeDays()}),beReq('/rest/v1/rpc/admin_wallet_transfers','POST',{p_search:'',p_limit:200,p_offset:0})].map(function(q){return q.catch(function(){return null})})).then(function(x){L.me=x[0];L.team=x[1];L.sessions=x[2];L.riders=x[3];L.fin=x[4];L.wt=x[5];if(L.me&&!U.pf){S.profile.name=L.me.name||S.profile.name;S.profile.email=L.me.email||S.profile.email;S.profile.phone=L.me.phone||''}})},function(e){L.err=/JWT|expired|401/i.test(e.message)?'Your session ended. Sign in again.':e.message})
    .then(function(){L.busy=false;refresh()});
 }
 function liveOn(){return beOn()&&!!L.orders}
@@ -1468,7 +1499,7 @@ function liveBar(){
   if(L.err)return '<div class="card pad" style="border-color:var(--red)"><b>Could not load your live data.</b> <span class="muted">'+esc(L.err)+'</span> <span class="acts" style="display:inline-flex;margin-left:.6rem">'+btn('Try again','liveReload')+'</span></div>';
   return '';
 }
-var SAMPLE_ROUTES=['categories','brands','chats','locations','finance','wallet-transfers','group-orders','smart-cart'];
+var SAMPLE_ROUTES=['categories','brands','chats','locations','group-orders','smart-cart'];
 function sampleBar(){return '<div class="card pad" style="border-color:var(--warn,#F59E0B);margin-bottom:1rem"><b>Sample data.</b> <span class="muted">This page is not connected to your backend yet, so the names and numbers on it are examples, not your real business.'+(cur()&&cur().p==='riders'?' Approve real riders under KYC review.':'')+'</span></div>'}
 function liveBars(vals,labels,fmt){
   var W=600,H=190,pl=8,pb=22,pt=10,max=Math.max.apply(0,vals.concat([1])),bw=(W-pl*2)/vals.length;
