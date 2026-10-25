@@ -24,6 +24,7 @@ await db.exec(fs.readFileSync(root + 'migrations/20261031000003_admin_finance.sq
 await db.exec(fs.readFileSync(root + 'migrations/20261101000001_admin_catalog.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261101000002_admin_chats_brand.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261101000003_admin_locations.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261101000004_group_orders.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -514,6 +515,75 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
     await throws('unknown hood errors', () => db.query(`select admin_loc_hood_set('LOC-9999','active')`), 'not found');
     await throws('bad hood status is rejected', () => db.query(`select admin_loc_hood_set($1,'x')`, [id]), 'Choose active');
     ok('changes are audited', (await q(`select count(*)::int n from audit_log where action like 'location.%'`))[0].n >= 5);
+  });
+}
+// ---- Group orders
+{
+  const ordId = (await q(`select id from orders where customer_id = $1 limit 1`, [A]))[0].id, ordTotal = (await q(`select total from orders where id = $1`, [ordId]))[0].total;
+  let g1, g2;
+  await as(A, async () => {
+    await throws('cannot insert groups directly', () => db.query(`insert into group_orders (code, title, host_id, merchant_id) values ('X','Test',$1,'m1')`, [A]), 'permission denied');
+    await throws('short title is rejected', () => db.query(`select group_create('m1','A')`), 'name');
+    await throws('unknown merchant is rejected', () => db.query(`select group_create('nope','Office lunch')`), 'not available');
+    g1 = (await q(`select group_create('m1','  Office lunch ', false) g`))[0].g;
+    ok('group is created with an invite code and the host as first member', /^GRP-[0-9A-F]{6}$/.test(g1.code) && (await q(`select count(*)::int n from group_members where group_id = $1`, [g1.id]))[0].n === 1);
+    g2 = (await q(`select group_create('m1','Game night', true) g`))[0].g;
+  });
+  await as(B, async () => {
+    await throws('unknown code is rejected', () => db.query(`select group_join('GRP-NOPE00')`), 'No group found');
+    await q(`select group_join($1)`, [' ' + g1.code.toLowerCase() + ' ']);
+    await q(`select group_join($1)`, [g2.code]);
+    ok('joining twice is harmless', (await q(`select group_join($1) id`, [g1.code]))[0].id === g1.id && (await q(`select count(*)::int n from group_members where group_id = $1`, [g1.id]))[0].n === 2);
+    await throws('only the host can lock', () => db.query(`select group_set_status($1, 'locked')`, [g1.id]), 'Only the host');
+    await throws('only the host can cancel', () => db.query(`select group_cancel($1)`, [g1.id]), 'Only the host');
+    ok('members can see their group and its members', (await q(`select count(*)::int n from group_orders where id = $1`, [g1.id]))[0].n === 1 && (await q(`select count(*)::int n from group_members where group_id = $1`, [g1.id]))[0].n === 2);
+    await throws('members cannot edit shares', () => db.query(`update group_members set amount = 1`), 'permission denied');
+  });
+  await as(R, async () => {
+    ok('non-members cannot see a group', (await q(`select count(*)::int n from group_orders`))[0].n === 0 && (await q(`select count(*)::int n from group_members`))[0].n === 0);
+    await throws('non-members cannot leave', () => db.query(`select group_leave($1)`, [g1.id]), 'not in that group');
+  });
+  await as(A, async () => {
+    await throws('shares need a locked group', () => db.query(`select group_set_shares($1, '[]')`, [g1.id]), 'Lock the group');
+    await q(`select group_set_status($1, 'locked')`, [g1.id]);
+  });
+  await as(R, async () => { await throws('locked groups cannot be joined', () => db.query(`select group_join($1)`, [g1.code]), 'no longer open'); });
+  await as(A, async () => {
+    await throws('negative shares are rejected', () => db.query(`select group_set_shares($1, $2::jsonb)`, [g1.id, JSON.stringify([{ user_id: A, amount: -5 }])]), 'zero or more');
+    await throws('shares for strangers are rejected', () => db.query(`select group_set_shares($1, $2::jsonb)`, [g1.id, JSON.stringify([{ user_id: R, amount: 100 }])]), 'active member');
+    await q(`select group_set_shares($1, $2::jsonb)`, [g1.id, JSON.stringify([{ user_id: A, amount: Math.floor(ordTotal / 2) }, { user_id: B, amount: ordTotal - Math.floor(ordTotal / 2) }])]);
+    await throws('order must be yours', () => db.query(`select group_attach_order($1, 'CB-NOPE')`, [g1.id]), 'not yours');
+    await q(`select group_attach_order($1, $2)`, [g1.id, ordId]);
+    const row = (await q(`select status, total, order_id from group_orders where id = $1`, [g1.id]))[0];
+    ok('attaching the order places the group with the real order total', row.status === 'placed' && row.total === ordTotal && row.order_id === ordId, JSON.stringify(row));
+    await throws('a placed group cannot be cancelled', () => db.query(`select group_cancel($1)`, [g1.id]), 'no longer');
+    await throws('an order cannot be linked twice', () => db.query(`select group_attach_order($1, $2)`, [g2.id, ordId]), 'Lock the group');
+    await throws('customers cannot use admin_groups', () => db.query(`select admin_groups()`), 'Admins only');
+    await throws('customers cannot use admin_group_cancel', () => db.query(`select admin_group_cancel($1)`, [g2.id]), 'Admins only');
+  });
+  await as(B, async () => { await q(`select group_leave($1)`, [g2.id]); });
+  await as(A, async () => {
+    ok('leaving removes the member from the group', (await q(`select count(*)::int n from group_members where group_id = $1 and left_at is null`, [g2.id]))[0].n === 1);
+    await throws('the host cannot leave', () => db.query(`select group_leave($1)`, [g2.id]), 'host cannot leave');
+  });
+  await as(ADM, async () => {
+    const su = async (sql, p) => { await db.exec('reset role'); await db.query(sql, p); await db.exec('set role authenticated'); };
+    const list = (await q(`select admin_groups() l`))[0].l, a = list.find(x => x.id === g1.id), b = list.find(x => x.id === g2.id);
+    ok('admin sees both groups with real members', list.length === 2 && a.people === 2 && a.members.length === 2 && a.members.some(m => m.host && m.name === 'ada') && a.host === 'ada' && a.merchant);
+    ok('placed group reconciles: allocated equals the order total', a.status === 'placed' && a.allocated === a.total && a.total === ordTotal, JSON.stringify(a));
+    ok('nothing is collected until shares are paid', a.collected === 0 && b.collected === 0);
+    await su(`update group_members set amount = amount + 300 where group_id = $1 and user_id = $2`, [g1.id, B]);
+    ok('an off-by-300 allocation is visible to the admin', (await q(`select admin_groups() l`))[0].l.find(x => x.id === g1.id).allocated === ordTotal + 300);
+    await su(`update group_members set paid = true where group_id = $1 and user_id = $2`, [g1.id, A]);
+    ok('collected counts paid shares only', (await q(`select admin_groups() l`))[0].l.find(x => x.id === g1.id).collected === Math.floor(ordTotal / 2));
+    await su(`update orders set stage = 'delivered' where id = $1`, [ordId]);
+    ok('a placed group becomes delivered with its order', (await q(`select admin_groups() l`))[0].l.find(x => x.id === g1.id).status === 'delivered');
+    await throws('delivered groups cannot be cancelled by admin', () => db.query(`select admin_group_cancel($1)`, [g1.id]), 'Only open or locked');
+    await q(`select admin_group_cancel($1)`, [g2.id]);
+    const b2 = (await q(`select admin_groups() l`))[0].l.find(x => x.id === g2.id);
+    ok('admin can cancel an open group', b2.status === 'cancelled' && b2.collected === 0);
+    await throws('unknown group errors', () => db.query(`select admin_group_cancel('GO-9999')`), 'not found');
+    ok('admin cancel is audited', (await q(`select count(*)::int n from audit_log where action = 'group.cancel'`))[0].n === 1);
   });
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
