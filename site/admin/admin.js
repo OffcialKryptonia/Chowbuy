@@ -224,7 +224,18 @@ function vMerchants(){
   (list.length?'<div class="tw"><table class="t" style="min-width:60rem"><thead><tr><th>Merchant</th><th>Vertical</th><th class="r">Orders (30d)</th><th class="r">GMV (30d)</th><th class="r">Commission</th><th>KYC</th><th>Status</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="foot"><span>'+list.length+' merchant'+(list.length>1?'s':'')+'</span></div>':empty('building','No merchants found','Adjust your filters to see more.',btn('Clear filters','clear','merch','pri')))+'</div>';
 }
 
+function catReload(){return beReq('/rest/v1/rpc/admin_catalog','POST',{}).then(function(c){L.cat=c;refresh()})}
+function vCategoriesLive(){
+  var C=L.cat,tv=T('catV','all'),list=C.categories.filter(function(c){return tv==='all'||c.vertical===tv}),um=C.unmanaged.map(function(u,i){return{u:u,i:i}}).filter(function(x){return tv==='all'||x.u.vertical===tv});
+  var rows=list.map(function(c){return '<tr><td><div class="who"><span class="tile" style="background:'+VC[c.vertical]+'">'+ic(c.icon||VI[c.vertical])+'</span><b>'+esc(c.name)+'</b></div></td><td>'+vbadge(c.vertical)+'</td><td class="r mono">'+num(c.items)+'</td><td class="r mono">'+num(c.merchants)+'</td><td class="r mono">'+Number(c.share).toFixed(1)+'%</td><td><div class="acts">'+sw(c.visible,'catVis',c.id,'Visible to customers: '+c.name)+'<small class="muted">'+(c.visible?'Visible':'Hidden')+'</small></div></td></tr>'}).join('');
+  var umh=um.length?'<div class="card"><div class="pad" style="padding-bottom:.4rem"><h3>Used by merchants, not in your list yet</h3><p class="sub">Merchants typed these categories on their products. Add the ones you want to manage.</p></div><div class="tw"><table class="t"><thead><tr><th>Category</th><th>Vertical</th><th class="r">Items</th><th></th></tr></thead><tbody>'+um.map(function(x){return '<tr><td><b>'+esc(x.u.name)+'</b></td><td>'+vbadge(x.u.vertical)+'</td><td class="r mono">'+num(x.u.items)+'</td><td class="r">'+btn(ic('plus')+'Add to list','catAdopt',String(x.i),'')+'</td></tr>'}).join('')+'</tbody></table></div></div>':'';
+  return head('Categories','Control what customers can browse in each vertical.',btn(ic('plus')+'Add category','addCat',null,'pri'))+liveBar()+
+   '<div class="card pad"><span class="muted">Item and merchant counts are real. GMV share is each category\'s share of delivered item sales in the last 30 days. <b>The customer app does not read this list yet</b>, so hiding a category here is saved but does not change what customers see.</span></div>'+
+   '<div class="card"><div class="bar">'+tabs('catV',[['all','All'],['restaurant','Restaurant'],['grocery','Grocery'],['pharmacy','Pharmacy'],['package','Package']],1)+'</div>'+
+   (list.length?'<div class="tw"><table class="t"><thead><tr><th>Category</th><th>Vertical</th><th class="r">Items</th><th class="r">Merchants</th><th class="r">GMV share</th><th>Customer visibility</th></tr></thead><tbody>'+rows+'</tbody></table></div>':empty('tags','No categories here yet','Add the first category, or add one merchants already use below.',btn('Add category','addCat',null,'pri')))+'</div>'+umh;
+}
 function vCategories(){
+  if(liveOn()&&L.cat)return vCategoriesLive();
   var tv=T('catV','all'),list=S.categories.filter(function(c){return tv==='all'||c.vertical===tv});
   var rows=list.map(function(c){return '<tr><td><div class="who"><span class="tile" style="background:'+VC[c.vertical]+'">'+ic(c.icon||VI[c.vertical])+'</span><b>'+esc(c.name)+'</b></div></td><td>'+vbadge(c.vertical)+'</td><td class="r mono">'+(c.vertical==='package'?'—':num(c.items))+'</td><td class="r mono">'+num(c.merchants)+'</td><td class="r mono">'+c.share.toFixed(1)+'%</td><td><div class="acts">'+sw(c.visible,'catVis',c.id,'Visible to customers: '+c.name)+'<small class="muted">'+(c.visible?'Visible':'Hidden')+'</small></div></td></tr>'}).join('');
   return head('Categories','Control what customers can browse in each vertical.',btn(ic('plus')+'Add category','addCat',null,'pri'))+
@@ -236,11 +247,21 @@ function openAddCat(){
   openM('<h3>Add category</h3>'+inp('name','Category name','','placeholder="e.g. Breakfast & Pastries" maxlength="40" required')+sel('vertical','Vertical',[['restaurant','Restaurant'],['grocery','Grocery'],['pharmacy','Pharmacy'],['package','Package']],T('catV','restaurant')==='all'?'restaurant':T('catV','restaurant'))+
    '<div class="f"><label>Icon</label><div class="chips">'+CATICONS.map(function(n,i){return '<label class="cp"><input type="radio" name="icon" value="'+n+'"'+(i===0?' checked':'')+' style="width:auto;margin:0">'+ic(n)+'</label>'}).join('')+'</div></div><div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Add category</button></div>',
    function(v){var n=v.name.trim();if(n.length<2)return 'Enter a category name (at least 2 characters).';
+    if(liveOn()&&L.cat){beReq('/rest/v1/rpc/admin_category_add','POST',{p_vertical:v.vertical,p_name:n,p_icon:v.icon}).then(function(){return catReload()}).then(function(){toast('Category "'+n+'" added to '+V[v.vertical])},function(e){toast(e.message,'err')});return}
     if(S.categories.some(function(c){return c.vertical===v.vertical&&c.name.toLowerCase()===n.toLowerCase()}))return 'That category already exists in '+V[v.vertical]+'.';
     upd(function(){S.categories.push({id:'C'+Date.now(),name:n,vertical:v.vertical,items:0,merchants:0,share:0,visible:true,icon:v.icon});log('Category "'+n+'" added to '+V[v.vertical],'settings')});toast('Category "'+n+'" added to '+V[v.vertical])});
 }
 
+function vBrandsLive(){
+  var C=L.cat,tv=T('brV','all'),list=C.brands.filter(function(b){return tv==='all'||b.vertical===tv});
+  var rows=list.map(function(b){return '<tr><td><div class="who">'+tile(b.name,b.vertical)+'<b>'+esc(b.name)+'</b>'+(b.featured?'<span class="pill acc">'+ic('star')+'Featured</span>':'')+'</div></td><td>'+vbadge(b.vertical)+'</td><td class="r mono">'+num(b.products)+'</td><td class="r mono">'+num(b.merchants)+'</td><td><div class="acts">'+sw(b.featured,'brandFeat',b.id,'Featured brand: '+b.name)+'<small class="muted">'+(b.featured?'Featured':'Standard')+'</small></div></td></tr>'}).join('');
+  return head('Brands','National FMCG, food and pharma brands customers recognise.',btn(ic('plus')+'Add brand','addBrand',null,'pri'))+liveBar()+
+   '<div class="card pad"><span class="muted">Products are counted by finding the brand name in the product name, because products do not record a brand yet. <b>The customer app does not show featured brands yet.</b></span></div>'+
+   '<div class="card"><div class="bar">'+tabs('brV',[['all','All'],['restaurant','Restaurant'],['grocery','Grocery'],['pharmacy','Pharmacy'],['package','Package']],1)+'</div>'+
+   (list.length?'<div class="tw"><table class="t"><thead><tr><th>Brand</th><th>Vertical</th><th class="r">Products</th><th class="r">Merchants stocking</th><th>Featured</th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="foot"><span>'+C.brands.filter(function(b){return b.featured}).length+' featured of '+C.brands.length+' brands</span></div>':empty('sparkles','No brands here yet','Add one to feature it on the marketplace.',btn('Add brand','addBrand',null,'pri')))+'</div>';
+}
 function vBrands(){
+  if(liveOn()&&L.cat)return vBrandsLive();
   var tv=T('brV','all'),list=S.brands.filter(function(b){return tv==='all'||b.vertical===tv});
   var rows=list.map(function(b){return '<tr><td><div class="who">'+tile(b.name,b.vertical)+'<b>'+esc(b.name)+'</b>'+(b.featured?'<span class="pill acc">'+ic('star')+'Featured</span>':'')+'</div></td><td>'+vbadge(b.vertical)+'</td><td class="r mono">'+num(b.products)+'</td><td class="r mono">'+num(b.merchants)+'</td><td><div class="acts">'+sw(b.featured,'brandFeat',b.id,'Featured brand: '+b.name)+'<small class="muted">'+(b.featured?'Featured':'Standard')+'</small></div></td></tr>'}).join('');
   return head('Brands','National FMCG, food and pharma brands customers recognise.',btn(ic('plus')+'Add brand','addBrand',null,'pri'))+
@@ -249,8 +270,9 @@ function vBrands(){
 }
 function openAddBrand(){
   openM('<h3>Add brand</h3>'+inp('name','Brand name','','placeholder="e.g. Hollandia" maxlength="40" required')+sel('vertical','Vertical',[['grocery','Grocery'],['restaurant','Restaurant'],['pharmacy','Pharmacy'],['package','Package']],'grocery')+
-   '<div class="frow">'+inp('products','Products (SKUs)','0','inputmode="numeric"')+inp('merchants','Merchants stocking','0','inputmode="numeric"')+'</div><div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Add brand</button></div>',
-   function(v){var n=v.name.trim();if(n.length<2)return 'Enter a brand name.';if(S.brands.some(function(b){return b.name.toLowerCase()===n.toLowerCase()}))return 'That brand is already in the catalog.';
+   (liveOn()&&L.cat?'':'<div class="frow">'+inp('products','Products (SKUs)','0','inputmode="numeric"')+inp('merchants','Merchants stocking','0','inputmode="numeric"')+'</div>')+'<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Add brand</button></div>',
+   function(v){var n=v.name.trim();if(n.length<2)return 'Enter a brand name.';
+    if(liveOn()&&L.cat){beReq('/rest/v1/rpc/admin_brand_add','POST',{p_name:n,p_vertical:v.vertical}).then(function(){return catReload()}).then(function(){toast('Brand "'+n+'" added')},function(e){toast(e.message,'err')});return}if(S.brands.some(function(b){return b.name.toLowerCase()===n.toLowerCase()}))return 'That brand is already in the catalog.';
     var p=parseInt(v.products,10)||0,m=parseInt(v.merchants,10)||0;
     upd(function(){S.brands.push({id:'B'+Date.now(),name:n,vertical:v.vertical,products:p,merchants:m,featured:false});log('Brand "'+n+'" added','settings')});toast('Brand "'+n+'" added')});
 }
@@ -610,9 +632,12 @@ var A={
  suspendM:function(el){var m=find(S.merchants,el.getAttribute('data-id')),on=m.status==='active';upd(function(){m.status=on?'suspended':'active';log(m.name+(on?' suspended':' reinstated'),on?'warn':'kyc')});toast(m.name+(on?' suspended. Their store is hidden from customers.':' reinstated and live again.'),on?'warn':'')},
  approveR:function(el){var r=find(S.riders,el.getAttribute('data-id'));upd(function(){r.status='active';log(r.name+' approved as '+r.type.toLowerCase()+' rider','kyc')});toast(r.name+' approved and ready for dispatch.')},
  suspendR:function(el){var r=find(S.riders,el.getAttribute('data-id')),on=r.status==='active';upd(function(){r.status=on?'suspended':'active';log(r.name+(on?' suspended':' reinstated'),on?'warn':'kyc')});toast(r.name+(on?' suspended from dispatch.':' reinstated.'),on?'warn':'')},
- catVis:function(el){var c=find(S.categories,el.getAttribute('data-id'));upd(function(){c.visible=!c.visible;log('Category "'+c.name+'" '+(c.visible?'shown':'hidden'),'settings')});toast('"'+c.name+'" is now '+(c.visible?'visible to':'hidden from')+' customers.')},
+ catVis:function(el){if(liveOn()&&L.cat){var lc=L.cat.categories.filter(function(x){return x.id===el.getAttribute('data-id')})[0];if(lc)beReq('/rest/v1/rpc/admin_category_set_visible','POST',{p_id:lc.id,p_visible:!lc.visible}).then(function(){return catReload()}).then(function(){toast('"'+lc.name+'" is now '+(lc.visible?'hidden':'visible')+'. Saved.')},function(e){toast(e.message,'err')});return}
+  var c=find(S.categories,el.getAttribute('data-id'));upd(function(){c.visible=!c.visible;log('Category "'+c.name+'" '+(c.visible?'shown':'hidden'),'settings')});toast('"'+c.name+'" is now '+(c.visible?'visible to':'hidden from')+' customers.')},
  addCat:function(){openAddCat()},
- brandFeat:function(el){var b=find(S.brands,el.getAttribute('data-id'));upd(function(){b.featured=!b.featured;log(b.name+(b.featured?' featured':' unfeatured'),'settings')});toast(b.name+(b.featured?' is now a featured brand.':' removed from featured brands.'))},
+ catAdopt:function(el){var u=(L.cat&&L.cat.unmanaged||[])[+el.getAttribute('data-id')];if(!u)return;beReq('/rest/v1/rpc/admin_category_add','POST',{p_vertical:u.vertical,p_name:u.name,p_icon:'tags'}).then(function(){return catReload()}).then(function(){toast('"'+u.name+'" added to your categories.')},function(e){toast(e.message,'err')})},
+ brandFeat:function(el){if(liveOn()&&L.cat){var lb=L.cat.brands.filter(function(x){return x.id===el.getAttribute('data-id')})[0];if(lb)beReq('/rest/v1/rpc/admin_brand_set_featured','POST',{p_id:lb.id,p_featured:!lb.featured}).then(function(){return catReload()}).then(function(){toast(lb.name+(lb.featured?' removed from featured brands.':' is now a featured brand.'))},function(e){toast(e.message,'err')});return}
+  var b=find(S.brands,el.getAttribute('data-id'));upd(function(){b.featured=!b.featured;log(b.name+(b.featured?' featured':' unfeatured'),'settings')});toast(b.name+(b.featured?' is now a featured brand.':' removed from featured brands.'))},
  addBrand:function(){openAddBrand()},
  country:function(el){var c=S.locs.countries.filter(function(x){return x.name===el.getAttribute('data-id')})[0];
    if(c.name==='Nigeria'&&c.status==='live'){toast('Nigeria is the only live market and cannot be paused.','err');return}
@@ -1476,16 +1501,16 @@ function beConnect(url,anon,email,pw){
     U.hist=r[1];save();
   });
 }
-function beDisconnect(){BE.tok='';beSaveLocal();U.hist=null;L.dash=L.orders=L.merchants=L.me=L.team=L.sessions=L.riders=L.fin=L.wt=null}
+function beDisconnect(){BE.tok='';beSaveLocal();U.hist=null;L.dash=L.orders=L.merchants=L.me=L.team=L.sessions=L.riders=L.fin=L.wt=L.cat=null}
 
 /* ---- live numbers: once connected, the dashboard, orders and merchants show the real backend instead of sample data ---- */
-var L={dash:null,orders:null,merchants:null,me:null,team:null,sessions:null,riders:null,fin:null,wt:null,err:'',busy:false};
+var L={dash:null,orders:null,merchants:null,me:null,team:null,sessions:null,riders:null,fin:null,wt:null,cat:null,err:'',busy:false};
 function rangeDays(){var m=String(RANGES[U.range][0]).match(/\d+/);return m?+m[0]:30}
 function liveLoad(){
   if(!beOn())return Promise.resolve();
   L.busy=true;L.err='';
   return Promise.all([beReq('/rest/v1/rpc/admin_dashboard','POST',{p_days:rangeDays()}),beReq('/rest/v1/rpc/admin_orders','POST',{p_status:'all',p_search:'',p_limit:200,p_offset:0}),beReq('/rest/v1/rpc/admin_merchants','POST',{})])
-   .then(function(r){L.dash=r[0];L.orders=r[1];L.merchants=r[2];return Promise.all([beReq('/rest/v1/rpc/admin_me','POST',{}),beReq('/rest/v1/rpc/admin_team','POST',{}),beReq('/rest/v1/rpc/admin_my_sessions','POST',{}),beReq('/rest/v1/rpc/admin_riders','POST',{}),beReq('/rest/v1/rpc/admin_finance','POST',{p_days:rangeDays()}),beReq('/rest/v1/rpc/admin_wallet_transfers','POST',{p_search:'',p_limit:200,p_offset:0})].map(function(q){return q.catch(function(){return null})})).then(function(x){L.me=x[0];L.team=x[1];L.sessions=x[2];L.riders=x[3];L.fin=x[4];L.wt=x[5];if(L.me&&!U.pf){S.profile.name=L.me.name||S.profile.name;S.profile.email=L.me.email||S.profile.email;S.profile.phone=L.me.phone||''}})},function(e){L.err=/JWT|expired|401/i.test(e.message)?'Your session ended. Sign in again.':e.message})
+   .then(function(r){L.dash=r[0];L.orders=r[1];L.merchants=r[2];return Promise.all([beReq('/rest/v1/rpc/admin_me','POST',{}),beReq('/rest/v1/rpc/admin_team','POST',{}),beReq('/rest/v1/rpc/admin_my_sessions','POST',{}),beReq('/rest/v1/rpc/admin_riders','POST',{}),beReq('/rest/v1/rpc/admin_finance','POST',{p_days:rangeDays()}),beReq('/rest/v1/rpc/admin_wallet_transfers','POST',{p_search:'',p_limit:200,p_offset:0}),beReq('/rest/v1/rpc/admin_catalog','POST',{})].map(function(q){return q.catch(function(){return null})})).then(function(x){L.me=x[0];L.team=x[1];L.sessions=x[2];L.riders=x[3];L.fin=x[4];L.wt=x[5];L.cat=x[6];if(L.me&&!U.pf){S.profile.name=L.me.name||S.profile.name;S.profile.email=L.me.email||S.profile.email;S.profile.phone=L.me.phone||''}})},function(e){L.err=/JWT|expired|401/i.test(e.message)?'Your session ended. Sign in again.':e.message})
    .then(function(){L.busy=false;refresh()});
 }
 function liveOn(){return beOn()&&!!L.orders}
@@ -1499,7 +1524,7 @@ function liveBar(){
   if(L.err)return '<div class="card pad" style="border-color:var(--red)"><b>Could not load your live data.</b> <span class="muted">'+esc(L.err)+'</span> <span class="acts" style="display:inline-flex;margin-left:.6rem">'+btn('Try again','liveReload')+'</span></div>';
   return '';
 }
-var SAMPLE_ROUTES=['categories','brands','chats','locations','group-orders','smart-cart'];
+var SAMPLE_ROUTES=['chats','locations','group-orders','smart-cart'];
 function sampleBar(){return '<div class="card pad" style="border-color:var(--warn,#F59E0B);margin-bottom:1rem"><b>Sample data.</b> <span class="muted">This page is not connected to your backend yet, so the names and numbers on it are examples, not your real business.'+(cur()&&cur().p==='riders'?' Approve real riders under KYC review.':'')+'</span></div>'}
 function liveBars(vals,labels,fmt){
   var W=600,H=190,pl=8,pb=22,pt=10,max=Math.max.apply(0,vals.concat([1])),bw=(W-pl*2)/vals.length;

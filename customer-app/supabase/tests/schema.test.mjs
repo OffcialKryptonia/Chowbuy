@@ -21,6 +21,7 @@ await db.exec(fs.readFileSync(root + 'migrations/20261030000001_admin_live.sql',
 await db.exec(fs.readFileSync(root + 'migrations/20261031000001_admin_profile_team.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261031000002_rider_positions.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261031000003_admin_finance.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261101000001_admin_catalog.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -412,6 +413,38 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
     ok('transfer totals add up', t.volume >= 700 && t.count === before + 1);
     const none = (await q(`select admin_wallet_transfers('zzzz-none', 10, 0) t`))[0].t;
     ok('transfer search with no match returns nothing', none.total === 0 && none.rows.length === 0);
+  });
+}
+// ---- Admin catalog: categories and brands
+{
+  await as(A, async () => {
+    for (const sql of [`select admin_catalog()`, `select admin_category_add('grocery','Snacks','tags')`, `select admin_category_set_visible('CAT-1', false)`, `select admin_brand_add('Indomie','grocery')`, `select admin_brand_set_featured('BRD-1', true)`])
+      await throws('customers cannot use ' + sql.slice(7, 30), () => db.query(sql), 'Admins only');
+    await throws('customers cannot read catalog tables', () => db.query(`select * from catalog_categories`), 'permission denied');
+  });
+  await as(ADM, async () => {
+    const c0 = (await q(`select admin_catalog() c`))[0].c;
+    ok('catalog starts empty but lists unmanaged product categories', c0.categories.length === 0 && Array.isArray(c0.unmanaged) && Array.isArray(c0.brands));
+    const cat = (await q(`select category from products where btrim(category) <> '' limit 1`))[0]?.category;
+    const vert = cat ? (await q(`select m.vertical v from products p join merchants m on m.id = p.merchant_id where p.category = $1 limit 1`, [cat]))[0].v : 'grocery';
+    await q(`select admin_category_add($1, $2, 'cart')`, [vert, '  ' + (cat || 'Snacks') + ' ']);
+    await throws('duplicate category (any case) is rejected', () => db.query(`select admin_category_add($1, $2)`, [vert, (cat || 'Snacks').toUpperCase()]), 'already exists');
+    await throws('short name is rejected', () => db.query(`select admin_category_add('grocery','A')`), 'at least 2');
+    await throws('bad vertical is rejected', () => db.query(`select admin_category_add('cars','Tyres')`), 'Choose a vertical');
+    const c1 = (await q(`select admin_catalog() c`))[0].c;
+    const row = c1.categories[0];
+    ok('added category appears with real item counts', c1.categories.length === 1 && row.visible === true && row.items === (await q(`select count(*)::int n from products p join merchants m on m.id=p.merchant_id where m.vertical=$1 and lower(p.category)=lower($2)`, [vert, cat || 'Snacks']))[0].n, JSON.stringify(row));
+    ok('a managed category leaves the unmanaged list', !c1.unmanaged.some(u => u.vertical === vert && u.name.toLowerCase() === (cat || 'Snacks').toLowerCase()));
+    await q(`select admin_category_set_visible($1, false)`, [row.id]);
+    ok('visibility can be switched off', (await q(`select admin_catalog() c`))[0].c.categories[0].visible === false);
+    await throws('unknown category id errors', () => db.query(`select admin_category_set_visible('CAT-999999', true)`), 'not found');
+    await q(`select admin_brand_add('  Hollandia ', 'grocery')`);
+    await throws('duplicate brand (any case) is rejected', () => db.query(`select admin_brand_add('HOLLANDIA', 'grocery')`), 'already in the catalog');
+    const b = (await q(`select admin_catalog() c`))[0].c.brands[0];
+    ok('brand is saved trimmed and not featured', b.name === 'Hollandia' && b.featured === false && b.products === 0);
+    await q(`select admin_brand_set_featured($1, true)`, [b.id]);
+    ok('brand can be featured', (await q(`select admin_catalog() c`))[0].c.brands[0].featured === true);
+    ok('changes are written to the audit log', (await q(`select count(*)::int n from audit_log where action like 'catalog.%'`))[0].n >= 4);
   });
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
