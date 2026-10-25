@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Email confirmed | ChowBuy</title>
+<meta name="description" content="Your ChowBuy email address is confirmed. Open the app to continue.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#FF5A1F">
+<link rel="icon" type="image/png" href="/assets/logo.png"><link rel="apple-touch-icon" href="/assets/logo.png">
+<style>
+:root{--bg:#fff;--fg:#1a1a1a;--mute:#666;--brand:#FF5A1F;--card:#fff7f3;--line:#f0dcd2}
+@media (prefers-color-scheme:dark){:root{--bg:#141414;--fg:#f3f3f3;--mute:#a8a8a8;--card:#1f1b19;--line:#33291f}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:16px;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{width:100%;max-width:420px;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:32px 24px}
+img{width:64px;height:64px;border-radius:14px}
+h1{font-size:24px;margin:16px 0 8px}
+p{color:var(--mute);line-height:1.5;margin:0 0 20px}
+a.btn{display:block;background:var(--brand);color:#fff;text-decoration:none;font-weight:700;padding:14px;border-radius:12px;margin-top:10px}
+a.alt{display:block;color:var(--brand);text-decoration:none;font-weight:600;padding:12px}
+</style>
+</head>
+<body>
+<main>
+  <img src="/assets/logo.png" alt="ChowBuy" width="64" height="64">
+  <h1 id="t">Email confirmed</h1>
+  <p id="m">You are all set. Open the ChowBuy app and sign in to start ordering.</p>
+  <a class="btn" id="open" href="chowbuy://auth-callback">Open the ChowBuy app</a>
+  <a class="alt" href="/">Go to chowbuy.ng</a>
+</main>
+<script>
+(function () {
+  // Supabase puts a failure in the URL hash or query (for example an expired link). Show it plainly instead of a blank page.
+  var raw = (location.hash || '').replace(/^#/, '') || (location.search || '').replace(/^\?/, '');
+  var q = new URLSearchParams(raw);
+  var err = q.get('error_description') || q.get('error');
+  if (err) {
+    document.getElementById('t').textContent = 'This link did not work';
+    document.getElementById('m').textContent = /expired|invalid/i.test(err)
+      ? 'The confirmation link has expired or was already used. If you already confirmed, just sign in. Otherwise sign up again in the app to get a new link.'
+      : 'We could not confirm your email. Please try again from the app.';
+  } else if (q.get('access_token') || q.get('code')) {
+    // Pass the session on to the app when the phone has it installed.
+    document.getElementById('open').href = 'chowbuy://auth-callback' + (location.hash || (location.search ? location.search : ''));
+  }
+})();
+</script>
+</body>
+</html>
