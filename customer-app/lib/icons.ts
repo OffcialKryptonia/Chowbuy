@@ -1,6 +1,7 @@
 import {
   Apple, Banana, Beef, Beer, Bike, Cake, CakeSlice, Carrot, ChefHat, Coffee, Cookie, CupSoda, Drumstick, Egg, Fish, Flame, Heart, IceCream, Leaf,
   Milk, Percent, Pill, Pizza, Salad, Sandwich, Soup, Sprout, Baby, Utensils, Wheat, Croissant, Popcorn, Store, ShoppingBasket, Package, Stethoscope,
+  Tags, Sparkles, Star, Zap, ShoppingBag,
   type LucideIcon,
 } from 'lucide-react-native';
 import type { Vertical } from './types';
@@ -39,6 +40,15 @@ export const HEALTH_CATS: Cat[] = [
   { id: 'cold', label: 'Cold & Allergy', icon: Leaf, tint: '#0891B2' },
   { id: 'heart', label: 'Wellness', icon: Heart, tint: '#E11D48' },
 ];
+
+/** Icons the Admin Console offers when adding a category. Anything unknown falls back to a tag. */
+const ADMIN_ICONS: Record<string, LucideIcon> = { utensils: Utensils, cart: ShoppingBasket, pill: Pill, box: Package, tags: Tags, sparkles: Sparkles, star: Star, zap: Zap, bag: ShoppingBag, store: Store };
+const ADMIN_TINT: Record<Vertical, string> = { restaurant: '#FF5A1F', grocery: '#12A150', pharmacy: '#2563EB', package: '#7C3AED' };
+
+/** Builds a tile for a category the Admin added that the app does not ship with. */
+export const adminCat = (vertical: Vertical) => (name: string, icon: string): Cat => ({
+  id: 'x:' + name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(), label: name, icon: ADMIN_ICONS[icon] ?? Tags, tint: ADMIN_TINT[vertical],
+});
 
 export const VERTICALS: { id: Vertical; label: string; icon: LucideIcon; tint: string }[] = [
   { id: 'restaurant', label: 'Restaurants', icon: Utensils, tint: '#FF5A1F' },

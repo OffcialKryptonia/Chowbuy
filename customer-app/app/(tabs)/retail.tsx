@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Image, View } from 'react-native';
 import { Camera, ClipboardList, ImagePlus, Package, Pill } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -7,7 +7,9 @@ import { Button, Card, Chip, Empty, Field, Pill as PillTag, Row, Screen, Section
 import { CatRail, ProductRow } from '@/components/discovery';
 import { BasketBar } from '@/components/discovery/BasketBar';
 import { useTheme } from '@/lib/theme';
-import { HEALTH_CATS } from '@/lib/icons';
+import { HEALTH_CATS, adminCat } from '@/lib/icons';
+import { useCatalogConfig } from '@/hooks/useCatalogConfig';
+import { shapeCats } from '@/lib/catalog-config';
 import { useCatalog } from '@/stores/catalog';
 import { useAuth } from '@/stores/auth';
 import { uploadRx } from '@/lib/backend';
@@ -44,6 +46,8 @@ function Pharmacy() {
   const uid = useAuth((s) => s.session?.user.id);
   const name = useSession((s) => s.name);
   const [cat, setCat] = useState<string | null>(null);
+  const { data: cfg } = useCatalogConfig();
+  const healthCats = useMemo(() => shapeCats(HEALTH_CATS, cfg, 'pharmacy', adminCat('pharmacy')), [cfg]);
   const items = store ? products.filter((x) => x.merchantId === store.id) : [];
 
   const upload = async (camera: boolean) => {
@@ -82,7 +86,7 @@ function Pharmacy() {
         </>
       ) : null}
       <SectionTitle title="Health & personal care" />
-      <CatRail cats={HEALTH_CATS} selected={cat} onPick={(id) => setCat(cat === id ? null : id)} />
+      <CatRail cats={healthCats} selected={cat} onPick={(id) => setCat(cat === id ? null : id)} />
       {store && items.length ? items.map((x) => <ProductRow key={x.id} product={x} merchant={store} />) : <Empty icon={Pill} title="No items" body="Nothing to show yet." />}
     </>
   );

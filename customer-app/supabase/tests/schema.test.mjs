@@ -26,6 +26,7 @@ await db.exec(fs.readFileSync(root + 'migrations/20261101000002_admin_chats_bran
 await db.exec(fs.readFileSync(root + 'migrations/20261101000003_admin_locations.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261101000004_group_orders.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261101000005_smart_cart_events.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261101000006_public_catalog.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -607,6 +608,31 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
     ok('breaks accepted and dismissed down by suggestion', c && c.accepted === 2 && c.dismissed === 1, JSON.stringify(m.byRec));
     ok('long suggestion names are cut to 30 characters', m.byRec.some(r => r.rec.length === 30));
     ok('days is clamped', (await q(`select admin_smart_cart(100000) m`))[0].m.days === 365 && (await q(`select admin_smart_cart(0) m`))[0].m.days === 1);
+  });
+}
+// ---- Public catalog feed and the Smart Cart free-delivery threshold
+{
+  const su = async sql => { await db.exec('reset role'); await db.exec(sql); };
+  await as(null, async () => {
+    const c = (await q(`select get_public_catalog() c`))[0].c;
+    ok('anyone can read the public catalog feed', Array.isArray(c.categories) && Array.isArray(c.brands) && Array.isArray(c.cities) && Array.isArray(c.hoods));
+    ok('the feed lists live and pipeline cities with their status', c.cities.some(x => x.name === 'Lagos' && x.status === 'live'));
+    ok('the feed has no secrets or ids', !/secret|owner|user_id/i.test(JSON.stringify(c)));
+    ok('unpublished smart cart and brand are null', c.smartCart === null && c.brand === null);
+  });
+  await su(`insert into platform_settings (key, value) values ('smart_cart', '{"threshold": 12000.4, "maxBundle": 8, "flags": {"cheaper": false}}'), ('brand', '{"MAIN": {"name": "ChowBuy"}}')`);
+  await as(A, async () => {
+    const c = (await q(`select get_public_catalog() c`))[0].c;
+    ok('published smart cart and brand reach the feed', c.smartCart.threshold === 12000.4 && c.smartCart.flags.cheaper === false && c.brand.MAIN.name === 'ChowBuy');
+    const place = async () => (await q(`select place_order('m1', '[{"product_id":"p3","qty":1}]'::jsonb, 'cod', $1, null) r`, [addr]))[0].r.order;
+    await su(`update platform_settings set value = '{"threshold": 100}' where key = 'smart_cart'`);
+    const low = await as(A, place);
+    await su(`update platform_settings set value = '{"threshold": 99999999}' where key = 'smart_cart'`);
+    const high = await as(A, place);
+    ok('a low threshold makes delivery free, a high one charges it', low.delivery_fee === 0 && high.delivery_fee > 0, JSON.stringify([low.delivery_fee, high.delivery_fee, low.subtotal]));
+    await su(`delete from platform_settings where key = 'smart_cart'`);
+    const def = await as(A, place);
+    ok('without a setting the old 10,000 rule still applies', def.delivery_fee === (def.subtotal >= 10000 ? 0 : high.delivery_fee), JSON.stringify([def.delivery_fee, def.subtotal]));
   });
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

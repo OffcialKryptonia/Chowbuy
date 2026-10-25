@@ -1,11 +1,17 @@
 import React, { useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import * as WebBrowser from 'expo-web-browser';
 import * as Clipboard from 'expo-clipboard';
 import { Banknote, Check, CreditCard, Landmark, Link2, MapPin, Minus, Plus, ShoppingBag, Tag, Wallet, type LucideIcon } from 'lucide-react-native';
 import { Button, Card, Empty, Field, Header, Row, Screen, SectionTitle, Sheet, Txt, useToast } from '@/components/ui';
 import { AddressPicker } from '@/components/discovery/AddressPicker';
+import { SmartCartCard } from '@/components/SmartCartCard';
+import { useCatalogConfig } from '@/hooks/useCatalogConfig';
+import { freeFrom } from '@/lib/catalog-config';
+import { useGroups } from '@/hooks/useGroups';
+import { attachOrderToGroup } from '@/lib/groups';
 import { useCart } from '@/stores/cart';
 import { useSession } from '@/stores/session';
 import { useOrders } from '@/stores/orders';
@@ -30,6 +36,7 @@ const METHODS: { id: PayMethod; label: string; sub: string; icon: LucideIcon }[]
 export default function Checkout() {
   const p = useTheme();
   const toast = useToast();
+  const qc = useQueryClient();
   const cfg = usePublicConfig().data.gateways;
   const { merchant, lines, promo, qty, applyPromo, clear } = useCart();
   const { addresses, activeAddressId, wallet, email } = useSession();
@@ -40,6 +47,10 @@ export default function Checkout() {
   const [pickAddr, setPickAddr] = useState(false);
   const [busy, setBusy] = useState(false);
   const [transfer, setTransfer] = useState<PayInit | null>(null);
+  const { data: ccfg } = useCatalogConfig();
+  const { data: groups } = useGroups();
+  const [split, setSplit] = useState(true);
+  const grp = !DEMO && merchant ? groups.find((g) => g.isHost && g.status === 'locked' && g.merchantId === merchant.id) : undefined;
   const draft = useRef<Order | null>(null);
   const live = useRef<Order | null>(null);   // live mode: the unpaid order already created on the server, reused on retry
 
@@ -50,7 +61,7 @@ export default function Checkout() {
     return <Screen><Header title="Basket" /><Empty icon={ShoppingBag} title="Your basket is empty" body="Add something delicious and it will show up here." action={<Button full={false} label="Browse" onPress={() => router.replace('/')} />} /></Screen>;
   }
 
-  const t = totals(lines, merchant.deliveryFee, promo?.pct ?? 0);
+  const t = totals(lines, merchant.deliveryFee, promo?.pct ?? 0, freeFrom(ccfg));
   const enabled = METHODS.filter((m) => cfg[m.id].enabled);
   const codMsg = pay === 'cod' ? COD_RULES(cfg.cod.maxAmount, t.total) : null;
   const walletMsg = pay === 'wallet' && wallet < t.total ? `Wallet balance ${ngn(wallet)} is not enough. Top up in Profile or choose another method.` : null;
@@ -71,6 +82,7 @@ export default function Checkout() {
     return live.current;
   };
   const finishLive = (o: Order, paid: boolean) => {
+    if (grp && split) void attachOrderToGroup(grp, o.id, o.total).then(() => qc.invalidateQueries({ queryKey: ['groups'] })).catch(() => toast('Your order is placed, but we could not record the group split. Open the group to check.', 'bad'));
     if (paid) useOrders.getState().markPaid(o.id);
     live.current = null; clear(); success();
     router.replace(`/orders/${o.id}/track`);
@@ -201,11 +213,22 @@ export default function Checkout() {
         ))}
       </Card>
 
+      <SmartCartCard merchant={merchant} onChange={() => { live.current = null; draft.current = null; }} />
+
       <Row gap={8} style={{ alignItems: 'flex-end' }}>
         <View style={{ flex: 1 }}><Field label="Promo code" value={code} onChangeText={(v) => { setCode(v); setCodeErr(null); }} autoCapitalize="characters" placeholder="e.g. LUNCH15" error={codeErr} /></View>
         <View style={{ marginBottom: codeErr ? 20 : 0 }}><Button full={false} variant="soft" icon={Tag} label="Apply" onPress={tryPromo} /></View>
       </Row>
       {promo ? <Row gap={6}><Check size={16} color={p.ok} /><Txt size={13} color={p.ok}>{promo.code} applied: {promo.pct}% off</Txt></Row> : null}
+
+      {grp ? (
+        <Card>
+          <Row style={{ justifyContent: 'space-between' }}>
+            <View style={{ flex: 1 }}><Txt size={15} weight="bold">Split with {grp.title}</Txt><Txt size={12} color={p.mute}>{grp.members.length} people share the total equally. You pay the store now; friends settle up with you.</Txt></View>
+            <Button full={false} small variant={split ? 'primary' : 'ghost'} label={split ? 'On' : 'Off'} onPress={() => setSplit(!split)} />
+          </Row>
+        </Card>
+      ) : null}
 
       <SectionTitle title="Pay with" />
       {enabled.map((m) => {

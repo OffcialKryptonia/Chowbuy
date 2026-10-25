@@ -9,7 +9,9 @@ import { BasketBar } from '@/components/discovery/BasketBar';
 import { useTheme, radius } from '@/lib/theme';
 import { BANNERS } from '@/lib/mock';
 import { useCatalog } from '@/stores/catalog';
-import { FOOD_CATS, VERTICALS } from '@/lib/icons';
+import { FOOD_CATS, VERTICALS, adminCat } from '@/lib/icons';
+import { useCatalogConfig } from '@/hooks/useCatalogConfig';
+import { shapeCats } from '@/lib/catalog-config';
 import { filterMerchants, merchantsWithDish, type Sort } from '@/lib/discovery';
 import { useSession } from '@/stores/session';
 import { tap } from '@/lib/sound-effects';
@@ -30,6 +32,8 @@ export default function Home() {
   const [cat, setCat] = useState<string | null>(null);
   const [offers, setOffers] = useState(false);
   const [sort, setSort] = useState<Sort>('recommended');
+  const { data: cfg } = useCatalogConfig();
+  const foodCats = useMemo(() => shapeCats(FOOD_CATS, cfg, 'restaurant', adminCat('restaurant')), [cfg]);
 
   const list = useMemo(() => {
     const base = filterMerchants(MERCHANTS, { vertical, q: '', cat, offersOnly: offers, sort });
@@ -84,7 +88,7 @@ export default function Home() {
         ))}
       </ScrollView>
 
-      <CatRail cats={FOOD_CATS} selected={cat} onPick={(id) => setCat(cat === id ? null : id)} />
+      <CatRail cats={foodCats} selected={cat} onPick={(id) => setCat(cat === id ? null : id)} />
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
         <Chip icon={Percent} label="Offers (-20%)" selected={offers} onPress={() => setOffers(!offers)} />
