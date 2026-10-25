@@ -23,6 +23,7 @@ await db.exec(fs.readFileSync(root + 'migrations/20261031000002_rider_positions.
 await db.exec(fs.readFileSync(root + 'migrations/20261031000003_admin_finance.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261101000001_admin_catalog.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261101000002_admin_chats_brand.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261101000003_admin_locations.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -480,6 +481,39 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
     if (bi) { const id = (await q(`select id from chat_filters where builtin limit 1`))[0].id; await q(`select admin_chat_filter_save($1, false, 'mask', '{"x"}')`, [id]); ok('built-in filters keep their own pattern', JSON.stringify((await q(`select words from chat_filters where id = $1`, [id]))[0].words) === JSON.stringify(bi.words)); }
     const n = (await q(`select admin_broadcast_count('') n`))[0].n;
     ok('broadcast count equals active paid or cash orders', n === (await q(`select count(*)::int c from orders where stage not in ('delivered','cancelled') and (paid or pay = 'cod')`))[0].c);
+  });
+}
+// ---- Admin locations
+{
+  await as(A, async () => {
+    for (const sql of [`select admin_locations()`, `select admin_loc_country_set('Ghana','live')`, `select admin_loc_city_save('Enugu','Enugu','live')`, `select admin_loc_hood_add('Lagos','Lekki')`, `select admin_loc_hood_set('LOC-1','disabled')`])
+      await throws('customers cannot use ' + sql.slice(7, 30), () => db.query(sql), 'Admins only');
+    await throws('customers cannot read location tables', () => db.query(`select * from loc_hoods`), 'permission denied');
+  });
+  await as(ADM, async () => {
+    const l0 = (await q(`select admin_locations() l`))[0].l;
+    ok('starts with Nigeria live and the five seeded cities, no hoods', l0.countries[0].name === 'Nigeria' && l0.countries[0].status === 'live' && l0.cities.length === 5 && l0.hoods.length === 0);
+    await q(`select admin_loc_country_set('Ghana','live')`);
+    ok('a country can go live', (await q(`select admin_locations() l`))[0].l.countries.find(c => c.name === 'Ghana').status === 'live');
+    await throws('Nigeria cannot be paused', () => db.query(`select admin_loc_country_set('Nigeria','pipeline')`), 'cannot be paused');
+    await throws('bad country status is rejected', () => db.query(`select admin_loc_country_set('Ghana','gone')`), 'Choose live');
+    await q(`select admin_loc_city_save(' Enugu ', 'Enugu', 'pipeline')`);
+    await q(`select admin_loc_city_save('Enugu', '', 'live')`);
+    const en = (await q(`select admin_locations() l`))[0].l.cities.find(c => c.name === 'Enugu');
+    ok('city saved trimmed, status updated, state kept', en && en.state === 'Enugu' && en.status === 'live');
+    await throws('bad city status is rejected', () => db.query(`select admin_loc_city_save('Enugu','Enugu','closed')`), 'Choose live');
+    const id = (await q(`select admin_loc_hood_add('Lagos','  Lekki Phase 1 ') id`))[0].id;
+    await throws('duplicate neighbourhood (any case) is rejected', () => db.query(`select admin_loc_hood_add('Lagos','lekki phase 1')`), 'already exists');
+    await throws('unknown city is rejected', () => db.query(`select admin_loc_hood_add('Atlantis','Reef')`), 'Choose a city');
+    await q(`select admin_loc_hood_set($1, 'coming_soon')`, [id]);
+    const l1 = (await q(`select admin_locations() l`))[0].l;
+    ok('hood saved trimmed with new status', l1.hoods.length === 1 && l1.hoods[0].name === 'Lekki Phase 1' && l1.hoods[0].status === 'coming_soon');
+    ok('only active hoods count toward a city', l1.cities.find(c => c.name === 'Lagos').active_hoods === 0);
+    await q(`select admin_loc_hood_set($1, 'active')`, [id]);
+    ok('active hood is counted', (await q(`select admin_locations() l`))[0].l.cities.find(c => c.name === 'Lagos').active_hoods === 1);
+    await throws('unknown hood errors', () => db.query(`select admin_loc_hood_set('LOC-9999','active')`), 'not found');
+    await throws('bad hood status is rejected', () => db.query(`select admin_loc_hood_set($1,'x')`, [id]), 'Choose active');
+    ok('changes are audited', (await q(`select count(*)::int n from audit_log where action like 'location.%'`))[0].n >= 5);
   });
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
