@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Linking, Pressable, Switch, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
-import { ArrowDownLeft, ArrowUpRight, Award, HeadphonesIcon, MapPin, Monitor, Moon, Plus, Send, Sun, type LucideIcon } from 'lucide-react-native';
+import { ArrowDownLeft, ArrowUpRight, Award, HeadphonesIcon, MapPin, Monitor, Moon, Plus, Send, Sun, Users, type LucideIcon } from 'lucide-react-native';
+import { router } from 'expo-router';
 import { Avatar, Button, Card, Field, Header, Row, Screen, SectionTitle, Sheet, Txt, useToast } from '@/components/ui';
 import { AccountPrefs } from '@/components/profile/AccountPrefs';
 import { SoundPicker } from '@/components/profile/SoundPicker';
@@ -137,6 +138,9 @@ export default function Profile() {
       {!DEMO ? <AccountPrefs /> : null}
 
       <SectionTitle title="Support" />
+      <Card onPress={() => router.push('/group')}>
+        <Row gap={12}><Users size={22} color={p.brand} /><View style={{ flex: 1 }}><Txt size={15} weight="bold">Group orders</Txt><Txt size={13} color={p.mute}>Order together and split the bill</Txt></View></Row>
+      </Card>
       <Card onPress={() => void Linking.openURL('mailto:support@chowbuy.ng?subject=ChowBuy%20app%20support')}>
         <Row gap={12}><HeadphonesIcon size={22} color={p.brand} /><View style={{ flex: 1 }}><Txt size={15} weight="bold">Contact support</Txt><Txt size={13} color={p.mute}>support@chowbuy.ng · replies within a few hours</Txt></View></Row>
       </Card>

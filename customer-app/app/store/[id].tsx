@@ -1,7 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { Image, ScrollView, View } from 'react-native';
 import { Clock, ThumbsUp } from 'lucide-react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { Users } from 'lucide-react-native';
+import { Button, useToast } from '@/components/ui';
+import { createGroup } from '@/lib/groups';
+import { DEMO } from '@/lib/config';
+import { useQueryClient } from '@tanstack/react-query';
 import { Chip, Empty, Header, Pill, Row, Screen, Txt } from '@/components/ui';
 import { ProductRow } from '@/components/discovery';
 import { BasketBar } from '@/components/discovery/BasketBar';
@@ -17,6 +22,9 @@ export default function StoreScreen() {
   const items = useMemo(() => products.filter((x) => x.merchantId === id), [products, id]);
   const cats = useMemo(() => [...new Set(items.map((i) => i.category))], [items]);
   const [cat, setCat] = useState<string | null>(null);
+  const toast = useToast();
+  const qc = useQueryClient();
+  const [grpBusy, setGrpBusy] = useState(false);
   if (!m) return <Screen><Header title="Store not found" /><Empty icon={Store} title="We could not find that store" body="It may have closed or moved." /></Screen>;
   const shown = items.filter((i) => !cat || i.category === cat);
   return (
@@ -30,6 +38,12 @@ export default function StoreScreen() {
         <Row gap={8} style={{ flexWrap: 'wrap' }}>
           <Pill label={`${m.rating}% (${m.ratingCount})`} tone="ok" icon={ThumbsUp} /><Pill label={`${m.etaMin}-${m.etaMax} min`} tone="brand" icon={Clock} /><Pill label={m.open ? m.hours : 'Closed now'} tone={m.open ? 'neutral' : 'bad'} />
         </Row>
+        {!DEMO ? <Button small variant="ghost" icon={Users} loading={grpBusy} label="Order with friends" onPress={async () => {
+          setGrpBusy(true);
+          try { const g = await createGroup(m.id, `${m.name} group order`, false); await qc.invalidateQueries({ queryKey: ['groups'] }); router.push(`/group/${g.id}`); }
+          catch (e) { toast(e instanceof Error ? e.message : 'Could not start a group.', 'bad'); }
+          finally { setGrpBusy(false); }
+        }} /> : null}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           <Chip label="All" selected={!cat} onPress={() => setCat(null)} />
           {cats.map((c) => <Chip key={c} label={c} selected={cat === c} onPress={() => setCat(cat === c ? null : c)} />)}

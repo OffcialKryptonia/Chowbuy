@@ -4,7 +4,9 @@ import { Briefcase, Check, Crosshair, Home as HomeIcon, MapPin, Trash2 } from 'l
 import * as Location from 'expo-location';
 import { Button, Chip, Field, Row, Sheet, Txt, useToast } from '@/components/ui';
 import { useTheme } from '@/lib/theme';
-import { suggestAreas } from '@/lib/discovery';
+import { LAGOS_AREAS, suggestAreas } from '@/lib/discovery';
+import { useCatalogConfig } from '@/hooks/useCatalogConfig';
+import { activeAreas, areaBlock, areaCity } from '@/lib/catalog-config';
 import { useSession } from '@/stores/session';
 import { tap } from '@/lib/sound-effects';
 import { DEMO } from '@/lib/config';
@@ -28,7 +30,9 @@ export function AddressPicker({ visible, onClose }: { visible: boolean; onClose:
   const [landmark, setLandmark] = useState('');
   const [label, setLabel] = useState<SavedAddress['label']>('Home');
   const [err, setErr] = useState<string | null>(null);
-  const sugg = adding && area.length > 0 && !AREA_COORDS[area] ? suggestAreas(area) : [];
+  const { data: cfg } = useCatalogConfig();
+  const areas = React.useMemo(() => activeAreas(cfg, LAGOS_AREAS), [cfg]);
+  const sugg = adding && area.length > 0 && !areas.includes(area) ? suggestAreas(area, 5, areas) : [];
 
   const gps = async () => {
     const perm = await Location.requestForegroundPermissionsAsync();
@@ -45,10 +49,12 @@ export function AddressPicker({ visible, onClose }: { visible: boolean; onClose:
   const uid = useAuth((s) => s.session?.user.id);
   const save = async () => {
     if (line.trim().length < 5) { setErr('Enter a street address.'); return; }
+    const blocked = areaBlock(cfg, area.trim());
+    if (blocked) { setErr(blocked); return; }
     const c = AREA_COORDS[area.trim()];
-    if (!pending.current && !c) { setErr('Pick a neighbourhood from the suggestions or use your current location.'); return; }
+    if (!pending.current && !c) { setErr(areas.includes(area.trim()) ? 'Tap the location button to pin this area on the map.' : 'Pick a neighbourhood from the suggestions or use your current location.'); return; }
     const loc = pending.current ?? { latitude: c![0], longitude: c![1] };
-    const a = { label, line: line.trim(), area: area.trim() + ', Lagos', landmark: landmark.trim() || undefined, location: loc };
+    const a = { label, line: line.trim(), area: area.trim() + ', ' + (areaCity(cfg, area.trim()) ?? 'Lagos'), landmark: landmark.trim() || undefined, location: loc };
     if (!DEMO) {
       if (!uid) return;
       try {
