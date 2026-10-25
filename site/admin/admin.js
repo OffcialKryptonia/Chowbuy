@@ -343,7 +343,32 @@ function vRiders(){
 }
 
 function hoodCounts(){var a=0;S.locs.hoods.forEach(function(h){if(h.status==='active')a++});return a}
-function vLocations(){
+function locReload(){return beReq('/rest/v1/rpc/admin_locations','POST',{}).then(function(c){L.loc=c;refresh()})}
+function locCall(fn,body,ok,warn){return beReq('/rest/v1/rpc/'+fn,'POST',body).then(function(){return locReload()}).then(function(){if(ok)toast(ok,warn?'warn':'')},function(e){toast(e.message,'err')})}
+function vLocationsLive(){
+  var C=L.loc,live=C.countries.filter(function(c){return c.status==='live'}).length,cl=C.cities.filter(function(c){return c.status==='live'}).length,
+   act=C.hoods.filter(function(h){return h.status==='active'}).length,o30=C.cities.reduce(function(a,c){return a+Number(c.orders30)},0),
+   states=C.cities.filter(function(c){return c.state}).map(function(c){return c.state}).filter(function(x,i,a){return a.indexOf(x)===i}).length;
+  var cityRows=C.cities.map(function(c){return '<tr><td><b>'+esc(c.name)+'</b></td><td>'+esc(c.state||'—')+'</td><td class="r mono">'+num(c.merchants)+'</td><td class="r mono">'+num(c.orders30)+'</td><td class="r mono">'+num(c.active_hoods)+'</td><td>'+pill(c.status)+'</td><td class="r">'+btn(ic('refresh')+'Cycle status','cycleC',c.name)+'</td></tr>'}).join('');
+  var hq=T('hoodC','all'),hoods=C.hoods.filter(function(h){return hq==='all'||h.city===hq});
+  var hr=hoods.map(function(h){var c=C.cities.filter(function(x){return x.name===h.city})[0]||{};return '<tr><td><b>'+esc(h.name)+'</b></td><td>'+esc(h.city)+'</td><td>'+esc(c.state||'—')+'</td><td class="r mono">'+num(h.orders30)+'</td><td>'+pill(h.status)+'</td><td class="r">'+btn(ic('refresh')+'Cycle status','cycleH',h.id)+'</td></tr>'}).join('');
+  return head('Locations & service areas','Country → State → City → Neighbourhood. Control exactly where ChowBuy delivers.',btn(ic('plus')+'Add city','addCityLive',null,'pri'))+liveBar()+
+  '<div class="card pad"><span class="muted">Merchant and order counts match the city or neighbourhood name inside each merchant\'s area and each order\'s delivery area. <b>The customer app does not read this list yet</b>, so changes here are saved but do not limit where customers can order.</span></div>'+
+  '<div class="grid g4">'+mini('Active markets',live+' live · '+(C.countries.length-live)+' pipeline','Countries','globe')+mini('Cities live',cl,'Across '+states+' state'+(states===1?'':'s'),'pin')+mini('Active neighbourhoods',act,'of '+C.hoods.length+' mapped','store')+mini('Orders (30d)',num(o30),'In your cities','bike')+'</div>'+
+  '<div class="grid g2"><div class="card pad"><h3>Country markets</h3><p class="sub">Tap a country to move it between live and pipeline.</p><div class="chips" style="margin-top:1rem">'+C.countries.map(function(c){return '<button type="button" class="cp '+(c.status==='live'?'on':'pipe')+'" data-act="country" data-id="'+esc(c.name)+'">'+ic(c.status==='live'?'checkc':'clock')+esc(c.name)+' · '+c.status+'</button>'}).join('')+'</div>'+
+    '<div style="margin-top:1.4rem"><h3 style="font-size:.95rem">Add neighbourhood</h3><form data-form="addHood" class="frow" style="margin-top:.7rem;align-items:end"><div class="f"><label for="hn">Name</label><input id="hn" name="name" placeholder="e.g. Lekki Phase 2" maxlength="40" required></div>'+sel('hc','City',C.cities.map(function(c){return[c.name,c.name]}),C.cities.length?C.cities[0].name:'').replace('name="hc"','name="city"')+'<button class="btn pri" type="submit">'+ic('plus')+'Add</button></form></div></div>'+
+   '<div class="card"><div class="pad" style="padding-bottom:.4rem"><h3>Cities</h3><p class="sub">Cycle: live → paused → pipeline</p></div><div class="tw"><table class="t" style="min-width:36rem"><thead><tr><th>City</th><th>State</th><th class="r">Merchants</th><th class="r">Orders (30d)</th><th class="r">Active areas</th><th>Status</th><th></th></tr></thead><tbody>'+cityRows+'</tbody></table></div></div></div>'+
+  '<div class="card"><div class="bar"><div><h3>Neighbourhoods</h3><p class="sub">Cycle: active → disabled → coming soon</p></div><div style="margin-left:auto">'+tabs('hoodC',[['all','All']].concat(C.cities.map(function(c){return[c.name,c.name]})),1)+'</div></div>'+
+  (hoods.length?'<div class="tw"><table class="t" style="min-width:36rem"><thead><tr><th>Neighbourhood</th><th>City</th><th>State</th><th class="r">Orders (30d)</th><th>Status</th><th></th></tr></thead><tbody>'+hr+'</tbody></table></div>':empty('pin','No neighbourhoods here','Add the first service area using the form above.'))+'</div>';
+}
+function openAddCityLive(){
+  openM('<h3>Add city</h3>'+inp('name','City','','placeholder="e.g. Enugu" maxlength="40" required')+inp('state','State / region','','placeholder="e.g. Enugu" maxlength="40" required')+sel('status','Status',[['live','Live'],['pipeline','Pipeline']],'pipeline')+'<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Add city</button></div>',
+   function(v){var n=v.name.trim(),st=v.state.trim();if(n.length<2||st.length<2)return 'Enter both a city and a state.';
+    if(L.loc.cities.some(function(c){return c.name.toLowerCase()===n.toLowerCase()}))return n+' is already in the list.';
+    locCall('admin_loc_city_save',{p_name:n,p_state:st,p_status:v.status},n+' added.')});
+}
+function vLocations(){return liveOn()&&L.loc?vLocationsLive():vLocationsDemo()}
+function vLocationsDemo(){
   var L=S.locs,act=hoodCounts(),live=L.countries.filter(function(c){return c.status==='live'}).length;
   var cityRows=L.cities.map(function(c){var m=S.merchants.filter(function(x){return x.city===c.name}).length,h=L.hoods.filter(function(x){return x.city===c.name&&x.status==='active'}).length;
     return '<tr><td><b>'+esc(c.name)+'</b></td><td>'+esc(c.state)+'</td><td class="r mono">'+m+'</td><td class="r mono">'+h+'</td><td>'+pill(c.status)+'</td></tr>'}).join('');
@@ -639,10 +664,12 @@ var A={
  brandFeat:function(el){if(liveOn()&&L.cat){var lb=L.cat.brands.filter(function(x){return x.id===el.getAttribute('data-id')})[0];if(lb)beReq('/rest/v1/rpc/admin_brand_set_featured','POST',{p_id:lb.id,p_featured:!lb.featured}).then(function(){return catReload()}).then(function(){toast(lb.name+(lb.featured?' removed from featured brands.':' is now a featured brand.'))},function(e){toast(e.message,'err')});return}
   var b=find(S.brands,el.getAttribute('data-id'));upd(function(){b.featured=!b.featured;log(b.name+(b.featured?' featured':' unfeatured'),'settings')});toast(b.name+(b.featured?' is now a featured brand.':' removed from featured brands.'))},
  addBrand:function(){openAddBrand()},
- country:function(el){var c=S.locs.countries.filter(function(x){return x.name===el.getAttribute('data-id')})[0];
+ country:function(el){if(liveOn()&&L.loc){var lc=L.loc.countries.filter(function(x){return x.name===el.getAttribute('data-id')})[0];if(lc.name==='Nigeria'&&lc.status==='live'){toast('Nigeria is the only live market and cannot be paused.','err');return}locCall('admin_loc_country_set',{p_name:lc.name,p_status:lc.status==='live'?'pipeline':'live'},lc.name+' is now '+(lc.status==='live'?'pipeline':'live')+'.');return}var c=S.locs.countries.filter(function(x){return x.name===el.getAttribute('data-id')})[0];
    if(c.name==='Nigeria'&&c.status==='live'){toast('Nigeria is the only live market and cannot be paused.','err');return}
    upd(function(){c.status=c.status==='live'?'pipeline':'live';log(c.name+' market set to '+c.status,'pin')});toast(c.name+' is now '+c.status+'.')},
- cycleH:function(el){var h=find(S.locs.hoods,el.getAttribute('data-id')),o=['active','disabled','coming_soon'];upd(function(){h.status=o[(o.indexOf(h.status)+1)%3];log(h.name+' ('+h.city+') set to '+h.status.replace('_',' '),'pin')});toast(h.name+' is now '+h.status.replace('_',' ')+'.')},
+ cycleC:function(el){var c=L.loc.cities.filter(function(x){return x.name===el.getAttribute('data-id')})[0],o=['live','paused','pipeline'],n=o[(o.indexOf(c.status)+1)%3];locCall('admin_loc_city_save',{p_name:c.name,p_state:'',p_status:n},c.name+' is now '+n+'.')},
+ addCityLive:function(){openAddCityLive()},
+ cycleH:function(el){if(liveOn()&&L.loc){var lh=find(L.loc.hoods,el.getAttribute('data-id')),oo=['active','disabled','coming_soon'],nn=oo[(oo.indexOf(lh.status)+1)%3];locCall('admin_loc_hood_set',{p_id:lh.id,p_status:nn},lh.name+' is now '+nn.replace('_',' ')+'.');return}var h=find(S.locs.hoods,el.getAttribute('data-id')),o=['active','disabled','coming_soon'];upd(function(){h.status=o[(o.indexOf(h.status)+1)%3];log(h.name+' ('+h.city+') set to '+h.status.replace('_',' '),'pin')});toast(h.name+' is now '+h.status.replace('_',' ')+'.')},
  batch:function(){
    var p=S.settlements.filter(function(s){return s.status==='pending'});if(!p.length){toast('No pending payees to settle.','warn');return}
    var tot=p.reduce(function(s,x){return s+x.amount},0);
@@ -740,6 +767,7 @@ function onFile(slot,file,input){
 }
 var FORMS={
  addHood:function(f){var v=fd(f),n=(v.name||'').trim();if(n.length<2){toast('Enter a neighbourhood name.','err');return}
+   if(liveOn()&&L.loc){locCall('admin_loc_hood_add',{p_city:v.city,p_name:n},n+' added to '+v.city+' and set active.');return}
    if(S.locs.hoods.some(function(h){return h.city===v.city&&h.name.toLowerCase()===n.toLowerCase()})){toast(n+' already exists in '+v.city+'.','err');return}
    upd(function(){S.locs.hoods.push({id:'H'+Date.now(),name:n,city:v.city,status:'active'});log(n+' added to '+v.city,'pin')});toast(n+' added to '+v.city+' and set active.')}
 };
@@ -1531,7 +1559,7 @@ function beConnect(url,anon,email,pw){
     U.hist=r[1];save();
   });
 }
-function beDisconnect(){BE.tok='';beSaveLocal();U.hist=null;L.dash=L.orders=L.merchants=L.me=L.team=L.sessions=L.riders=L.fin=L.wt=L.cat=L.chat=L.chf=null}
+function beDisconnect(){BE.tok='';beSaveLocal();U.hist=null;L.dash=L.orders=L.merchants=L.me=L.team=L.sessions=L.riders=L.fin=L.wt=L.cat=L.chat=L.chf=L.loc=null}
 
 /* ---- live numbers: once connected, the dashboard, orders and merchants show the real backend instead of sample data ---- */
 var L={dash:null,orders:null,merchants:null,me:null,team:null,sessions:null,riders:null,fin:null,wt:null,cat:null,err:'',busy:false};
@@ -1540,7 +1568,7 @@ function liveLoad(){
   if(!beOn())return Promise.resolve();
   L.busy=true;L.err='';
   return Promise.all([beReq('/rest/v1/rpc/admin_dashboard','POST',{p_days:rangeDays()}),beReq('/rest/v1/rpc/admin_orders','POST',{p_status:'all',p_search:'',p_limit:200,p_offset:0}),beReq('/rest/v1/rpc/admin_merchants','POST',{})])
-   .then(function(r){L.dash=r[0];L.orders=r[1];L.merchants=r[2];return Promise.all([beReq('/rest/v1/rpc/admin_me','POST',{}),beReq('/rest/v1/rpc/admin_team','POST',{}),beReq('/rest/v1/rpc/admin_my_sessions','POST',{}),beReq('/rest/v1/rpc/admin_riders','POST',{}),beReq('/rest/v1/rpc/admin_finance','POST',{p_days:rangeDays()}),beReq('/rest/v1/rpc/admin_wallet_transfers','POST',{p_search:'',p_limit:200,p_offset:0}),beReq('/rest/v1/rpc/admin_catalog','POST',{}),beReq('/rest/v1/rpc/admin_chat_threads','POST',{}),beReq('/rest/v1/chat_filters?select=*&order=id','GET'),beReq('/rest/v1/platform_settings?key=eq.brand&select=value','GET')].map(function(q){return q.catch(function(){return null})})).then(function(x){L.me=x[0];L.team=x[1];L.sessions=x[2];L.riders=x[3];L.fin=x[4];L.wt=x[5];L.cat=x[6];if(x[7]&&Array.isArray(x[7].threads)&&Array.isArray(x[8]))chSet(x[7],x[8]);if(x[9]&&x[9][0]&&x[9][0].value&&x[9][0].value.MAIN){S.brands2.published=x[9][0].value;if(S.brands2.draft&&JSON.stringify(S.brands2.draft)===JSON.stringify(S.brands2.published))S.brands2.draft=null}if(L.me&&!U.pf){S.profile.name=L.me.name||S.profile.name;S.profile.email=L.me.email||S.profile.email;S.profile.phone=L.me.phone||''}})},function(e){L.err=/JWT|expired|401/i.test(e.message)?'Your session ended. Sign in again.':e.message})
+   .then(function(r){L.dash=r[0];L.orders=r[1];L.merchants=r[2];return Promise.all([beReq('/rest/v1/rpc/admin_me','POST',{}),beReq('/rest/v1/rpc/admin_team','POST',{}),beReq('/rest/v1/rpc/admin_my_sessions','POST',{}),beReq('/rest/v1/rpc/admin_riders','POST',{}),beReq('/rest/v1/rpc/admin_finance','POST',{p_days:rangeDays()}),beReq('/rest/v1/rpc/admin_wallet_transfers','POST',{p_search:'',p_limit:200,p_offset:0}),beReq('/rest/v1/rpc/admin_catalog','POST',{}),beReq('/rest/v1/rpc/admin_chat_threads','POST',{}),beReq('/rest/v1/chat_filters?select=*&order=id','GET'),beReq('/rest/v1/platform_settings?key=eq.brand&select=value','GET'),beReq('/rest/v1/rpc/admin_locations','POST',{})].map(function(q){return q.catch(function(){return null})})).then(function(x){L.me=x[0];L.team=x[1];L.sessions=x[2];L.riders=x[3];L.fin=x[4];L.wt=x[5];L.cat=x[6];if(x[7]&&Array.isArray(x[7].threads)&&Array.isArray(x[8]))chSet(x[7],x[8]);if(x[10]&&Array.isArray(x[10].cities))L.loc=x[10];if(x[9]&&x[9][0]&&x[9][0].value&&x[9][0].value.MAIN){S.brands2.published=x[9][0].value;if(S.brands2.draft&&JSON.stringify(S.brands2.draft)===JSON.stringify(S.brands2.published))S.brands2.draft=null}if(L.me&&!U.pf){S.profile.name=L.me.name||S.profile.name;S.profile.email=L.me.email||S.profile.email;S.profile.phone=L.me.phone||''}})},function(e){L.err=/JWT|expired|401/i.test(e.message)?'Your session ended. Sign in again.':e.message})
    .then(function(){L.busy=false;refresh()});
 }
 function liveOn(){return beOn()&&!!L.orders}
@@ -1554,7 +1582,7 @@ function liveBar(){
   if(L.err)return '<div class="card pad" style="border-color:var(--red)"><b>Could not load your live data.</b> <span class="muted">'+esc(L.err)+'</span> <span class="acts" style="display:inline-flex;margin-left:.6rem">'+btn('Try again','liveReload')+'</span></div>';
   return '';
 }
-var SAMPLE_ROUTES=['locations','group-orders','smart-cart'];
+var SAMPLE_ROUTES=['group-orders','smart-cart'];
 function sampleBar(){return '<div class="card pad" style="border-color:var(--warn,#F59E0B);margin-bottom:1rem"><b>Sample data.</b> <span class="muted">This page is not connected to your backend yet, so the names and numbers on it are examples, not your real business.'+(cur()&&cur().p==='riders'?' Approve real riders under KYC review.':'')+'</span></div>'}
 function liveBars(vals,labels,fmt){
   var W=600,H=190,pl=8,pb=22,pt=10,max=Math.max.apply(0,vals.concat([1])),bw=(W-pl*2)/vals.length;
