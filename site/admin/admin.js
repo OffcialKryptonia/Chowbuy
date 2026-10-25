@@ -457,7 +457,7 @@ function vBrandSet(){
   var navLinks=U.dev==='desktop'?'<span class="muted" style="margin-left:auto;display:flex;gap:1rem;font-size:.8rem"><span>Home</span><span>Offers</span><span>Help</span></span>':'<span style="margin-left:auto">'+ic('menu')+'</span>';
   return head('Brand settings','Identity for the consumer, merchant and rider apps.',
     (dirty?'<span class="badge-un">Unsaved changes</span>':'<span class="pill ok">'+ic('check')+'Published</span>')+btn('Reset to published','brandReset',null,'',dirty?'':' disabled')+btn(ic('check')+'Publish changes','brandPub',null,'pri',dirty?'':' disabled'))+
-  '<div class="tabs" role="tablist">'+['MAIN','MERCHANT','RIDER'].map(function(x){return '<button type="button" role="tab" data-act="brandTab" data-id="'+x+'" aria-pressed="'+(k===x)+'">'+x+' · '+BNAMES[x]+'</button>'}).join('')+'</div>'+
+  (liveOn()?'<div class="card pad"><span class="muted">Logos are uploaded to your project\'s storage and the published brand is saved to your database. <b>The customer, merchant and rider apps do not read it yet.</b></span></div>':'')+'<div class="tabs" role="tablist">'+['MAIN','MERCHANT','RIDER'].map(function(x){return '<button type="button" role="tab" data-act="brandTab" data-id="'+x+'" aria-pressed="'+(k===x)+'">'+x+' · '+BNAMES[x]+'</button>'}).join('')+'</div>'+
   '<div class="grid g2" style="align-items:start"><div style="display:grid;gap:1rem"><div class="card pad"><h3>Relationship to ChowBuy</h3><div class="chips" style="margin-top:.8rem">'+BRELS.map(function(r){return '<button type="button" class="cp '+(b.rel===r[0]?'on':'')+'" data-act="rel" data-id="'+r[0]+'" aria-pressed="'+(b.rel===r[0])+'" title="'+r[2]+'">'+r[1]+'</button>'}).join('')+'</div><p class="sub" style="margin-top:.6rem">'+BRELS.filter(function(r){return r[0]===b.rel})[0][2]+'</p></div>'+
   '<div class="card pad"><h3>Profile</h3><div style="display:grid;gap:.9rem;margin-top:1rem"><div class="f"><label for="bn">Brand name</label><input id="bn" data-fid="bn" data-in="brand:name" value="'+esc(b.name)+'" maxlength="40"></div><div class="f"><label for="bt">Tagline</label><input id="bt" data-fid="bt" data-in="brand:tagline" value="'+esc(b.tagline)+'" maxlength="80"></div><div class="frow"><div class="f"><label for="bc">Primary colour</label><input id="bc" type="color" data-ch="brand:color" value="'+esc(b.color)+'" style="height:2.8rem;padding:.2rem"></div><div class="f"><label for="bh">Hex code</label><input id="bh" data-ch="brand:color" value="'+esc(b.color)+'" maxlength="7" spellcheck="false"></div></div></div></div>'+
   '<div class="card pad"><h3>Brand assets</h3><p class="sub">SVG, PNG, WebP or JPG. Maximum 2 MB each.</p><div style="display:grid;gap:.7rem;margin-top:1rem">'+slots+'</div></div></div>'+
@@ -669,7 +669,7 @@ var A={
  pickFile:function(el){var i=$('#file-'+el.getAttribute('data-id'));if(i)i.click()},
  rmAsset:function(el){var k=el.getAttribute('data-id'),s=SLOTS.filter(function(x){return x[0]===k})[0];upd(function(){delete bdraft()[U.brand].assets[k]});toast(s[1]+' removed from draft.','warn')},
  brandReset:function(){confirmM('Reset to published','Discard all unsaved brand changes?','Discard',function(){upd(function(){S.brands2.draft=null});toast('Draft discarded. Showing the published brands.')},true)},
- brandPub:function(){if(!bdirty())return;confirmM('Publish brand changes','This updates the consumer, merchant and rider apps for everyone.','Publish',function(){upd(function(){S.brands2.published=clone(S.brands2.draft);S.brands2.draft=null;log('Brand settings published','settings')});toast('Brand changes published.')})},
+ brandPub:function(){if(!bdirty())return;if(liveOn()){var dr=S.brands2.draft,bad=['MAIN','MERCHANT','RIDER'].some(function(k){return Object.keys(dr[k].assets).some(function(sl){return /^data:/.test(dr[k].assets[sl].url)})});if(bad){toast('Some logos were added before you signed in. Remove and upload them again.','err');return}}confirmM('Publish brand changes',liveOn()?'This saves the brand to your project. The apps pick it up once they are wired to it.':'This updates the consumer, merchant and rider apps for everyone.','Publish',function(){if(liveOn()){beUpsert('brand',S.brands2.draft).then(function(){upd(function(){S.brands2.published=clone(S.brands2.draft);S.brands2.draft=null});toast('Brand saved to your project.')},function(e){toast(e.message,'err')});return}upd(function(){S.brands2.published=clone(S.brands2.draft);S.brands2.draft=null;log('Brand settings published','settings')});toast('Brand changes published.')})},
  gw:function(el){var D=sEdit(),k=el.getAttribute('data-id');D.gateways[k]=!D.gateways[k];refresh();toast(GW.filter(function(g){return g[0]===k})[0][1]+' '+(D.gateways[k]?'enabled':'disabled')+'. Press Save settings to apply.')},
  addCity:function(){openAddCity()},
  rmCity:function(el){var D=sEdit(),c=el.getAttribute('data-id');if(D.cities.length<=1){toast('Keep at least one operating city.','err');return}D.cities=D.cities.filter(function(x){return x!==c});refresh();toast(c+' removed. Press Save settings to apply.','warn')},
@@ -729,7 +729,11 @@ function onFile(slot,file,input){
   if(file.size>2*1024*1024){toast('That file is '+(file.size/1048576).toFixed(1)+' MB. The limit is 2 MB.','err');input.value='';return}
   var fr=new FileReader();
   fr.onload=function(){var url=fr.result,im=new Image();
-    im.onload=function(){upd(function(){bdraft()[U.brand].assets[slot]={name:file.name,type:file.type,size:file.size,w:file.type==='image/svg+xml'?0:im.naturalWidth,h:file.type==='image/svg+xml'?0:im.naturalHeight,url:url}});toast(SLOTS.filter(function(s){return s[0]===slot})[0][1]+' uploaded to draft.')};
+    im.onload=function(){var app=U.brand,meta={name:file.name,type:file.type,size:file.size,w:file.type==='image/svg+xml'?0:im.naturalWidth,h:file.type==='image/svg+xml'?0:im.naturalHeight},lbl=SLOTS.filter(function(s){return s[0]===slot})[0][1];
+      if(liveOn()){var path=app.toLowerCase()+'/'+slot+'-'+Date.now()+'.'+(file.type==='image/svg+xml'?'svg':file.type==='image/jpeg'?'jpg':file.type.split('/')[1]);toast('Uploading '+lbl.toLowerCase()+'…');
+        fetch(BE.url.replace(/\/+$/,'')+'/storage/v1/object/brand/'+path,{method:'POST',headers:{apikey:BE.anon,Authorization:'Bearer '+BE.tok,'Content-Type':file.type,'x-upsert':'false'},body:file}).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error('Upload failed ('+r.status+'). '+t.slice(0,100))});
+          meta.url=BE.url.replace(/\/+$/,'')+'/storage/v1/object/public/brand/'+path;upd(function(){bdraft()[app].assets[slot]=meta});toast(lbl+' uploaded to draft.')}).catch(function(e){toast(e.message,'err')});input.value='';return}
+      meta.url=url;upd(function(){bdraft()[app].assets[slot]=meta});toast(lbl+' uploaded to draft.')};
     im.onerror=function(){toast('That image could not be read.','err')};im.src=url};
   fr.onerror=function(){toast('Could not read that file.','err')};
   fr.readAsDataURL(file);
@@ -1267,7 +1271,7 @@ function chRe(w){return new RegExp('(^|[^a-z0-9])'+w.replace(/[.*+?^${}()|[\]\\]
 /* returns [{id,name,action}] for each enabled category the text trips */
 function chScreen(text){
   var out=[],t=String(text||''),digits=t.replace(/[\s-]/g,'');
-  S.chat.filters.forEach(function(f){if(!f.on)return;
+  chFl().forEach(function(f){if(!f.on)return;
     var hit=f.builtin?/(\+?234|\b0)[789][01]\d{8}/.test(digits):f.words.some(function(w){return w&&chRe(w).test(t)});
     if(hit)out.push({id:f.id,name:f.name,action:f.action})});
   return out}
@@ -1287,16 +1291,34 @@ function seedChats(){
   c.threads=live.map(function(o,i){var sc=scripts[i%scripts.length];
     return{id:'CT'+(500+i),orderId:o.id,customer:o.customer,rider:o.rider,city:o.city,msgs:sc.map(function(m,j){return{id:'m'+i+'-'+j,from:m[0],t:m[1],ts:now-(sc.length-j)*70000-i*240000}})}});
   c.seeded=true}
-function chFlags(th){var n=0;th.msgs.forEach(function(m){if(m.from!=='support'&&!S.chat.reviewed[m.id]&&chScreen(m.t).length)n++});return n}
+function chLiveOn(){return liveOn()&&!!L.chat}
+function chFl(){return chLiveOn()?(L.chf||[]):S.chat.filters}
+function CH(){
+  if(!chLiveOn())return S.chat;
+  var lk={},rv={};L.chat.threads.forEach(function(t){if(t.locked)lk[t.id]=true;t.msgs.forEach(function(m){if(m.reviewed)rv[m.id]=true})});
+  var AU={'chat.review':'Marked a flagged message as reviewed','chat.lock':'Locked a chat','chat.unlock':'Unlocked a chat','chat.support_message':'Support message sent'};
+  var au=L.chat.audit.map(function(a){var m=a.meta||{},t=AU[a.action]||'';
+    if(a.action==='chat.filter')t='Changed keyword filter "'+(m.id||'')+'" ('+(m.action||'')+', '+(m.enabled===false?'off':'on')+')';
+    else if(a.action==='chat.broadcast')t='Emergency broadcast to '+(m.area?m.area:'all areas')+' ('+m.chats+' chats)';
+    else if(m.order&&t)t+=' for '+m.order;
+    return{t:t||a.action,ts:new Date(a.at).getTime(),who:a.who,action:a.action,meta:m}});
+  var bc=au.filter(function(a){return a.action==='chat.broadcast'}).map(function(a){return{title:'Emergency broadcast',city:a.meta.area||'all',count:a.meta.chats,ts:a.ts}});
+  return{threads:L.chat.threads,locked:lk,reviewed:rv,filters:L.chf||[],retention:null,broadcasts:bc,audit:au}}
+function chMF(m){if(m.from==='support')return[];return chLiveOn()?(m.flags||[]).map(function(n){return{name:n,action:'live'}}):chScreen(m.t)}
+function chReload(){return Promise.all([beReq('/rest/v1/rpc/admin_chat_threads','POST',{}),beReq('/rest/v1/chat_filters?select=*&order=id','GET')]).then(function(r){chSet(r[0],r[1]);refresh()})}
+function chSet(c,f){c.threads.forEach(function(t){t.msgs.forEach(function(m){if(m.from==='system')m.from='support'})});L.chat=c;L.chf=(f||[]).map(function(x){return{id:x.id,name:x.name,on:x.enabled,action:x.action,words:x.words||[],builtin:x.builtin}})}
+function chCall(fn,body,ok,warn){return beReq('/rest/v1/rpc/'+fn,'POST',body).then(function(){return chReload()}).then(function(){if(ok)toast(ok,warn?'warn':'')},function(e){toast(e.message,'err')})}
+function chSave(f,patch){var n=Object.assign({on:f.on,action:f.action,words:f.words},patch);return chCall('admin_chat_filter_save',{p_id:f.id,p_enabled:n.on,p_action:n.action,p_words:f.builtin?[]:n.words},'Keyword filter updated.')}
+function chFlags(th){var n=0;th.msgs.forEach(function(m){if(m.from!=='support'&&!CH().reviewed[m.id]&&chMF(m).length)n++});return n}
 function chRedact(t){return String(t).replace(/(\+?234|\b0)[789][01][\s-]?\d{3}[\s-]?\d{4}/g,function(m){return m.slice(0,4)+'••••'+m.slice(-2)})}
 function chSetTabs(){return tabs('chatTab',[['live','Live chats'],['filters','Keyword filters'],['broadcast','Emergency broadcast'],['audit','Audit log']])}
 function vChats(){
   var tab=T('chatTab','live'),body='';
   if(tab==='live')body=chLive();else if(tab==='filters')body=chFilters();else if(tab==='broadcast')body=chBroadcast();else body=chAuditV();
-  var c=S.chat,fl=c.threads.reduce(function(a,t){return a+chFlags(t)},0);
-  return head('Chat supervision','Monitor customer and rider chats, enforce keyword rules and step in when needed.','<span class="pill '+(fl?'warn':'ok')+'">'+ic(fl?'alert':'shield')+(fl?fl+' flagged to review':'Nothing flagged')+'</span>')+chSetTabs()+body}
+  var c=CH(),fl=c.threads.reduce(function(a,t){return a+chFlags(t)},0);
+  return head('Chat supervision','Monitor customer and rider chats, enforce keyword rules and step in when needed.','<span class="pill '+(fl?'warn':'ok')+'">'+ic(fl?'alert':'shield')+(fl?fl+' flagged to review':'Nothing flagged')+'</span>'+(chLiveOn()?btn(ic('refresh')+'Refresh','chRefresh',null,''):''))+(chLiveOn()?liveBar():'')+chSetTabs()+body}
 function chLive(){
-  var c=S.chat,fil=U.chF,list=c.threads.filter(function(t){return fil==='all'||(fil==='flag'&&chFlags(t)>0)||(fil==='lock'&&c.locked[t.id])});
+  var c=CH(),fil=U.chF,list=c.threads.filter(function(t){return fil==='all'||(fil==='flag'&&chFlags(t)>0)||(fil==='lock'&&c.locked[t.id])});
   var sel=find(c.threads,U.chSel);if(!sel&&list.length){sel=list[0];U.chSel=sel.id}
   var chip=function(v,l){return '<button type="button" data-act="chF" data-v="'+v+'" aria-pressed="'+(fil===v)+'">'+l+'</button>'};
   var rows=list.map(function(t){var last=t.msgs[t.msgs.length-1],n=chFlags(t);
@@ -1304,9 +1326,9 @@ function chLive(){
   return '<div class="card"><div class="bar"><div class="tabs sm" role="group" aria-label="Chat filter">'+chip('all','All ('+c.threads.length+')')+chip('flag','Flagged')+chip('lock','Locked')+'</div></div><div class="pad radar"><div style="display:grid;gap:.1rem;align-content:start;max-height:36rem;overflow:auto">'+rows+'</div><div class="card pad" style="box-shadow:none">'+(sel?chThread(sel):empty('chat','Pick a conversation','Chats update in real time in production.'))+'</div></div></div>';
 }
 function chThread(t){
-  var c=S.chat,lk=!!c.locked[t.id],msgs=t.msgs.map(function(m){
-    var fl=m.from==='support'?[]:chScreen(m.t),rev=!!c.reviewed[m.id],who=m.from==='customer'?t.customer:m.from==='rider'?t.rider:'ChowBuy Support';
-    return '<div style="padding:.6rem .8rem;border-radius:.9rem;border:1px solid '+(fl.length&&!rev?'var(--amber)':'var(--line)')+';background:'+(m.from==='support'?'var(--accent-soft)':fl.length&&!rev?'var(--amber-soft)':'var(--card)')+'"><div class="acts" style="justify-content:space-between;flex-wrap:nowrap"><b style="font-size:.8rem">'+esc(who)+' <span class="muted" style="font-weight:600">· '+(m.from==='support'?'Support':m.from==='customer'?'Customer':'Rider')+'</span></b><small class="muted nw">'+fdt(m.ts)+'</small></div><div style="margin-top:.2rem">'+esc(chRedact(m.t))+'</div>'+(fl.length?'<div class="acts" style="margin-top:.4rem">'+fl.map(function(f){return '<span class="pill '+(rev?'':'warn')+'">'+ic('alert')+esc(f.name)+' · '+(f.action==='block'?'would block':f.action==='mask'?'would mask':'flag only')+'</span>'}).join('')+(rev?'<small class="muted">Reviewed</small>':btn('Mark reviewed','chRev',m.id))+'</div>':'')+'</div>'}).join('');
+  var c=CH(),lk=!!c.locked[t.id],msgs=t.msgs.map(function(m){
+    var fl=chMF(m),rev=!!c.reviewed[m.id],who=m.from==='customer'?t.customer:m.from==='rider'?t.rider:'ChowBuy Support';
+    return '<div style="padding:.6rem .8rem;border-radius:.9rem;border:1px solid '+(fl.length&&!rev?'var(--amber)':'var(--line)')+';background:'+(m.from==='support'?'var(--accent-soft)':fl.length&&!rev?'var(--amber-soft)':'var(--card)')+'"><div class="acts" style="justify-content:space-between;flex-wrap:nowrap"><b style="font-size:.8rem">'+esc(who)+' <span class="muted" style="font-weight:600">· '+(m.from==='support'?'Support':m.from==='customer'?'Customer':'Rider')+'</span></b><small class="muted nw">'+fdt(m.ts)+'</small></div><div style="margin-top:.2rem">'+esc(chRedact(m.t))+'</div>'+(fl.length?'<div class="acts" style="margin-top:.4rem">'+fl.map(function(f){return '<span class="pill '+(rev?'':'warn')+'">'+ic('alert')+esc(f.name)+' · '+(f.action==='live'?'flagged':f.action==='block'?'would block':f.action==='mask'?'would mask':'flag only')+'</span>'}).join('')+(rev?'<small class="muted">Reviewed</small>':btn('Mark reviewed','chRev',m.id))+'</div>':'')+'</div>'}).join('');
   return '<div class="acts" style="justify-content:space-between;flex-wrap:nowrap"><div><b>'+esc(t.orderId)+'</b><small class="muted" style="display:block">'+esc(t.customer)+' with '+esc(t.rider)+' · '+esc(t.city)+'</small></div><div class="acts"><a class="btn sm" href="#/orders">'+ic('list')+'Order</a>'+btn(ic('ban')+(lk?'Unlock chat':'Lock chat'),'chLock',t.id,lk?'':'danger')+'</div></div>'+
    '<div style="display:grid;gap:.5rem;margin:1rem 0;max-height:22rem;overflow:auto">'+msgs+'</div>'+
    (lk?'<p class="sub"><span class="pill bad">'+ic('ban')+'Locked</span> Customer and rider can no longer send messages. Only ChowBuy Support can post.</p>':'')+
@@ -1314,7 +1336,7 @@ function chThread(t){
    '<div class="acts" style="margin-top:.6rem">'+btn(ic('check')+'Send to both','chSay',t.id,'pri')+'<span class="muted" style="font-size:.8rem">or send an emergency message:</span>'+EMERG.map(function(e){return btn(e[1],'chEmerg',t.id+'|'+e[0])}).join('')+'</div>';
 }
 function chFilters(){
-  var c=S.chat,res=U.chTest?chScreen(U.chTest):[];
+  var c=CH(),res=U.chTest?chScreen(U.chTest):[];
   var cards=c.filters.map(function(f){
     var words=f.builtin?'<p class="sub">Detects Nigerian mobile numbers written in any common format, including spaces and dashes.</p>':'<div class="chips" style="margin:.7rem 0">'+(f.words.map(function(w,i){return '<span class="pill" style="gap:.35rem">'+esc(w)+'<button type="button" data-act="chDel" data-id="'+f.id+'|'+i+'" aria-label="Remove '+esc(w)+'" style="display:inline-grid;place-items:center">'+ic('x')+'</button></span>'}).join('')||'<small class="muted">No keywords yet.</small>')+'</div><form data-form="chword" data-id="'+f.id+'" class="acts" style="flex-wrap:nowrap"><input name="w" aria-label="Add keyword to '+esc(f.name)+'" placeholder="Add a word or phrase" maxlength="40" autocomplete="off"><button type="submit" class="btn sm">'+ic('plus')+'Add</button></form>';
     return '<div class="card pad"><div class="acts" style="justify-content:space-between;flex-wrap:nowrap"><div><h3>'+esc(f.name)+'</h3><p class="sub">'+(f.builtin?'Built-in pattern':f.words.length+' keywords')+'</p></div>'+sw(f.on,'chFon',f.id,'Enable '+f.name)+'</div>'+
@@ -1322,21 +1344,24 @@ function chFilters(){
   return '<div class="card pad" style="background:var(--accent-soft);border-color:transparent;display:flex;gap:.8rem">'+ic('shield')+'<div><b>The server enforces these rules.</b><div class="muted" style="font-size:.88rem">The customer app also pre-checks phone numbers and off-platform payment phrases for faster feedback, but only the server decides what is delivered. Rules apply to the customer app, the rider app and in-app chat history.</div></div></div>'+
    '<div class="grid g2" style="align-items:start">'+cards+'</div>'+
    '<div class="card pad"><h3>Test a message</h3><p class="sub">Type something a customer or rider might send and see what the current rules would do.</p><div class="f" style="margin-top:.8rem"><label for="chT">Sample message</label><input id="chT" data-fid="chT" data-in="chat:test" value="'+esc(U.chTest)+'" placeholder="e.g. just send money to my account" autocomplete="off"></div><div class="acts" style="margin-top:.8rem">'+(!U.chTest?'<span class="muted">Waiting for a message…</span>':res.length?res.map(function(r){return '<span class="pill warn">'+ic('alert')+esc(r.name)+' · '+(r.action==='block'?'blocked':r.action==='mask'?'masked and flagged':'flagged')+'</span>'}).join(''):'<span class="pill ok">'+ic('check')+'Would be delivered</span>')+'</div></div>'+
-   '<div class="card pad"><h3>Chat history</h3><div class="f" style="margin-top:.6rem;max-width:22rem"><label for="chRet">Keep chat logs for</label><select id="chRet" data-ch="chat:ret"><option value="30"'+(c.retention===30?' selected':'')+'>30 days</option><option value="90"'+(c.retention===90?' selected':'')+'>90 days</option><option value="180"'+(c.retention===180?' selected':'')+'>180 days</option></select><small>Logs are kept for disputes and safety reviews, then deleted.</small></div></div>';
+   (CH().retention==null?'':'<div class="card pad"><h3>Chat history</h3><div class="f" style="margin-top:.6rem;max-width:22rem"><label for="chRet">Keep chat logs for</label><select id="chRet" data-ch="chat:ret"><option value="30"'+(c.retention===30?' selected':'')+'>30 days</option><option value="90"'+(c.retention===90?' selected':'')+'>90 days</option><option value="180"'+(c.retention===180?' selected':'')+'>180 days</option></select><small>Logs are kept for disputes and safety reviews, then deleted.</small></div></div>');
 }
+function chBcN(city){var k=city==='all'?'':city;
+  if(L.bcnK!==k){L.bcnK=k;L.bcn=null;beReq('/rest/v1/rpc/admin_broadcast_count','POST',{p_area:k}).then(function(n){if(L.bcnK===k){L.bcn=Number(n)||0;refresh()}},function(){})}
+  return L.bcn==null?0:L.bcn}
 function chBroadcast(){
-  var b=U.chBc,m=EMERG.filter(function(e){return e[0]===b.id})[0],cities=['all'].concat(Object.keys(CITYN)),
-   n=S.chat.threads.filter(function(t){return b.city==='all'||t.city===b.city}).length;
+  var b=U.chBc,m=EMERG.filter(function(e){return e[0]===b.id})[0],cities=['all'].concat(chLiveOn()?CH().threads.map(function(t){return t.city}).filter(function(x,i,a){return x&&a.indexOf(x)===i}):Object.keys(CITYN)),
+   n=chLiveOn()?chBcN(b.city):CH().threads.filter(function(t){return b.city==='all'||t.city===b.city}).length;
   return '<div class="grid g2" style="align-items:start"><div class="card pad"><h3>Send an emergency broadcast</h3><p class="sub">Posts a message from ChowBuy Support into every active chat in the area, and sends a push notification to the customer and rider.</p>'+
    '<div class="f" style="margin-top:1rem"><label for="bcM">Message</label><select id="bcM" data-ch="chat:bcm">'+EMERG.map(function(e){return '<option value="'+e[0]+'"'+(b.id===e[0]?' selected':'')+'>'+esc(e[1])+'</option>'}).join('')+'</select></div>'+
-   '<div class="f" style="margin-top:.8rem"><label for="bcC">Audience</label><select id="bcC" data-ch="chat:bcc">'+cities.map(function(c){return '<option value="'+esc(c)+'"'+(b.city===c?' selected':'')+'>'+(c==='all'?'All cities':esc(c))+'</option>'}).join('')+'</select><small>'+n+' active chat'+(n===1?'':'s')+' will receive it.</small></div>'+
+   '<div class="f" style="margin-top:.8rem"><label for="bcC">Audience</label><select id="bcC" data-ch="chat:bcc">'+cities.map(function(c){return '<option value="'+esc(c)+'"'+(b.city===c?' selected':'')+'>'+(c==='all'?'All cities':esc(c))+'</option>'}).join('')+'</select><small>'+(chLiveOn()&&L.bcn==null?'Counting active orders…':n+' active chat'+(n===1?'':'s')+' will receive it.')+'</small></div>'+
    '<div style="margin-top:1rem;padding:.9rem;border-radius:.9rem;background:var(--accent-soft)"><small class="muted">Preview</small><div style="margin-top:.3rem">'+esc(m[2])+'</div></div>'+
    '<div class="acts" style="margin-top:1rem">'+btn(ic('alert')+'Send broadcast','chBc',null,'danger',n?'':' disabled')+'</div></div>'+
-   '<div class="card pad"><h3>Recent broadcasts</h3>'+(S.chat.broadcasts.length?'<div class="feed" style="margin-top:.6rem">'+S.chat.broadcasts.slice(0,8).map(function(x){return '<div class="it"><span class="ico w">'+ic('alert')+'</span><div><div>'+esc(x.title)+' · '+esc(x.city==='all'?'All cities':x.city)+'</div><small>'+x.count+' chats · '+fdt(x.ts)+'</small></div></div>'}).join('')+'</div>':'<p class="sub" style="margin-top:.6rem">Nothing sent yet.</p>')+'</div></div>';
+   '<div class="card pad"><h3>Recent broadcasts</h3>'+(CH().broadcasts.length?'<div class="feed" style="margin-top:.6rem">'+CH().broadcasts.slice(0,8).map(function(x){return '<div class="it"><span class="ico w">'+ic('alert')+'</span><div><div>'+esc(x.title)+' · '+esc(x.city==='all'?'All cities':x.city)+'</div><small>'+x.count+' chats · '+fdt(x.ts)+'</small></div></div>'}).join('')+'</div>':'<p class="sub" style="margin-top:.6rem">Nothing sent yet.</p>')+'</div></div>';
 }
 function chAuditV(){
-  var a=S.chat.audit;
-  return '<div class="card pad"><h3>Supervisor activity</h3><p class="sub">Every intervention, lock, review and broadcast is recorded here.</p>'+(a.length?'<div class="feed" style="margin-top:.6rem">'+a.map(function(x){return '<div class="it"><span class="ico">'+ic('shield')+'</span><div><div>'+esc(x.t)+'</div><small>'+fdt(x.ts)+' · '+esc(S.profile.name)+'</small></div></div>'}).join('')+'</div>':'<p class="sub" style="margin-top:.6rem">No supervisor actions yet.</p>')+'</div>';
+  var a=CH().audit;
+  return '<div class="card pad"><h3>Supervisor activity</h3><p class="sub">Every intervention, lock, review and broadcast is recorded here.</p>'+(a.length?'<div class="feed" style="margin-top:.6rem">'+a.map(function(x){return '<div class="it"><span class="ico">'+ic('shield')+'</span><div><div>'+esc(x.t)+'</div><small>'+fdt(x.ts)+' · '+esc(x.who||S.profile.name)+'</small></div></div>'}).join('')+'</div>':'<p class="sub" style="margin-top:.6rem">No supervisor actions yet.</p>')+'</div>';
 }
 
 /* ---- realtime & push ---- */
@@ -1398,24 +1423,29 @@ Object.assign(A,{
  /* chat supervision */
  chF:function(el){U.chF=el.getAttribute('data-v');U.chSel=null;refresh()},
  chSel:function(el){U.chSel=el.getAttribute('data-id');U.chmsg='';refresh()},
- chRev:function(el){var id=el.getAttribute('data-id');upd(function(){S.chat.reviewed[id]=true;chAudit('Marked a flagged message as reviewed')});toast('Marked as reviewed.')},
- chLock:function(el){var t=find(S.chat.threads,el.getAttribute('data-id')),lk=!!S.chat.locked[t.id];
-   var go=function(){upd(function(){if(lk)delete S.chat.locked[t.id];else S.chat.locked[t.id]=true;chAudit((lk?'Unlocked chat ':'Locked chat ')+t.orderId)});toast(lk?'Chat unlocked.':'Chat locked. Only Support can post.',lk?'':'warn')};
+ chRefresh:function(){chReload().then(function(){toast('Chats refreshed.')},function(e){toast(e.message,'err')})},
+ chRev:function(el){var id=el.getAttribute('data-id');if(chLiveOn()){chCall('admin_chat_review',{p_message:id},'Marked as reviewed.');return}upd(function(){S.chat.reviewed[id]=true;chAudit('Marked a flagged message as reviewed')});toast('Marked as reviewed.')},
+ chLock:function(el){var t=find(CH().threads,el.getAttribute('data-id')),lk=!!CH().locked[t.id];
+   var go=function(){if(chLiveOn()){chCall('admin_chat_lock',{p_order:t.orderId,p_lock:!lk},lk?'Chat unlocked.':'Chat locked. Only Support can post.',!lk);return}upd(function(){if(lk)delete S.chat.locked[t.id];else S.chat.locked[t.id]=true;chAudit((lk?'Unlocked chat ':'Locked chat ')+t.orderId)});toast(lk?'Chat unlocked.':'Chat locked. Only Support can post.',lk?'':'warn')};
    if(lk)go();else confirmM('Lock chat '+esc(t.orderId)+'?','The customer and rider will not be able to message each other. You can unlock it at any time.','Lock chat',go,true)},
- chSay:function(el){var t=find(S.chat.threads,el.getAttribute('data-id')),v=String(U.chmsg||'').trim();
+ chSay:function(el){var t=find(CH().threads,el.getAttribute('data-id')),v=String(U.chmsg||'').trim();
    if(v.length<2){toast('Type a message first.','err');return}
+   if(chLiveOn()){U.chmsg='';chCall('admin_chat_say',{p_order:t.orderId,p_text:v},'Sent to the customer and rider.');return}
    upd(function(){t.msgs.push({id:'s'+Date.now(),from:'support',t:v,ts:Date.now()});U.chmsg='';chAudit('Support message sent in '+t.orderId)});toast('Sent to the customer and rider.')},
- chEmerg:function(el){var p=el.getAttribute('data-id').split('|'),t=find(S.chat.threads,p[0]),e=EMERG.filter(function(x){return x[0]===p[1]})[0];
+ chEmerg:function(el){var p=el.getAttribute('data-id').split('|'),t=find(CH().threads,p[0]),e=EMERG.filter(function(x){return x[0]===p[1]})[0];
+   if(chLiveOn()){chCall('admin_chat_say',{p_order:t.orderId,p_text:e[2]},'Emergency message sent.',true);return}
    upd(function(){t.msgs.push({id:'s'+Date.now(),from:'support',t:e[2],ts:Date.now()});chAudit('Emergency message "'+e[1]+'" sent in '+t.orderId)});toast('Emergency message sent.','warn')},
- chFon:function(el){var f=find(S.chat.filters,el.getAttribute('data-id'));upd(function(){f.on=!f.on;chAudit((f.on?'Enabled':'Disabled')+' keyword filter: '+f.name)})},
- chDel:function(el){var p=el.getAttribute('data-id').split('|'),f=find(S.chat.filters,p[0]),w=f.words[Number(p[1])];upd(function(){f.words.splice(Number(p[1]),1);chAudit('Removed keyword "'+w+'" from '+f.name)});toast('Keyword removed.')},
- chBc:function(){var b=U.chBc,m=EMERG.filter(function(e){return e[0]===b.id})[0],ts=S.chat.threads.filter(function(t){return b.city==='all'||t.city===b.city});
+ chFon:function(el){if(chLiveOn()){var lf=find(L.chf,el.getAttribute('data-id'));chSave(lf,{on:!lf.on});return}var f=find(S.chat.filters,el.getAttribute('data-id'));upd(function(){f.on=!f.on;chAudit((f.on?'Enabled':'Disabled')+' keyword filter: '+f.name)})},
+ chDel:function(el){var p=el.getAttribute('data-id').split('|');if(chLiveOn()){var lf=find(L.chf,p[0]),nw=lf.words.slice();nw.splice(Number(p[1]),1);chSave(lf,{words:nw});return}var f=find(S.chat.filters,p[0]),w=f.words[Number(p[1])];upd(function(){f.words.splice(Number(p[1]),1);chAudit('Removed keyword "'+w+'" from '+f.name)});toast('Keyword removed.')},
+ chBc:function(){var b=U.chBc,m=EMERG.filter(function(e){return e[0]===b.id})[0],ts=CH().threads.filter(function(t){return b.city==='all'||t.city===b.city});
+   if(chLiveOn()){var ln=chBcN(b.city);confirmM('Send "'+esc(m[1])+'" to '+ln+' active chat'+(ln===1?'':'s')+'?','This posts a message from ChowBuy Support into every active order chat in the area.','Send broadcast',function(){beReq('/rest/v1/rpc/admin_broadcast','POST',{p_area:b.city==='all'?'':b.city,p_text:m[2]}).then(function(n){return chReload().then(function(){toast('Broadcast sent to '+n+' chats.','warn')})},function(e){toast(e.message,'err')})},true);return}
    confirmM('Send "'+esc(m[1])+'" to '+ts.length+' chat'+(ts.length===1?'':'s')+'?','This posts a message from ChowBuy Support and sends a push notification to every customer and rider involved.','Send broadcast',function(){
      upd(function(){var now=Date.now();ts.forEach(function(t,i){t.msgs.push({id:'b'+now+i,from:'support',t:m[2],ts:now})});S.chat.broadcasts.unshift({title:m[1],city:b.city,count:ts.length,ts:now});chAudit('Emergency broadcast "'+m[1]+'" to '+(b.city==='all'?'all cities':b.city)+' ('+ts.length+' chats)');log('Emergency broadcast: '+m[1],'warn')});toast('Broadcast sent to '+ts.length+' chats.','warn')},true)}
 });
 Object.assign(FORMS,{
- chword:function(f){var fl=find(S.chat.filters,f.getAttribute('data-id')),w=String(f.elements.w.value||'').trim().toLowerCase();
+ chword:function(f){var fl=find(chFl(),f.getAttribute('data-id')),w=String(f.elements.w.value||'').trim().toLowerCase();
    if(w.length<2){toast('Enter at least 2 characters.','err');return}
+   if(chLiveOn()){if(fl.words.indexOf(w)>-1){toast('That keyword is already in the list.','warn');return}chSave(fl,{words:fl.words.concat([w])});return}
    if(fl.words.indexOf(w)>-1){toast('That keyword is already in the list.','warn');return}
    upd(function(){fl.words.push(w);chAudit('Added keyword "'+w+'" to '+fl.name)});toast('Keyword added.')}
 });
@@ -1426,7 +1456,7 @@ Object.assign(INP,{
 Object.assign(CHG,{
  rt:function(k,v){setPath(re(),k,v);refresh()},
  chat:function(k,v){
-   if(k.indexOf('act.')===0){var f=find(S.chat.filters,k.slice(4));upd(function(){f.action=v;chAudit('Changed action for '+f.name+' to '+v)});toast('Filter action updated.')}
+   if(k.indexOf('act.')===0){if(chLiveOn()){chSave(find(L.chf,k.slice(4)),{action:v});return}var f=find(S.chat.filters,k.slice(4));upd(function(){f.action=v;chAudit('Changed action for '+f.name+' to '+v)});toast('Filter action updated.')}
    else if(k==='ret'){upd(function(){S.chat.retention=Number(v);chAudit('Chat retention set to '+v+' days')});toast('Retention updated.')}
    else if(k==='bcm'){U.chBc.id=v;refresh()}else if(k==='bcc'){U.chBc.city=v;refresh()}}
 });
@@ -1501,7 +1531,7 @@ function beConnect(url,anon,email,pw){
     U.hist=r[1];save();
   });
 }
-function beDisconnect(){BE.tok='';beSaveLocal();U.hist=null;L.dash=L.orders=L.merchants=L.me=L.team=L.sessions=L.riders=L.fin=L.wt=L.cat=null}
+function beDisconnect(){BE.tok='';beSaveLocal();U.hist=null;L.dash=L.orders=L.merchants=L.me=L.team=L.sessions=L.riders=L.fin=L.wt=L.cat=L.chat=L.chf=null}
 
 /* ---- live numbers: once connected, the dashboard, orders and merchants show the real backend instead of sample data ---- */
 var L={dash:null,orders:null,merchants:null,me:null,team:null,sessions:null,riders:null,fin:null,wt:null,cat:null,err:'',busy:false};
@@ -1510,7 +1540,7 @@ function liveLoad(){
   if(!beOn())return Promise.resolve();
   L.busy=true;L.err='';
   return Promise.all([beReq('/rest/v1/rpc/admin_dashboard','POST',{p_days:rangeDays()}),beReq('/rest/v1/rpc/admin_orders','POST',{p_status:'all',p_search:'',p_limit:200,p_offset:0}),beReq('/rest/v1/rpc/admin_merchants','POST',{})])
-   .then(function(r){L.dash=r[0];L.orders=r[1];L.merchants=r[2];return Promise.all([beReq('/rest/v1/rpc/admin_me','POST',{}),beReq('/rest/v1/rpc/admin_team','POST',{}),beReq('/rest/v1/rpc/admin_my_sessions','POST',{}),beReq('/rest/v1/rpc/admin_riders','POST',{}),beReq('/rest/v1/rpc/admin_finance','POST',{p_days:rangeDays()}),beReq('/rest/v1/rpc/admin_wallet_transfers','POST',{p_search:'',p_limit:200,p_offset:0}),beReq('/rest/v1/rpc/admin_catalog','POST',{})].map(function(q){return q.catch(function(){return null})})).then(function(x){L.me=x[0];L.team=x[1];L.sessions=x[2];L.riders=x[3];L.fin=x[4];L.wt=x[5];L.cat=x[6];if(L.me&&!U.pf){S.profile.name=L.me.name||S.profile.name;S.profile.email=L.me.email||S.profile.email;S.profile.phone=L.me.phone||''}})},function(e){L.err=/JWT|expired|401/i.test(e.message)?'Your session ended. Sign in again.':e.message})
+   .then(function(r){L.dash=r[0];L.orders=r[1];L.merchants=r[2];return Promise.all([beReq('/rest/v1/rpc/admin_me','POST',{}),beReq('/rest/v1/rpc/admin_team','POST',{}),beReq('/rest/v1/rpc/admin_my_sessions','POST',{}),beReq('/rest/v1/rpc/admin_riders','POST',{}),beReq('/rest/v1/rpc/admin_finance','POST',{p_days:rangeDays()}),beReq('/rest/v1/rpc/admin_wallet_transfers','POST',{p_search:'',p_limit:200,p_offset:0}),beReq('/rest/v1/rpc/admin_catalog','POST',{}),beReq('/rest/v1/rpc/admin_chat_threads','POST',{}),beReq('/rest/v1/chat_filters?select=*&order=id','GET'),beReq('/rest/v1/platform_settings?key=eq.brand&select=value','GET')].map(function(q){return q.catch(function(){return null})})).then(function(x){L.me=x[0];L.team=x[1];L.sessions=x[2];L.riders=x[3];L.fin=x[4];L.wt=x[5];L.cat=x[6];if(x[7]&&Array.isArray(x[7].threads)&&Array.isArray(x[8]))chSet(x[7],x[8]);if(x[9]&&x[9][0]&&x[9][0].value&&x[9][0].value.MAIN){S.brands2.published=x[9][0].value;if(S.brands2.draft&&JSON.stringify(S.brands2.draft)===JSON.stringify(S.brands2.published))S.brands2.draft=null}if(L.me&&!U.pf){S.profile.name=L.me.name||S.profile.name;S.profile.email=L.me.email||S.profile.email;S.profile.phone=L.me.phone||''}})},function(e){L.err=/JWT|expired|401/i.test(e.message)?'Your session ended. Sign in again.':e.message})
    .then(function(){L.busy=false;refresh()});
 }
 function liveOn(){return beOn()&&!!L.orders}
@@ -1524,7 +1554,7 @@ function liveBar(){
   if(L.err)return '<div class="card pad" style="border-color:var(--red)"><b>Could not load your live data.</b> <span class="muted">'+esc(L.err)+'</span> <span class="acts" style="display:inline-flex;margin-left:.6rem">'+btn('Try again','liveReload')+'</span></div>';
   return '';
 }
-var SAMPLE_ROUTES=['chats','locations','group-orders','smart-cart'];
+var SAMPLE_ROUTES=['locations','group-orders','smart-cart'];
 function sampleBar(){return '<div class="card pad" style="border-color:var(--warn,#F59E0B);margin-bottom:1rem"><b>Sample data.</b> <span class="muted">This page is not connected to your backend yet, so the names and numbers on it are examples, not your real business.'+(cur()&&cur().p==='riders'?' Approve real riders under KYC review.':'')+'</span></div>'}
 function liveBars(vals,labels,fmt){
   var W=600,H=190,pl=8,pb=22,pt=10,max=Math.max.apply(0,vals.concat([1])),bw=(W-pl*2)/vals.length;

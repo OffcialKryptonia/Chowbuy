@@ -22,6 +22,7 @@ await db.exec(fs.readFileSync(root + 'migrations/20261031000001_admin_profile_te
 await db.exec(fs.readFileSync(root + 'migrations/20261031000002_rider_positions.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261031000003_admin_finance.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261101000001_admin_catalog.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261101000002_admin_chats_brand.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -445,6 +446,40 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
     await q(`select admin_brand_set_featured($1, true)`, [b.id]);
     ok('brand can be featured', (await q(`select admin_catalog() c`))[0].c.brands[0].featured === true);
     ok('changes are written to the audit log', (await q(`select count(*)::int n from audit_log where action like 'catalog.%'`))[0].n >= 4);
+  });
+}
+// ---- Admin chat supervision
+{
+  await as(A, async () => {
+    for (const sql of [`select admin_chat_threads()`, `select admin_chat_review(gen_random_uuid())`, `select admin_chat_filter_save('pay', true, 'block', '{x}')`, `select admin_broadcast_count('')`])
+      await throws('customers cannot use ' + sql.slice(7, 30), () => db.query(sql), 'Admins only');
+  });
+  const oid = (await q(`select id from orders where rider_id is not null order by created_at limit 1`))[0].id;
+  await db.exec(`insert into chat_messages (order_id, sender_role, body, flags) values ('${oid}', 'rider', 'Send money to my account', '{"Off-platform payment"}')`);
+  await db.exec(`insert into chat_messages (order_id, sender_role, body, flags, created_at) values ('${oid}', 'customer', 'Okay, heading out', '{}', now() + interval '1 second')`);
+  await as(ADM, async () => {
+    const t = (await q(`select admin_chat_threads() t`))[0].t;
+    const th = t.threads.find(x => x.orderId === oid);
+    const mine = th ? th.msgs.slice(-2) : [];
+    ok('thread has the new messages in order with server flags', th && mine.length === 2 && mine[0].from === 'rider' && mine[0].flags[0] === 'Off-platform payment' && mine[1].flags.length === 0, JSON.stringify(mine));
+    ok('thread names customer and rider', th.customer && th.rider && th.rider !== 'No rider yet');
+    await q(`select admin_chat_review($1::uuid)`, [mine[0].id]);
+    ok('a message can be marked reviewed', (await q(`select admin_chat_threads() t`))[0].t.threads.find(x => x.orderId === oid).msgs.find(m => m.id === mine[0].id).reviewed === true);
+    await throws('unknown message errors', () => db.query(`select admin_chat_review(gen_random_uuid())`), 'not found');
+    await q(`select admin_chat_lock('${oid}', true)`);
+    ok('locked threads are marked locked', (await q(`select admin_chat_threads() t`))[0].t.threads.find(x => x.orderId === oid).locked === true);
+    await q(`select admin_chat_lock('${oid}', false)`);
+    await q(`select admin_chat_say('${oid}', 'Support here')`);
+    ok('audit lists chat actions with who did them', (await q(`select admin_chat_threads() t`))[0].t.audit.length >= 3 && (await q(`select admin_chat_threads() t`))[0].t.audit.every(a => a.action.startsWith('chat.') && a.who));
+    await q(`select admin_chat_filter_save('pay', true, 'flag', '{"  Opay ","opay","send money",""}')`);
+    const f = (await q(`select action, words, enabled from chat_filters where id = 'pay'`))[0];
+    ok('filter save trims, lowercases and dedupes keywords', f.action === 'flag' && f.enabled && JSON.stringify(f.words.slice().sort()) === JSON.stringify(['opay', 'send money']), JSON.stringify(f));
+    await throws('bad action is rejected', () => db.query(`select admin_chat_filter_save('pay', true, 'ban', '{}')`), 'Choose block');
+    await throws('unknown filter is rejected', () => db.query(`select admin_chat_filter_save('nope', true, 'flag', '{}')`), 'not found');
+    const bi = (await q(`select words from chat_filters where builtin limit 1`))[0];
+    if (bi) { const id = (await q(`select id from chat_filters where builtin limit 1`))[0].id; await q(`select admin_chat_filter_save($1, false, 'mask', '{"x"}')`, [id]); ok('built-in filters keep their own pattern', JSON.stringify((await q(`select words from chat_filters where id = $1`, [id]))[0].words) === JSON.stringify(bi.words)); }
+    const n = (await q(`select admin_broadcast_count('') n`))[0].n;
+    ok('broadcast count equals active paid or cash orders', n === (await q(`select count(*)::int c from orders where stage not in ('delivered','cancelled') and (paid or pay = 'cod')`))[0].c);
   });
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
