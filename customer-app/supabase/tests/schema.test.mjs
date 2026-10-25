@@ -25,6 +25,7 @@ await db.exec(fs.readFileSync(root + 'migrations/20261101000001_admin_catalog.sq
 await db.exec(fs.readFileSync(root + 'migrations/20261101000002_admin_chats_brand.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261101000003_admin_locations.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261101000004_group_orders.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261101000005_smart_cart_events.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -584,6 +585,28 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
     ok('admin can cancel an open group', b2.status === 'cancelled' && b2.collected === 0);
     await throws('unknown group errors', () => db.query(`select admin_group_cancel('GO-9999')`), 'not found');
     ok('admin cancel is audited', (await q(`select count(*)::int n from audit_log where action = 'group.cancel'`))[0].n === 1);
+  });
+}
+// ---- Smart Cart events
+{
+  await as(null, async () => { await throws('anonymous cannot track', () => db.query(`select smart_cart_track('opened')`), 'permission denied'); });
+  await as(A, async () => {
+    await throws('customers cannot read events', () => db.query(`select * from smart_cart_events`), 'permission denied');
+    await throws('customers cannot read the summary', () => db.query(`select admin_smart_cart(30)`), 'Admins only');
+    await throws('unknown event kind is rejected', () => db.query(`select smart_cart_track('hacked')`), 'Unknown event');
+    await q(`select smart_cart_track('opened')`); await q(`select smart_cart_track('optimized')`);
+    await q(`select smart_cart_track('accepted', 'cheaper')`); await q(`select smart_cart_track('accepted', 'cheaper')`); await q(`select smart_cart_track('dismissed', 'cheaper')`);
+    await q(`select smart_cart_track('accepted', $1)`, ['x'.repeat(60)]);
+    for (let i = 0; i < 70; i++) await q(`select smart_cart_track('opened')`);
+  });
+  await as(ADM, async () => {
+    const m = (await q(`select admin_smart_cart(30) m`))[0].m;
+    ok('counts events by kind', m.optimized === 1 && m.accepted === 3 && m.dismissed === 1, JSON.stringify(m));
+    ok('a burst is rate limited to 60 a minute', m.opened + m.optimized + m.accepted + m.dismissed === 60, JSON.stringify(m));
+    const c = m.byRec.find(r => r.rec === 'cheaper');
+    ok('breaks accepted and dismissed down by suggestion', c && c.accepted === 2 && c.dismissed === 1, JSON.stringify(m.byRec));
+    ok('long suggestion names are cut to 30 characters', m.byRec.some(r => r.rec.length === 30));
+    ok('days is clamped', (await q(`select admin_smart_cart(100000) m`))[0].m.days === 365 && (await q(`select admin_smart_cart(0) m`))[0].m.days === 1);
   });
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
