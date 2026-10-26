@@ -97,7 +97,7 @@ export const useAuth = create<AuthState>((set, get) => ({
     if (!p) throw new BackendError('Enter a valid Nigerian mobile number.');
     if (name.trim().length < 2) throw new BackendError('Enter your name.');
     if (password.length < 8) throw new BackendError('Use at least 8 characters for your password.');
-    const emailRedirectTo = Linking.createURL('auth-callback');
+    const emailRedirectTo = AUTH_WEB_URL;
     const { data, error } = await supabase.auth.signUp({
       email: email.trim().toLowerCase(),
       password,
@@ -137,7 +137,7 @@ export const useAuth = create<AuthState>((set, get) => ({
     }
   },
   reset: async (email) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: Linking.createURL('auth-callback') });
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: AUTH_WEB_URL });
     if (error) throw new BackendError(friendly(error.message));
   },
   signOut: async () => { await supabase.auth.signOut(); set({ session: null, role: null }); },

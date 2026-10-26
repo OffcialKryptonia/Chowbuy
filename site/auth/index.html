@@ -12,6 +12,7 @@
 :root{--bg:#fff;--fg:#1a1a1a;--mute:#666;--brand:#FF5A1F;--card:#fff7f3;--line:#f0dcd2}
 @media (prefers-color-scheme:dark){:root{--bg:#141414;--fg:#f3f3f3;--mute:#a8a8a8;--card:#1f1b19;--line:#33291f}}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;min-height:100vh;display:grid;place-items:center;padding:16px;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 main{width:100%;max-width:420px;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:32px 24px}
 img{width:64px;height:64px;border-radius:14px}
@@ -26,23 +27,65 @@ a.alt{display:block;color:var(--brand);text-decoration:none;font-weight:600;padd
   <img src="/assets/logo.png" alt="ChowBuy" width="64" height="64">
   <h1 id="t">Email confirmed</h1>
   <p id="m">You are all set. Open the ChowBuy app and sign in to start ordering.</p>
+  <form id="rf" hidden novalidate style="text-align:left;margin:0 0 6px">
+    <label for="pw1" style="display:block;font-weight:600;font-size:14px;margin-bottom:6px">New password</label>
+    <input id="pw1" type="password" autocomplete="new-password" minlength="8" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-size:16px;margin-bottom:12px">
+    <label for="pw2" style="display:block;font-weight:600;font-size:14px;margin-bottom:6px">Confirm new password</label>
+    <input id="pw2" type="password" autocomplete="new-password" minlength="8" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-size:16px;margin-bottom:6px">
+    <p id="rerr" role="alert" style="color:#d33;font-size:13px;margin:6px 0 0;min-height:1.2em"></p>
+    <button class="btn" id="rsave" type="submit" style="width:100%;border:0;cursor:pointer;font-size:16px">Save new password</button>
+  </form>
   <a class="btn" id="open" href="chowbuy://auth-callback">Open the ChowBuy app</a>
   <a class="alt" href="/">Go to chowbuy.ng</a>
 </main>
 <script>
 (function () {
-  // Supabase puts a failure in the URL hash or query (for example an expired link). Show it plainly instead of a blank page.
+  // Supabase email links land here with the result in the URL hash (or query). Read it, then clear it from the address bar.
   var raw = (location.hash || '').replace(/^#/, '') || (location.search || '').replace(/^\?/, '');
   var q = new URLSearchParams(raw);
   var err = q.get('error_description') || q.get('error');
+  var type = q.get('type'), token = q.get('access_token');
+  var T = document.getElementById('t'), M = document.getElementById('m'), open = document.getElementById('open'), rf = document.getElementById('rf');
+  try { history.replaceState(null, '', location.pathname); } catch (e) {}
+  var SB = 'https://nhaxcyfkbrbwlqbpizjo.supabase.co', KEY = 'sb_publishable_fEoqE8u49jwFe1v36CacDg_seaMgyUS';   // public client key, safe in a web page
+
   if (err) {
-    document.getElementById('t').textContent = 'This link did not work';
-    document.getElementById('m').textContent = /expired|invalid/i.test(err)
-      ? 'The confirmation link has expired or was already used. If you already confirmed, just sign in. Otherwise sign up again in the app to get a new link.'
-      : 'We could not confirm your email. Please try again from the app.';
-  } else if (q.get('access_token') || q.get('code')) {
-    // Pass the session on to the app when the phone has it installed.
-    document.getElementById('open').href = 'chowbuy://auth-callback' + (location.hash || (location.search ? location.search : ''));
+    T.textContent = 'This link did not work';
+    M.textContent = /expired|invalid/i.test(err)
+      ? 'The link has expired or was already used. If you already confirmed, just sign in. For a password reset, request a new link from the app.'
+      : 'We could not complete that. Please try again from the app.';
+    return;
+  }
+  if (type === 'recovery' && token) {
+    // Password reset works on any phone or computer, no app needed.
+    T.textContent = 'Choose a new password';
+    M.textContent = 'Enter a new password for your ChowBuy account (at least 8 characters).';
+    rf.hidden = false; open.hidden = true;
+    rf.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var a = document.getElementById('pw1').value, b = document.getElementById('pw2').value, er = document.getElementById('rerr'), btn = document.getElementById('rsave');
+      er.textContent = '';
+      if (a.length < 8) { er.textContent = 'Use at least 8 characters.'; return; }
+      if (a !== b) { er.textContent = 'The two passwords do not match.'; return; }
+      btn.disabled = true; btn.textContent = 'Saving...';
+      fetch(SB + '/auth/v1/user', { method: 'PUT', headers: { 'Content-Type': 'application/json', apikey: KEY, Authorization: 'Bearer ' + token }, body: JSON.stringify({ password: a }) })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (r) {
+          if (!r.ok) {
+            var msg = String((r.j && (r.j.msg || r.j.message || r.j.error_description)) || '');
+            er.textContent = /same|different/i.test(msg) ? 'Choose a password you have not used before.' : /weak|least|short/i.test(msg) ? 'Choose a stronger password (8+ characters).' : /expired|invalid|jwt/i.test(msg) ? 'This link has expired. Request a new one from the app.' : 'Could not save the password. Please try again.';
+            btn.disabled = false; btn.textContent = 'Save new password'; return;
+          }
+          rf.hidden = true; open.hidden = false;
+          T.textContent = 'Password changed';
+          M.textContent = 'Your password is updated. Open the ChowBuy app and sign in with your new password.';
+        }, function () { er.textContent = 'No connection. Check your internet and try again.'; btn.disabled = false; btn.textContent = 'Save new password'; });
+    });
+    return;
+  }
+  if (token) {
+    // Email confirmation: hand the session to the app when it is installed.
+    open.href = 'chowbuy://auth-callback#' + raw;
   }
 })();
 </script>
