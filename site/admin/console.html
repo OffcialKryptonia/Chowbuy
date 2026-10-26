@@ -1,0 +1,36 @@
+<div class="shell">
+  <aside class="side" id="side" aria-label="Admin navigation">
+    <div class="side-top">
+      <a class="brand" href="#/"><img src="../assets/logo.png" alt="" width="36" height="36"><span>ChowBuy</span><span class="chip">Admin</span></a>
+      <button type="button" class="ib burger" id="closeSide" aria-label="Close menu"></button>
+    </div>
+    <div class="ctx"><div class="av" id="ctxIcon" style="width:2.4rem;height:2.4rem" aria-hidden="true"></div><div><b style="font-size:.84rem;line-height:1.3">ChowBuy Platform — Admin console</b></div></div>
+    <nav class="nav" id="nav" aria-label="Sections"></nav>
+    <div class="side-foot">
+      <a href="../merchant/"><span>Merchant portal</span><span id="extIcon" aria-hidden="true"></span></a>
+      <div class="modebox" id="modeBox">
+        <div class="muted" style="font-size:.74rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:.35rem">Data mode</div>
+        <div class="tabs sm" role="group" aria-label="Data mode"><button type="button" id="modeLive" data-act="modeLive">Live</button><button type="button" id="modeDemo" data-act="modeDemo">Demo</button></div>
+        <small class="muted" id="modeNote" style="display:block;margin-top:.4rem"></small>
+      </div>
+      <button type="button" class="btn sm" id="resetBtn" data-act="resetAll" style="margin-top:.7rem;width:100%">Reset demo data</button>
+      <button type="button" class="btn sm" data-act="signOut" style="margin-top:.5rem;width:100%">Sign out</button>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+  <div class="main">
+    <header class="top">
+      <button type="button" class="ib burger" id="burger" aria-label="Open menu" aria-controls="side" aria-expanded="false"></button>
+      <div class="ttl"><b>Platform operations <span class="muted" style="font-weight:600">/ <span id="crumb">Dashboard</span></span></b><span>Restaurants · Super Marts · Pharmacies · Packages</span></div>
+      <button type="button" class="ib" id="theme" data-act="theme" aria-label="Toggle theme"></button>
+      <div style="position:relative">
+        <button type="button" class="ib" id="bell" data-act="bell" aria-label="Notifications" aria-haspopup="true" aria-expanded="false"></button>
+        <div class="pop" id="pop" role="region" aria-label="Notifications"><div class="hd"><span>Notifications</span><button type="button" class="btn sm" data-act="readAll">Mark all read</button></div><div id="notifList"></div></div>
+      </div>
+      <a class="av" id="avTop" href="#/profile" title="My profile" aria-label="My profile">AD</a>
+    </header>
+    <main class="view" id="view" tabindex="-1"><noscript>The admin console needs JavaScript.</noscript></main>
+  </div>
+</div>
+<div class="mwrap" id="mwrap" role="dialog" aria-modal="true"><div class="modal" id="mbody"></div></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
