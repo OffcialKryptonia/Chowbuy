@@ -7,6 +7,7 @@ import * as Apple from 'expo-apple-authentication';
 import { DEMO } from '@/lib/config';
 import { BackendError, fn, supabase } from '@/lib/supabase';
 import { normalizeNgPhone } from '@/lib/format';
+import { AUTH_WEB_URL } from '@/lib/auth-links';
 
 interface AuthState {
   ready: boolean;
