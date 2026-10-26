@@ -1843,7 +1843,7 @@ function ptDirty(){return !!U.ptd&&JSON.stringify(U.ptd)!==JSON.stringify(S.poin
 function tierOf(life){var t=S.points.tiers.slice().sort(function(a,b){return a.min-b.min}),c=t[0];t.forEach(function(x){if(life>=x.min)c=x});return c}
 function custRows(){
   var q=(U.q.customers||'').trim().toLowerCase();
-  var rows=beOn()&&U.cust.live?U.cust.live.rows.map(function(r){return{id:r.id,name:r.name,email:r.email||'',phone:r.phone||'',balance:r.balance,points:r.points,lifetime:r.lifetime,orders:Number(r.orders),spent:Number(r.spent),joined:Date.parse(r.joined)}}):S.cust;
+  var rows=beOn()&&U.cust.live?U.cust.live.rows.map(function(r){return{id:r.id,name:r.name,email:r.email||'',phone:r.phone||'',balance:r.balance,points:r.points,lifetime:r.lifetime,orders:Number(r.orders),spent:Number(r.spent),joined:Date.parse(r.joined),verified:r.verified!==false,lastSignIn:r.last_sign_in||null}}):S.cust;
   return rows.filter(function(c){return !q||(c.name+' '+c.email+' '+c.phone).toLowerCase().indexOf(q)>-1});
 }
 function custLoad(){
@@ -1857,9 +1857,9 @@ function vCustomers(){
   var st=live&&U.cust.live.stats&&U.cust.live.stats.customers!=null?U.cust.live.stats:{customers:all.length,walletTotal:all.reduce(function(s,c){return s+c.balance},0),pointsOutstanding:all.reduce(function(s,c){return s+c.points},0)};
   var pv=S.points.pointValue;
   var rows=list.map(function(c){var t=tierOf(c.lifetime);
-    return '<tr><td><div class="who"><span class="tile" style="background:#0F172A">'+esc(initials(c.name))+'</span><div><b>'+esc(c.name)+'</b><small>'+esc(c.email||c.id)+'</small></div></div></td><td class="mono nw">'+esc(c.phone||'—')+'</td><td class="r mono"><b>'+ngn(c.balance)+'</b></td><td class="r mono">'+num(c.points)+'<small class="muted" style="display:block">worth '+ngn(c.points*pv)+'</small></td><td>'+pill(t.name,t.min>=20000?'acc':t.min>0?'info':'')+'</td><td class="r mono">'+num(c.orders)+'</td><td class="r mono">'+ngn(c.spent)+'</td><td class="r"><div class="rowact">'+btn(ic('wallet')+'Manage','custOpen',c.id,'pri')+'</div></td></tr>'}).join('');
+    return '<tr><td><div class="who"><span class="tile" style="background:#0F172A">'+esc(initials(c.name))+'</span><div><b>'+esc(c.name)+'</b><small>'+esc(c.email||c.id)+'</small>'+(beOn()&&c.verified===false?'<span class="pill bad" style="margin-top:.2rem">Email not verified</span>':'')+'</div></div></td><td class="mono nw">'+esc(c.phone||'—')+'</td><td class="r mono"><b>'+ngn(c.balance)+'</b></td><td class="r mono">'+num(c.points)+'<small class="muted" style="display:block">worth '+ngn(c.points*pv)+'</small></td><td>'+pill(t.name,t.min>=20000?'acc':t.min>0?'info':'')+'</td><td class="r mono">'+num(c.orders)+'</td><td class="r mono">'+ngn(c.spent)+'</td><td class="r"><div class="rowact">'+btn(ic('wallet')+'Manage','custOpen',c.id,'pri')+'</div></td></tr>'}).join('');
   var banner=beOn()?(U.cust.err?'<div class="card pad" style="border-color:var(--bad)"><b>Could not load live customers.</b> <span class="muted">'+esc(U.cust.err)+'. Apply the 20261021000001 migration to your Supabase project, then reload.</span></div>':'<span class="pill ok">'+ic('checkc')+'Live data</span>'):'<span class="pill" title="Connect the backend in Messaging to manage real customers.">'+ic('alert')+'Demo data</span>';
-  return head('Customers','Master control of customer wallets and loyalty points. Every change needs a reason and is logged.',banner+btn(ic('down')+'Export CSV','custCsv',null,''))+
+  return head('Customers','Master control of customer wallets and loyalty points. Every change needs a reason and is logged.',banner+(beOn()?btn(ic('plus')+'Add customer','custAdd',null,'pri'):'')+btn(ic('down')+'Export CSV','custCsv',null,''))+
   '<div class="grid g4">'+kpi('Customers',num(st.customers),'','users','n')+kpi('Wallet balances held',ngn(st.walletTotal),'','wallet','g')+kpi('Points outstanding',num(st.pointsOutstanding),'','star')+kpi('Points liability',ngn(st.pointsOutstanding*pv),'at '+ngn(pv)+' per point','trend','n')+'</div>'+
   '<div class="card"><div class="bar">'+search('customers','Search name, email or phone')+tabs('cuF',[['all','All'],['bal','With balance'],['pts','With points'],['top','Silver and Gold']],1)+'</div>'+
   (list.length?'<div class="tw"><table class="t" style="min-width:60rem"><thead><tr><th>Customer</th><th>Phone</th><th class="r">Wallet</th><th class="r">Points</th><th>Tier</th><th class="r">Orders</th><th class="r">Spent</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>':(beOn()&&U.cust.load?empty('users','Loading customers','Fetching from your project…'):empty('users','No customers match','Try another search or filter.',btn('Clear filters','clear','customers','pri'))))+'</div>';
@@ -1907,6 +1907,54 @@ function histView(id){
   };
   if(beOn()){beReq('/rest/v1/rpc/admin_customer_ledger','POST',{p_user:id}).then(function(j){show(j.wallet,j.points)},function(e){toast(e.message,'err')});return}
   show(c.wtx,c.ptx);
+}
+/* ---- live customer profile, add, verify email, delete ---- */
+function custReload(){U.cust.live=null;U.cust.load=false;refresh()}
+function custProfile(id){
+  beReq('/rest/v1/rpc/admin_customer_profile','POST',{p_user:id}).then(function(p){
+    var ver=p.verified?'<span class="pill ok">Email verified</span>':'<span class="pill bad">Email not verified</span>';
+    var addr=(p.addresses||[]).map(function(a){return '<li><b>'+esc(a.label)+'</b> · '+esc(a.line)+(a.area?', '+esc(a.area):'')+'</li>'}).join('')||'<li class="muted">No saved addresses.</li>';
+    var rec=(p.recent||[]).map(function(o){return '<tr><td class="mono nw">'+esc(o.id)+'</td><td>'+esc(o.merchant||'—')+'</td><td>'+pill(o.stage)+'</td><td class="r mono">'+ngn(o.total)+'</td><td class="nw">'+fdt(Date.parse(o.created_at))+'</td></tr>'}).join('')||'<tr><td colspan="5" class="muted">No orders yet.</td></tr>';
+    openM('<h3>'+esc(p.name||'Customer')+'</h3><p class="muted">'+esc(p.email||'')+' · '+esc(p.phone||'no phone')+'</p><div class="acts" style="gap:.4rem;margin:.4rem 0">'+ver+'</div>'+
+     '<div class="kv"><span>Wallet balance</span><b class="mono">'+ngn(p.balance)+'</b><span>Points</span><b class="mono">'+num(p.points)+' · '+esc(p.tier||'')+'</b><span>Lifetime points</span><b class="mono">'+num(p.lifetime)+'</b>'+
+     '<span>Orders</span><b class="mono">'+num(p.orders)+' ('+num(p.delivered)+' delivered, '+num(p.cancelled)+' cancelled, '+num(p.active)+' active)</b><span>Total spent</span><b class="mono">'+ngn(p.spent)+'</b>'+
+     '<span>Joined</span><b>'+fdt(Date.parse(p.joined))+'</b><span>Last sign-in</span><b>'+(p.lastSignIn?fdt(Date.parse(p.lastSignIn)):'Never')+'</b><span>Sign-in method</span><b>'+esc(p.provider)+'</b><span>Customer ID</span><b class="mono" style="font-size:.72rem">'+esc(p.id)+'</b></div>'+
+     '<h3 style="font-size:1rem;margin-top:1rem">Saved addresses</h3><ul style="margin:.4rem 0 0;padding-left:1.1rem;display:grid;gap:.3rem">'+addr+'</ul>'+
+     '<h3 style="font-size:1rem;margin-top:1rem">Recent orders</h3><div class="tw" style="max-height:12rem;overflow:auto"><table class="t" style="min-width:0"><tbody>'+rec+'</tbody></table></div>'+
+     '<div class="acts" style="margin-top:1rem;gap:.6rem;flex-wrap:wrap"><button type="button" class="btn pri" data-act="custTop" data-id="'+id+'">'+ic('plus')+'Top up wallet</button><button type="button" class="btn danger" data-act="custDed" data-id="'+id+'">'+ic('down')+'Deduct wallet</button><button type="button" class="btn" data-act="custPts" data-id="'+id+'">'+ic('star')+'Adjust points</button><button type="button" class="btn" data-act="custHist" data-id="'+id+'">'+ic('list')+'History</button>'+
+     (p.verified?'':'<button type="button" class="btn" data-act="custVerify" data-id="'+id+'">'+ic('checkc')+'Verify email</button>')+
+     '<button type="button" class="btn danger" data-act="custDelete" data-id="'+id+'">'+ic('trash')+'Delete account</button></div><div class="ft"><button type="submit" class="btn">Close</button></div>',function(){});
+  },function(e){toast(e.message,'err')});
+}
+function custAddForm(){
+  openM('<h3>Add customer</h3><p class="muted">Creates a customer account with the email already verified. Leave the password empty to generate one. Share it with the customer privately; they can change it with Forgot password.</p>'+
+   inp('an','Full name','','maxlength="80" autocomplete="off"')+inp('ae','Email','','inputmode="email" autocomplete="off"')+inp('ap','Phone (optional)','','inputmode="tel" autocomplete="off"')+inp('aw','Password (optional, 8+ characters)','','autocomplete="off"')+
+   '<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Create customer</button></div>',function(v){
+    var name=String(v.an||'').trim(),email=String(v.ae||'').trim().toLowerCase();
+    if(name.length<2)return 'Enter the customer\u2019s name.';
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return 'Enter a valid email address.';
+    if(v.aw&&String(v.aw).length<8)return 'The password needs at least 8 characters.';
+    beFn('admin-customers',{action:'create',name:name,email:email,phone:String(v.ap||'').trim(),password:String(v.aw||'')}).then(function(r){
+      log('Added customer '+name+' ('+email+')','settings');audit('Customer added · '+email);custReload();
+      openM('<h3>Customer created</h3><p class="muted">'+esc(name)+' · '+esc(email)+'</p>'+(r.password?'<p>Temporary password (shown once, copy it now):</p><p class="mono" style="font-size:1.1rem;user-select:all"><b>'+esc(r.password)+'</b></p>':'<p>The password you entered was set.</p>')+'<div class="ft"><button type="submit" class="btn pri">Done</button></div>',function(){});
+    },function(e){toast(e.message,'err')});
+    return false;
+  });
+}
+function custVerifyDo(id){
+  var c=findCust(id);if(!c)return;
+  confirmM('Verify email manually','Mark '+esc(c.email||c.name)+' as verified without them clicking the email link. Use this when the confirmation email did not reach them.','Verify email',function(){
+    beFn('admin-customers',{action:'verify',id:id}).then(function(){log('Verified email for '+c.name,'settings');audit('Email verified manually · '+(c.email||id));custReload();toast('Email verified.')},function(e){toast(e.message,'err')});
+  });
+}
+function custDeleteDo(id){
+  var c=findCust(id);if(!c)return;
+  openM('<h3>Delete '+esc(c.name)+'?</h3><p class="muted">This permanently deletes the account, saved addresses, wallet and points. Past orders and payments stay on record without the customer\u2019s identity. It cannot be undone. It is blocked while the wallet has money or an order is in progress.</p>'+
+   inp('dc','Type DELETE to confirm','','autocomplete="off"')+'<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn danger">Delete account</button></div>',function(v){
+    if(String(v.dc||'').trim()!=='DELETE')return 'Type DELETE to confirm.';
+    beFn('admin-customers',{action:'delete',id:id}).then(function(){log('Deleted customer '+c.name,'settings');audit('Customer deleted · '+(c.email||id));closeM();custReload();toast('Customer deleted.')},function(e){toast(e.message,'err')});
+    return false;
+  });
 }
 /* ---- master points system ---- */
 function pointsCost(D,g){
@@ -1964,7 +2012,11 @@ function beUpsert(key,value){
 }
 Object.assign(A,{
  custOpen:function(el){var id=el.getAttribute('data-id'),c=findCust(id);if(!c)return;
+   if(beOn()){custProfile(id);return}
    openM(custHead(c)+'<div class="acts" style="margin-top:1rem;gap:.6rem"><button type="button" class="btn pri" data-act="custTop" data-id="'+id+'">'+ic('plus')+'Top up wallet</button><button type="button" class="btn danger" data-act="custDed" data-id="'+id+'">'+ic('down')+'Deduct wallet</button><button type="button" class="btn" data-act="custPts" data-id="'+id+'">'+ic('star')+'Adjust points</button><button type="button" class="btn" data-act="custHist" data-id="'+id+'">'+ic('list')+'History</button></div><div class="ft"><button type="submit" class="btn">Close</button></div>',function(){})},
+ custAdd:function(){custAddForm()},
+ custVerify:function(el){custVerifyDo(el.getAttribute('data-id'))},
+ custDelete:function(el){custDeleteDo(el.getAttribute('data-id'))},
  custTop:function(el){closeM();walletForm(el.getAttribute('data-id'),1)},
  custDed:function(el){closeM();walletForm(el.getAttribute('data-id'),-1)},
  custPts:function(el){closeM();pointsForm(el.getAttribute('data-id'))},

@@ -5,7 +5,7 @@ const db = new PGlite({ extensions: { pgcrypto } });
 const root = new URL('../', import.meta.url).pathname;
 await db.exec(`
  create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
- create schema auth; create table auth.users (id uuid primary key default gen_random_uuid(), email text, raw_user_meta_data jsonb default '{}', last_sign_in_at timestamptz);
+ create schema auth; create table auth.users (id uuid primary key default gen_random_uuid(), email text, raw_user_meta_data jsonb default '{}', last_sign_in_at timestamptz, email_confirmed_at timestamptz, raw_app_meta_data jsonb default '{}');
  create table auth.sessions (id uuid primary key default gen_random_uuid(), user_id uuid, user_agent text, ip inet, created_at timestamptz default now(), updated_at timestamptz, refreshed_at timestamptz);
  create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
  grant usage on schema public, auth to anon, authenticated, service_role;
@@ -27,6 +27,7 @@ await db.exec(fs.readFileSync(root + 'migrations/20261101000003_admin_locations.
 await db.exec(fs.readFileSync(root + 'migrations/20261101000004_group_orders.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261101000005_smart_cart_events.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261101000006_public_catalog.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261101000007_admin_customer_tools.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -633,6 +634,28 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
     await su(`delete from platform_settings where key = 'smart_cart'`);
     const def = await as(A, place);
     ok('without a setting the old 10,000 rule still applies', def.delivery_fee === (def.subtotal >= 10000 ? 0 : high.delivery_fee), JSON.stringify([def.delivery_fee, def.subtotal]));
+  });
+}
+
+/* ---- admin customer tools ---- */
+{
+  const su = async sql => { await db.exec('reset role'); await db.exec(sql); };
+  const cust = (await q(`select id from profiles where role = 'customer' limit 1`))[0].id;
+  await su(`update auth.users set email_confirmed_at = null where id = '${cust}'`);
+  await as(cust, async () => {
+    ok('a customer cannot read the admin customer profile', await q(`select admin_customer_profile('${cust}')`).then(() => false, () => true));
+  });
+  await as(ADM, async () => {
+    const pr = (await q(`select admin_customer_profile('${cust}') p`))[0].p;
+    ok('profile shows wallet, points, orders and email status', typeof pr.balance === 'number' && typeof pr.points === 'number' && typeof pr.orders === 'number' && pr.verified === false && Array.isArray(pr.addresses) && Array.isArray(pr.recent));
+    const list = (await q(`select admin_customers('', 200, 0) c`))[0].c;
+    ok('the list flags unverified customers', list.rows.some(r => r.id === cust && r.verified === false) && list.stats.unverified >= 1);
+    ok('admin accounts are not in the customer list', !list.rows.some(r => r.id === ADM));
+    ok('an admin id is not a customer profile', await q(`select admin_customer_profile('${ADM}')`).then(() => false, e => /not found/i.test(String(e.message))));
+  });
+  await su(`update auth.users set email_confirmed_at = now() where id = '${cust}'`);
+  await as(ADM, async () => {
+    ok('verified status follows the auth record', (await q(`select admin_customer_profile('${cust}') p`))[0].p.verified === true);
   });
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

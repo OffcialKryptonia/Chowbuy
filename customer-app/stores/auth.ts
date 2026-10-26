@@ -1,3 +1,4 @@
+import { ACCOUNT_EXISTS, alreadyRegistered } from '@/lib/signup';
 import { create } from 'zustand';
 import type { Session } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
@@ -104,6 +105,7 @@ export const useAuth = create<AuthState>((set, get) => ({
       options: { emailRedirectTo, data: { full_name: name.trim(), phone: p } },
     });
     if (error) throw new BackendError(friendly(error.message));
+    if (alreadyRegistered(data.user)) throw new BackendError(ACCOUNT_EXISTS);
     return data.session ? 'signed-in' : 'confirm-email';
   },
   /** Google through Supabase OAuth in the system browser; the provider must be enabled in the Supabase dashboard. */

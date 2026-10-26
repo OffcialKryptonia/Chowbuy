@@ -1,3 +1,4 @@
+import { ACCOUNT_EXISTS } from '@/lib/signup';
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -34,7 +35,11 @@ export function SignIn() {
         if (r === 'confirm-email') { setNote('Check your email and tap the confirmation link, then sign in.'); setMode('in'); setPassword(''); }
         else success();
       } else { await auth.reset(email); setNote('If that email has an account, a reset link is on its way.'); setMode('in'); }
-    } catch (e) { setErr(e instanceof Error ? e.message : 'Something went wrong.'); warn(); toast(e instanceof Error ? e.message : 'Something went wrong.', 'bad'); }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Something went wrong.';
+      if (msg === ACCOUNT_EXISTS) { setMode('in'); setPassword(''); setErr(msg); warn(); return; }
+      setErr(msg); warn(); toast(msg, 'bad');
+    }
     finally { setBusy(false); }
   };
 
