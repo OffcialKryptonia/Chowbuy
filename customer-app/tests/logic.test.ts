@@ -140,3 +140,11 @@ test('splitEqual shares add up exactly and the host keeps the remainder', async 
   assert.equal(s.find((x) => x.user_id === 'h')!.amount, 335);
   assert.deepEqual(splitEqual(500, [], 'h'), []);
 });
+
+test('alreadyRegistered spots the empty-identities fake user Supabase returns for existing emails', async () => {
+  const { alreadyRegistered } = await import('../lib/signup.ts');
+  assert.equal(alreadyRegistered({ identities: [] }), true);
+  assert.equal(alreadyRegistered({ identities: [{ id: 'x' }] }), false);
+  assert.equal(alreadyRegistered({}), false);
+  assert.equal(alreadyRegistered(null), false);
+});
