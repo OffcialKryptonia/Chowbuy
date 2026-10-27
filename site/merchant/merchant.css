@@ -366,3 +366,7 @@ table.t{width:100%;border-collapse:collapse;font-size:.86rem;min-width:46rem}
 @keyframes ringp{70%{box-shadow:0 0 0 8px rgba(255,106,0,0)}}
 @media(prefers-reduced-motion:reduce){.tabs button.pulse{animation:none!important}}
 .rb{min-width:11rem}.cd{white-space:nowrap}
+.lbox{display:grid;gap:.45rem;padding:.8rem .9rem;margin-bottom:.7rem;border:1px solid var(--line);border-radius:1rem;background:var(--card);font-size:.84rem}
+.lbox.on{border-color:var(--green)}
+.lbox b{display:flex;align-items:center;gap:.4rem}
+.lbox small{line-height:1.4}

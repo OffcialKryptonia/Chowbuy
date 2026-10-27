@@ -137,7 +137,8 @@ var KEY='cb-merchant-v1';
 function fnv(s){var h=2166136261;s=String(s);for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
 function load(){try{var j=localStorage.getItem(KEY);if(j){var o=JSON.parse(j);if(o&&o.v===2&&o.s&&o.s.items)return o.s}}catch(e){}return window.MSEED('restaurant')}
 var S=load(),warned=false;
-function save(){try{localStorage.setItem(KEY,JSON.stringify({v:2,s:S}))}catch(e){if(!warned){warned=true;toast('Browser storage is full. Changes last only until you close this tab.','warn')}}}
+var LV={on:false,me:null,store:null,orders:null,products:null,seen:null};
+function save(){if(LV.on)return;try{localStorage.setItem(KEY,JSON.stringify({v:2,s:S}))}catch(e){if(!warned){warned=true;toast('Browser storage is full. Changes last only until you close this tab.','warn')}}}
 var U={q:{},tab:{},page:{},md:null,reveal:{}};
 var T=function(k,d){return U.tab[k]||d};
 function log(t,k){S.activity.unshift({t:t,k:k||'bell',at:Date.now()});if(S.activity.length>40)S.activity.length=40}
@@ -227,7 +228,7 @@ function barcode(txt){var h=fnv(txt),o='',x=0,i;for(i=0;i<46;i++){h=Math.imul(h^
 
 /* ---------- router & shell ---------- */
 var A={},INP={},CHG={},FORMS={};
-function visible(r){return !r.v||r.v.indexOf(S.vertical)>=0}
+function visible(r){return(!LV.on||!!r.lf)&&(!r.v||r.v.indexOf(S.vertical)>=0)}
 function cur(){var h=location.hash.replace(/^#\/?/,'').split('?')[0].replace(/\/$/,'');return ROUTES.filter(function(r){return r.p===h})[0]||null}
 function lbl(r){return typeof r.n==='function'?r.n():r.n}
 function buildNav(){
@@ -236,7 +237,7 @@ function buildNav(){
     html+='<a href="#/'+r.p+'" data-p="'+r.p+'">'+ic(typeof r.i==='function'?r.i():r.i)+'<span>'+esc(lbl(r))+'</span>'+(r.badge?'<em class="nb" data-badge="'+r.badge+'"></em>':'')+'</a>'});
   $('#nav').innerHTML=html;
   var bt=['','orders','menu','wallet'],h='';
-  [['', 'grid','Home'],[S.vertical==='package'?'shipments':'orders','list',S.vertical==='package'?'Shipments':'Orders'],[S.vertical==='restaurant'?'menu':S.vertical==='package'?'branches':'products',S.vertical==='package'?'pin':'bag',S.vertical==='package'?'Branches':'Catalogue'],['wallet','wallet','Wallet']].forEach(function(b){h+='<a href="#/'+b[0]+'" data-p="'+b[0]+'">'+ic(b[1])+'<span>'+b[2]+'</span></a>'});
+  [['', 'grid','Home'],[S.vertical==='package'?'shipments':'orders','list',S.vertical==='package'?'Shipments':'Orders'],[S.vertical==='restaurant'?'menu':S.vertical==='package'?'branches':'products',S.vertical==='package'?'pin':'bag',S.vertical==='package'?'Branches':'Catalogue'],[LV.on?'settings':'wallet',LV.on?'settings':'wallet',LV.on?'Settings':'Wallet']].forEach(function(b){h+='<a href="#/'+b[0]+'" data-p="'+b[0]+'">'+ic(b[1])+'<span>'+b[2]+'</span></a>'});
   h+='<button type="button" data-act="more">'+ic('menu')+'<span>More</span></button>';$('#btm').innerHTML=h;
 }
 function pendingCount(){return S.orders.filter(function(o){return o.status==='new'}).length+(S.vertical==='pharmacy'?0:0)}
@@ -252,6 +253,12 @@ function renderBar(){
   var m=$('#profMenu');m.innerHTML='<div class="hd"><b>'+esc(S.me.name)+'</b><small class="muted">'+esc(S.me.email)+'</small></div><div class="grp2">View dashboard as</div>'+Object.keys(ROLE).filter(function(r){return r!=='pharmacist'||S.vertical==='pharmacy'}).map(function(r){return '<button type="button" class="it" data-act="role" data-id="'+r+'" aria-pressed="'+(role()===r)+'">'+ic(role()===r?'checkc':'users')+ROLE[r]+'</button>'}).join('')+'<hr><button type="button" class="it" data-act="goto" data-id="settings">'+ic('settings')+'Store settings</button><button type="button" class="it" data-act="goto" data-id="support">'+ic('help')+'Support & help</button><button type="button" class="it" data-act="testSound">'+ic('volume')+'Test order sound</button><button type="button" class="it mob" data-act="theme">'+ic('moon')+'Switch theme</button><button type="button" class="it" data-act="signout">'+ic('logout')+'Sign out (demo)</button>';
   var un=S.notifs.filter(function(n){return!n.read}).length,d=$('#nbadge');d.textContent=un;d.style.display=un?'':'none';
   $('#notifList').innerHTML=S.notifs.length?S.notifs.slice(0,12).map(function(n){return '<button type="button" class="it'+(n.read?'':' unread')+'" data-act="readN" data-id="'+n.id+'" style="width:100%;text-align:left">'+ic(n.read?'check':n.k)+'<span>'+esc(n.t)+'<small class="muted" style="display:block">'+ago(n.at)+'</small></span></button>'}).join(''):'<p class="muted" style="padding:1rem">No notifications yet.</p>';
+  if(LV.on){
+    $('#stat').innerHTML=[['open','Open','checkc'],['paused','Paused','ban']].map(function(x){return '<button type="button" data-act="status" data-id="'+x[0]+'" aria-pressed="'+(st===x[0])+'" class="s-'+x[0]+'">'+ic(x[2])+'<span>'+x[1]+'</span></button>'}).join('');
+    $('#brSel').innerHTML=LV.me.stores.map(function(x){return '<option value="'+esc(x.id)+'"'+(x.id===LV.store.id?' selected':'')+'>'+esc(x.name)+'</option>'}).join('');
+    m.innerHTML='<div class="hd"><b>'+esc(S.me.name)+'</b><small class="muted">'+esc(S.me.email)+'</small></div><button type="button" class="it" data-act="goto" data-id="settings">'+ic('settings')+'Store settings</button><button type="button" class="it" data-act="testSound">'+ic('volume')+'Test order sound</button><button type="button" class="it mob" data-act="theme">'+ic('moon')+'Switch theme</button><button type="button" class="it" data-act="signout">'+ic('logout')+'Sign out</button>';
+  }
+  renderLiveBox();
   var np=pendingCount();[].forEach.call(document.querySelectorAll('[data-badge]'),function(e){e.textContent=np;e.style.display=np?'':'none'});
   document.documentElement.style.setProperty('--vc',VC[S.vertical]);
   var banner=$('#banner');banner.className='banner'+(st==='open'?'':' show '+st);banner.innerHTML=st==='rush'?ic('flame')+'<span>Rush mode is on. Customers see <b>+15 min</b> on every delivery estimate.</span>'+btn('Back to open','status','open','sm'):st==='paused'?ic('ban')+'<span>You are paused'+(S.store.pauseReason?' ('+esc(S.store.pauseReason)+')':'')+'. New orders are blocked.</span>'+btn('Reopen store','status','open','sm pri'):'';
@@ -263,7 +270,7 @@ function render(keep){
   var r=cur(),main=$('#view');
   if(r&&!visible(r)){location.hash='#/';return}
   document.querySelectorAll('#nav a,#btm a').forEach(function(a){var on=r&&a.getAttribute('data-p')===r.p;a.classList.toggle('on',!!on);if(on)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
-  if(r){main.innerHTML=(r.roles&&r.roles.indexOf(role())<0)?head(esc(lbl(r)),'')+locked(r):r.f();document.title=lbl(r)+' · ChowBuy Merchant'}
+  if(r){main.innerHTML=(r.roles&&r.roles.indexOf(role())<0)?head(esc(lbl(r)),'')+locked(r):(LV.on?r.lf:r.f)();document.title=lbl(r)+' · ChowBuy Merchant'}
   else{main.innerHTML=head('Page not found','That page does not exist.')+'<div class="card">'+empty('search','Nothing here','Head back to your dashboard.','<a class="btn pri" href="#/">Go to dashboard</a>')+'</div>';document.title='Not found · ChowBuy Merchant'}
   $('#crumb').textContent=r?lbl(r):'Not found';
   renderBar();
@@ -334,6 +341,7 @@ document.addEventListener('submit',function(e){
 document.addEventListener('input',function(e){var t=e.target,k=t.getAttribute&&t.getAttribute('data-in');if(!k||t.composing)return;var i=k.indexOf(':');INP[k.slice(0,i)](k.slice(i+1),t.value,t)});
 document.addEventListener('change',function(e){
   var t=e.target,k=t.getAttribute&&t.getAttribute('data-ch');
+  if(t.id==='brSel'&&LV.on){var ns=LV.me.stores.filter(function(x){return x.id===t.value})[0];if(ns){LV.store=ns;lset('cb-merch-store',ns.id);LV.seen=null;liveLoad().then(function(){buildNav();refresh();toast('Showing '+ns.name+'.')},liveErr)}return}
   if(t.id==='brSel'){S.branch=t.value;save();refresh();toast('Showing '+brSel().name+'.');return}
   if(k){var i=k.indexOf(':');CHG[k.slice(0,i)](k.slice(i+1),t.value,t);return}
   var s=t.getAttribute&&t.getAttribute('data-file');if(s){FILES[s]&&FILES[s](t.files&&t.files[0],t)}
@@ -399,14 +407,15 @@ function vDash(){
 var PCship={pending:'warn',assigned:'info',picked:'info',transit:'info',delivered:'ok'};
 
 /* ---------- orders ---------- */
+function ost(){return LV.on?OST.filter(function(x){return x[0]!=='accepted'}):OST}
 function vOrders(){
   var t=T('ord','new'),q=(U.q.ord||'').toLowerCase(),pf=T('ordP','all');
-  var counts={};OST.forEach(function(s){counts[s[0]]=S.orders.filter(function(o){return o.status===s[0]}).length});
+  var counts={};ost().forEach(function(s){counts[s[0]]=S.orders.filter(function(o){return o.status===s[0]}).length});
   var rows=S.orders.filter(function(o){return o.status===t&&(pf==='all'||o.pay===pf)&&(!q||(o.id+' '+o.customer+' '+o.lines.map(function(l){return l.name}).join(' ')).toLowerCase().indexOf(q)>=0)}).sort(function(a,b){return t==='completed'||t==='cancelled'?b.ts-a.ts:(a.due||a.ts)-(b.due||b.ts)});
   return head(vtxt().orders,'Accept, prepare and hand over every '+vtxt().order+'.',btn(ic('printer')+'Print all new','printNew','','')+btn(ic('volume')+'Test sound','testSound'))+
-  '<div class="bar"><div class="tabs" role="group">'+OST.map(function(s){return '<button type="button" data-act="tab" data-k="ord" data-v="'+s[0]+'" aria-pressed="'+(t===s[0])+'" class="'+(s[0]==='new'&&counts.new?'pulse':'')+'">'+s[1]+' <em>'+counts[s[0]]+'</em></button>'}).join('')+'</div>'+search('ord','Search #CB-84920, customer or item')+
+  '<div class="bar"><div class="tabs" role="group">'+ost().map(function(s){return '<button type="button" data-act="tab" data-k="ord" data-v="'+s[0]+'" aria-pressed="'+(t===s[0])+'" class="'+(s[0]==='new'&&counts.new?'pulse':'')+'">'+s[1]+' <em>'+counts[s[0]]+'</em></button>'}).join('')+'</div>'+search('ord','Search #CB-84920, customer or item')+
   '<label class="sr" for="pf">Payment</label><select id="pf" class="in" data-ch="opf:x" aria-label="Payment type"><option value="all">All payments</option>'+['Card','Transfer','Wallet','Cash on Delivery'].map(function(p){return '<option'+(pf===p?' selected':'')+'>'+p+'</option>'}).join('')+'</select></div>'+
-  (rows.length?'<div class="ocards">'+rows.map(oCard).join('')+'</div>':'<div class="card">'+empty(t==='new'?'checkc':'list',t==='new'?'No new orders':'Nothing in '+OST.filter(function(s){return s[0]===t})[0][1],q?'No match for your search.':'New orders arrive here with a chime. Keep the store open to receive them.',q?btn('Clear search','clear','ord'):'<button type="button" class="btn pri" data-act="simNow">'+ic('zap')+'Simulate an incoming order</button>')+'</div>');
+  (rows.length?'<div class="ocards">'+rows.map(oCard).join('')+'</div>':'<div class="card">'+empty(t==='new'?'checkc':'list',t==='new'?'No new orders':'Nothing in '+ost().filter(function(s){return s[0]===t})[0][1],q?'No match for your search.':'New orders arrive here with a chime. Keep the store open to receive them.',q?btn('Clear search','clear','ord'):'<button type="button" class="btn pri" data-act="simNow">'+ic('zap')+'Simulate an incoming order</button>')+'</div>');
 }
 CHG.opf=function(k,v){U.tab.ordP=v;refresh()};
 function oCard(o){
@@ -417,8 +426,10 @@ function oCard(o){
   else if(o.status==='ready')acts=btn(ic('bike')+'Hand to rider','handoff',o.id,'pri');
   else if(o.status==='out')acts=btn(ic('checkc')+'Mark delivered','deliver',o.id,'pri');
   else if(o.status==='completed')acts=btn(ic('swap')+'Refund','refund',o.id);
+  if(LV.on){var cx=(o.stage==='received'||o.stage==='preparing')?btn(ic('xc')+'Cancel','reject',o.id,'danger'):'';
+    acts=o.status==='new'?btn(ic('check')+'Start preparing','accept',o.id,'pri')+cx:o.status==='preparing'?btn(ic('checkc')+'Mark ready','ready',o.id,'pri')+cx:o.status==='ready'?cx:''}
   return '<article class="oc '+o.status+'"><header><div><b class="mono">'+esc(o.id)+'</b><small class="muted"> · '+ago(o.ts)+'</small></div>'+pill(o.status,OPILL[o.status])+'</header>'+
-  '<div class="acts" style="justify-content:space-between"><div><b>'+esc(o.customer)+'</b><div class="muted" style="font-size:.82rem">'+ic('pin')+' '+esc(o.addr)+'</div></div><a class="ib sm" href="tel:'+esc(o.phone.replace(/\s/g,''))+'" aria-label="Call '+esc(o.customer)+'" data-act="call" data-id="'+esc(o.id)+'">'+ic('phone')+'</a></div>'+
+  '<div class="acts" style="justify-content:space-between"><div><b>'+esc(o.customer)+'</b><div class="muted" style="font-size:.82rem">'+ic('pin')+' '+esc(o.addr)+'</div></div>'+(o.phone?'<a class="ib sm" href="tel:'+esc(o.phone.replace(/\s/g,''))+'" aria-label="Call '+esc(o.customer)+'" data-act="call" data-id="'+esc(o.id)+'">'+ic('phone')+'</a>':'')+'</div>'+
   '<div class="acts"><span class="pill '+(o.paid?'ok':'warn')+'">'+esc(o.pay)+' · '+(o.paid?'paid':'collect '+ngn(otot(o)))+'</span>'+cdBadge(o)+'</div>'+
   '<ul class="ol">'+o.lines.map(lineHtml).join('')+'</ul>'+(o.note?'<p class="onote">'+ic('msg')+esc(o.note)+'</p>':'')+
   '<div class="muted" style="font-size:.82rem">'+(o.rider?ic('bike')+' '+esc(o.rider.name)+' · '+esc(o.rider.plate):o.status==='cancelled'?esc(o.cancelReason):ic('search')+' Searching for nearby rider')+'</div>'+
@@ -989,6 +1000,179 @@ var ROUTES=[
  {p:'onboarding',n:'Onboarding',i:'sparkles',g:'Business & Management',f:vOnboard,roles:['owner']},
  {p:'support',n:'Support',i:'help',g:'Business & Management',f:vSupport}
 ];
+/* ---------- live mode: your real store, orders and menu from the ChowBuy backend ---------- */
+var LAPI={url:'https://nhaxcyfkbrbwlqbpizjo.supabase.co',anon:'sb_publishable_fEoqE8u49jwFe1v36CacDg_seaMgyUS'};   /* publishable by design: every table is behind row-level security */
+function lget(k){try{return sessionStorage.getItem(k)||''}catch(e){return ''}}
+function lset(k,v){try{if(v)sessionStorage.setItem(k,v);else sessionStorage.removeItem(k)}catch(e){}}
+function lend(msg){lset('cb-merch-tok','');lset('cb-merch-rt','');lset('cb-merch-store','');if(msg)lset('cb-merch-msg',msg);location.reload()}
+var lrefreshing=null;
+function lrefresh(){
+  var rt=lget('cb-merch-rt');if(!rt)return Promise.reject(new Error('no refresh token'));
+  if(!lrefreshing)lrefreshing=fetch(LAPI.url+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:LAPI.anon,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:rt})})
+    .then(function(r){return r.json().then(function(j){if(!r.ok||!j.access_token)throw new Error('refresh failed');lset('cb-merch-tok',j.access_token);lset('cb-merch-rt',j.refresh_token||rt);return j.access_token})})
+    .then(function(t){lrefreshing=null;return t},function(e){lrefreshing=null;throw e});
+  return lrefreshing;
+}
+function lreq(path,method,body,retried){
+  var tok=lget('cb-merch-tok');
+  return fetch(LAPI.url+path,{method:method||'GET',headers:{apikey:LAPI.anon,Authorization:'Bearer '+(tok||LAPI.anon),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined})
+   .then(function(r){return r.text().then(function(t){var j={};try{j=t?JSON.parse(t):{}}catch(e){}
+     if(!r.ok){
+       if(r.status===401&&tok){
+         if(!retried&&lget('cb-merch-rt'))return lrefresh().then(function(){return lreq(path,method,body,true)},function(){lend('Your session expired. Please sign in again.');throw new Error('Session expired')});
+         lend('Your session expired. Please sign in again.');
+       }
+       throw new Error(j.message||j.msg||j.error_description||j.error||('Request failed ('+r.status+')'))}
+     return j})},function(){throw new Error('Could not reach the server. Check your connection.')});
+}
+function lrpc(fn,args){return lreq('/rest/v1/rpc/'+fn,'POST',args||{})}
+var STG={received:'new',preparing:'preparing',rider_accepted:'ready',rider_at_store:'ready',in_transit:'out',arrived:'out',delivered:'completed',cancelled:'cancelled'};
+var PAYL={korapay:'Card',pocketfi:'Transfer',wallet:'Wallet',cod:'Cash on Delivery'};
+function mapOrder(o){
+  var ts=Date.parse(o.created)||Date.now(),t=o.times||{},st=STG[o.stage]||'new',notes=[];
+  if(t.ready&&(o.stage==='preparing'||o.stage==='rider_accepted'||o.stage==='rider_at_store'))st='ready';else if(o.stage==='rider_accepted'||o.stage==='rider_at_store')st='preparing';
+  var lines=(o.lines||[]).map(function(l){if(l.note)notes.push(l.name+': '+l.note);return{id:l.productId||'',name:l.name||'Item',qty:l.qty||1,price:l.unitPrice||0,mods:(l.mods||[]).map(function(m){return m.name||m.label||''}).filter(Boolean),extra:0,note:l.note||''}});
+  var a=o.addr||{},r={id:o.id,ts:ts,status:st,customer:o.customer||'Customer',phone:'',addr:[a.line,a.area].filter(Boolean).join(', ')+(a.landmark?' (near '+a.landmark+')':''),pay:PAYL[o.pay]||o.pay,paid:!!o.paid,lines:lines,sub:o.subtotal||0,fee:o.fee||0,note:notes.join(' · '),rider:o.rider?{name:o.rider.name||'Rider',plate:o.rider.plate||'',eta:0}:null,stage:o.stage,cancelReason:o.cancelReason||'',refunded:o.refunded||0};
+  if(st!=='new'&&st!=='cancelled'){r.acceptedAt=Number(t.preparing)||ts;r.prep=25;r.due=r.acceptedAt+25*60000}
+  return r;
+}
+function buildLiveS(){
+  var st=LV.store,snd=S.sound!==false,base=window.MSEED(st.vertical);
+  S=base;S.sound=snd;S.vertical=st.vertical;
+  S.me={name:LV.me.name||LV.me.email,email:LV.me.email,role:'owner'};
+  S.store=Object.assign(S.store,{name:st.name,phone:'',email:LV.me.email,addr:st.area,logo:'',cover:'',status:st.open?'open':'paused',pauseReason:''});
+  S.branches=[{id:'B1',name:st.area||'Main store',addr:st.area||'',status:st.open?'open':'closed',f:1}];S.branch='B1';
+  S.notifs=[];S.activity=[];S.items=[];S.cats=[];S.ships=[];S.rx=[];S.reviews=[];
+  S.orders=(LV.orders||[]).map(mapOrder);
+}
+function liveLoad(){
+  var id=LV.store.id;
+  return Promise.all([lrpc('merchant_orders',{p_merchant:id,p_limit:200}),lreq('/rest/v1/products?merchant_id=eq.'+encodeURIComponent(id)+'&select=id,name,descr,price,category,in_stock,rx&order=category.asc,name.asc&limit=1000','GET')]).then(function(r){
+    var fresh=[];if(LV.seen){r[0].forEach(function(o){if(o.stage==='received'&&!LV.seen[o.id])fresh.push(o)})}
+    LV.seen=LV.seen||{};r[0].forEach(function(o){LV.seen[o.id]=1});
+    LV.orders=r[0];LV.products=r[1];buildLiveS();
+    if(fresh.length){chime();toast(fresh.length===1?'New order '+fresh[0].id+' from '+(fresh[0].customer||'a customer')+'.':fresh.length+' new orders.')}
+  });
+}
+function liveBoot(){
+  return lrpc('merchant_me').then(function(me){
+    LV.me=me;var want=lget('cb-merch-store');LV.store=me.stores.filter(function(s){return s.id===want})[0]||me.stores[0];lset('cb-merch-store',LV.store.id);LV.on=true;
+    return liveLoad();
+  });
+}
+function lsignIn(email,pw){
+  return fetch(LAPI.url+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:LAPI.anon,'Content-Type':'application/json'},body:JSON.stringify({email:email,password:pw})})
+   .then(function(r){return r.json().then(function(j){if(!r.ok||!j.access_token)throw new Error(/invalid/i.test(j.error_description||j.msg||'')?'Wrong email or password.':(j.error_description||j.msg||'Could not sign in.'));return j})},function(){throw new Error('Could not reach the server. Check your connection.')})
+   .then(function(j){
+     lset('cb-merch-tok',j.access_token);lset('cb-merch-rt',j.refresh_token||'');try{localStorage.setItem('cb-merch-who',email)}catch(e){}
+     return liveBoot().then(function(){buildNav();render(false)},function(e){
+       fetch(LAPI.url+'/auth/v1/logout',{method:'POST',headers:{apikey:LAPI.anon,Authorization:'Bearer '+j.access_token}}).catch(function(){});
+       lset('cb-merch-tok','');lset('cb-merch-rt','');LV.on=false;throw e});
+   });
+}
+function lsignOut(){var t=lget('cb-merch-tok');if(t)fetch(LAPI.url+'/auth/v1/logout',{method:'POST',headers:{apikey:LAPI.anon,Authorization:'Bearer '+t}}).catch(function(){});lend('')}
+function renderLiveBox(){
+  var b=$('#liveBox');if(!b)return;
+  b.innerHTML=LV.on?'<div class="lbox on"><b>'+ic('checkc')+' Live</b><small class="muted">Real orders and menu for '+esc(LV.store.name)+'. Other pages are not connected yet.</small><button type="button" class="btn sm" data-act="signout" style="width:100%">Sign out</button></div>'
+   :'<div class="lbox"><b>Demo data</b><small class="muted">Everything here is sample data. Go live to run your real store.</small><button type="button" class="btn sm pri" data-act="goLive" style="width:100%">Go live</button></div>';
+}
+function liveErr(e){toast(e.message||'Something went wrong.','err')}
+function lagosDay(ts){return new Date(ts).toLocaleDateString('en-CA',{timeZone:'Africa/Lagos'})}
+function vDashLive(){
+  var td=lagosDay(Date.now()),O=S.orders,today=O.filter(function(o){return lagosDay(o.ts)===td&&o.status!=='cancelled'});
+  var sales=today.reduce(function(a,o){return a+o.sub},0),active=O.filter(function(o){return['new','preparing','ready','out'].indexOf(o.status)>=0}),nw=O.filter(function(o){return o.status==='new'});
+  var st=LV.store,rt=st.ratingCount?st.ratingPct/20:0,hr=new Date().getHours(),first=String(S.me.name||'').split(' ')[0]||'there';
+  var recent=O.slice(0,8).map(function(o){return '<li><b class="mono">'+esc(o.id)+'</b><span>'+esc(o.customer)+' · '+ngn(o.sub)+'</span>'+pill(o.status,OPILL[o.status])+'<small class="muted">'+ago(o.ts)+'</small></li>'}).join('');
+  return head('Good '+(hr<12?'morning':hr<17?'afternoon':'evening')+', '+esc(first),esc(st.name)+' · live data'+(st.open?'':' · store is paused'),(S.vertical==='package'?'':'<a class="btn pri" href="#/orders">'+ic('list')+'Open '+vtxt().orders+'</a>')+'<button type="button" class="btn" data-act="liveRefresh">'+ic('rot')+'Refresh</button>')+
+  (st.active?'':'<div class="card pad" style="border-color:var(--amber,#F59E0B);margin-bottom:1rem"><b>Your store is not visible to customers yet.</b> <span class="muted">ChowBuy has not activated it. You can set up your menu in the meantime.</span></div>')+
+  '<div class="grid g5">'+kpi('Orders today',today.length,'','bag')+kpi('Sales today',ngn(sales),'','trend','g','Items only, cancelled excluded')+kpi('Active orders',active.length,'','list','n')+kpi('Waiting for you',nw.length,'','clock')+kpi('Store rating',rt?rt.toFixed(1)+' / 5':'New','','star','n',num(st.ratingCount)+' rating'+(st.ratingCount===1?'':'s'))+'</div>'+
+  (nw.length?'<div class="card pad" style="margin-top:1rem"><h3>Needs your attention</h3><p class="sub">New orders waiting to be accepted</p><div class="ribbon" style="margin-top:.8rem">'+nw.slice(0,10).map(function(o){return '<a class="rb" href="#/orders"><b class="mono">'+esc(o.id)+'</b><span>'+esc(o.customer)+' · '+ngn(o.sub)+'</span>'+pill('new','warn')+'</a>'}).join('')+'</div></div>':'')+
+  '<div class="card pad" style="margin-top:1rem"><h3>Recent orders</h3>'+(recent?'<ul class="feed">'+recent+'</ul>':empty('bag','No orders yet','Orders from customers will appear here as soon as they pay.'))+'</div>';
+}
+function lcat(p){return p.category||'Other'}
+function vCatalogLive(){
+  var P=LV.products||[],t=T('lcat','all'),q=(U.q.lcat||'').toLowerCase(),cats=[],rest=S.vertical==='restaurant';
+  P.forEach(function(p){if(cats.indexOf(lcat(p))<0)cats.push(lcat(p))});
+  var rows=P.filter(function(p){return(t==='all'||lcat(p)===t)&&(!q||(p.name+' '+lcat(p)).toLowerCase().indexOf(q)>=0)});
+  return head(rest?'Menu':'Products','What customers can order from you. Changes are live straight away.',btn(ic('plus')+'Add '+(rest?'dish':'product'),'pNew','','pri'))+
+  '<div class="card"><div class="bar"><div class="tabs" role="group"><button type="button" data-act="tab" data-k="lcat" data-v="all" aria-pressed="'+(t==='all')+'">All <em>'+P.length+'</em></button>'+cats.map(function(c){return '<button type="button" data-act="tab" data-k="lcat" data-v="'+esc(c)+'" aria-pressed="'+(t===c)+'">'+esc(c)+'</button>'}).join('')+'</div>'+search('lcat','Search items')+'</div>'+
+  (rows.length?'<div class="tw"><table class="t" style="min-width:36rem"><thead><tr><th>Item</th><th>Category</th><th style="text-align:right">Price</th><th>Available</th><th></th></tr></thead><tbody>'+rows.map(function(p){return '<tr><td><b>'+esc(p.name)+'</b>'+(p.rx?' '+pill('Rx','warn'):'')+(p.descr?'<div class="muted" style="font-size:.8rem">'+esc(p.descr.length>70?p.descr.slice(0,70)+'…':p.descr)+'</div>':'')+'</td><td>'+esc(lcat(p))+'</td><td class="mono" style="text-align:right">'+ngn(p.price)+'</td><td>'+sw(p.in_stock,'pStock',p.id,'Available to order')+'</td><td><div class="acts">'+btn('Edit','pEdit',p.id)+btn('Delete','pDel',p.id,'danger')+'</div></td></tr>'}).join('')+'</tbody></table></div>'
+    :empty('bag',P.length?'No match':'Nothing here yet',P.length?'Try another category or clear the search.':'Add your first '+(rest?'dish':'product')+' so customers can order it.',P.length?'':btn('Add '+(rest?'dish':'product'),'pNew','','pri')))+'</div>';
+}
+function pForm(p){
+  var rest=S.vertical==='restaurant',cats=[];(LV.products||[]).forEach(function(x){if(cats.indexOf(lcat(x))<0)cats.push(lcat(x))});
+  return '<h3>'+(p?'Edit':'Add')+' '+(rest?'dish':'product')+'</h3>'+inp('pn','Name',p?p.name:'','maxlength="80" required')+
+   '<div class="f"><label for="pd">Description</label><textarea id="pd" name="pd" rows="3" maxlength="400">'+esc(p?p.descr:'')+'</textarea></div>'+
+   '<div class="mgrid">'+inp('pp','Price (₦)',p?p.price:'','inputmode="numeric" placeholder="3500"')+inp('pc','Category',p?p.category:'','maxlength="40" list="pcl" placeholder="e.g. Rice Dishes"')+'</div><datalist id="pcl">'+cats.map(function(c){return '<option value="'+esc(c)+'">'}).join('')+'</datalist>'+
+   '<label style="display:flex;gap:.5rem;align-items:center;margin-top:.8rem"><input type="checkbox" name="pa"'+(!p||p.in_stock?' checked':'')+' style="width:auto"> Available to order</label>'+
+   (S.vertical==='pharmacy'?'<label style="display:flex;gap:.5rem;align-items:center;margin-top:.5rem"><input type="checkbox" name="px"'+(p&&p.rx?' checked':'')+' style="width:auto"> Needs a prescription</label>':'')+
+   '<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">'+(p?'Save changes':'Add')+'</button></div>';
+}
+function pSubmit(id){return function(d){
+  var price=parseInt(String(d.pp).replace(/\D/g,''),10);
+  if(!d.pn.trim())return 'Enter a name.';
+  if(!(price>=0))return 'Enter a price in naira.';
+  var b=$('#mf button[type=submit]');b.disabled=true;
+  lrpc('merchant_product_save',{p_merchant:LV.store.id,p_id:id||null,p_name:d.pn,p_descr:d.pd||'',p_price:price,p_category:d.pc||'',p_in_stock:!!d.pa,p_rx:!!d.px}).then(function(){return liveLoad()}).then(function(){closeM();refresh();toast(id?'Saved.':'Added. Customers can order it now.')},function(e){b.disabled=false;var er=$('#merr');if(er)er.textContent=e.message});
+  return false}}
+function vSettingsLive(){
+  var st=LV.store;
+  return head('Store settings','What customers see about your store.')+
+  '<div class="card pad"><div class="acts" style="justify-content:space-between"><div><h3>Accepting orders</h3><p class="sub">Turn off to pause new orders. Customers see the store as closed.</p></div>'+sw(st.open,'lsOpen','x','Accepting orders')+'</div></div>'+
+  '<form data-form="lstore" class="card pad" style="margin-top:1rem" novalidate><h3>Store details</h3><div class="mgrid" style="margin-top:1rem">'+inp('sn','Store name',st.name,'maxlength="80"')+inp('sh','Opening hours',st.hours,'maxlength="80" placeholder="e.g. 8am – 10pm daily"')+inp('sf','Delivery fee (₦)',st.deliveryFee,'inputmode="numeric"')+inp('se1','Fastest delivery (min)',st.etaMin,'inputmode="numeric"')+inp('se2','Slowest delivery (min)',st.etaMax,'inputmode="numeric"')+'</div>'+
+  '<p class="sub" style="margin-top:.8rem">Area: '+esc(st.area||'Not set')+' · Type: '+esc(V[st.vertical])+'. To change these, contact ChowBuy support.</p><div class="acts" style="margin-top:1rem"><button type="submit" class="btn pri">Save changes</button></div></form>';
+}
+FORMS.lstore=function(f){
+  var d=fdata(f),fee=parseInt(d.sf,10),a=parseInt(d.se1,10),b=parseInt(d.se2,10);
+  if(d.sn.trim().length<2){toast('Enter a store name.','warn');return}
+  if(!(fee>=0&&fee<=100000)){toast('Enter a delivery fee in naira.','warn');return}
+  if(!(a>=1&&b>=a&&b<=240)){toast('Enter a delivery time range, fastest first.','warn');return}
+  lreq('/rest/v1/merchants?id=eq.'+encodeURIComponent(LV.store.id),'PATCH',{name:d.sn.trim(),hours:d.sh.trim(),delivery_fee:fee,eta_min:a,eta_max:b}).then(function(){return liveBoot()}).then(function(){buildNav();refresh();toast('Saved.')},liveErr);
+};
+Object.assign(A,{
+ goLive:function(){
+   var who='';try{who=localStorage.getItem('cb-merch-who')||''}catch(e){}
+   openM('<h3>Go live</h3><p class="muted">Sign in with the account linked to your store to see your real orders and menu instead of sample data.</p>'+inp('le','Email',who,'type="email" autocomplete="username" autocapitalize="off"')+inp('lp','Password','','type="password" autocomplete="current-password"')+'<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Sign in</button></div>',function(d){
+     if(!d.le.trim()||!d.lp)return 'Enter your email and password.';
+     var b=$('#mf button[type=submit]');b.disabled=true;b.textContent='Signing in…';
+     lsignIn(d.le.trim(),d.lp).then(function(){closeM();toast('You are live. This is your real store.')},function(e){var er=$('#merr');if(er)er.textContent=e.message;b.disabled=false;b.textContent='Sign in'});
+     return false});
+ },
+ liveRefresh:function(){liveLoad().then(function(){refresh();toast('Up to date.')},liveErr)},
+ pNew:function(){openM(pForm(null),pSubmit(null))},
+ pEdit:function(el){var p=find(LV.products,el.getAttribute('data-id'));if(p)openM(pForm(p),pSubmit(p.id))},
+ pStock:function(el){var p=find(LV.products,el.getAttribute('data-id'));if(!p)return;var v=!p.in_stock;p.in_stock=v;refresh();lrpc('merchant_product_stock',{p_id:p.id,p_in_stock:v}).then(function(){toast(p.name+(v?' is available.':' is marked unavailable.'))},function(e){p.in_stock=!v;refresh();liveErr(e)})},
+ pDel:function(el){var p=find(LV.products,el.getAttribute('data-id'));if(!p)return;confirmM('Delete '+esc(p.name)+'?','Customers will no longer see it. Past orders are not affected.','Delete',function(){lrpc('merchant_product_delete',{p_id:p.id}).then(function(){return liveLoad()}).then(function(){refresh();toast('Deleted.')},liveErr)},true)},
+ lsOpen:function(){var v=!LV.store.open;lrpc('merchant_set_open',{p_merchant:LV.store.id,p_open:v}).then(function(){LV.store.open=v;buildLiveS();refresh();toast(v?'Store is open for orders.':'Store paused. Customers see it as closed.')},liveErr)}
+});
+['accept','reject','ready','status','signout','odetail'].forEach(function(k){
+  var orig=A[k];
+  A[k]=function(el,e){
+    if(!LV.on)return orig(el,e);
+    if(k==='signout')return lsignOut();
+    if(k==='status'){var v=el.getAttribute('data-id');if(v==='rush')return;if((v==='open')===LV.store.open)return;return A.lsOpen()}
+    var o=find(S.orders,el.getAttribute('data-id'));if(!o)return;
+    if(k==='odetail'){openM('<h3>'+esc(o.id)+' '+pill(o.status,OPILL[o.status])+'</h3><div class="kv"><span>Customer</span><b>'+esc(o.customer)+'</b><span>Delivery address</span><b>'+esc(o.addr)+'</b><span>Placed</span><b>'+dstr(o.ts)+'</b><span>Payment</span><b>'+esc(o.pay)+(o.paid?' (paid)':' (collect on delivery)')+'</b><span>Rider</span><b>'+(o.rider?esc(o.rider.name+(o.rider.plate?' · '+o.rider.plate:'')):'Not assigned yet')+'</b></div><ul class="ol" style="margin-top:1rem">'+o.lines.map(lineHtml).join('')+'</ul>'+(o.note?'<p class="onote">'+ic('msg')+esc(o.note)+'</p>':'')+'<div class="kv tot"><span>Items</span><b class="mono">'+ngn(o.sub)+'</b><span>Delivery fee</span><b class="mono">'+ngn(o.fee)+'</b></div><div class="ft"><button type="button" class="btn" data-m="x">Close</button></div>');return}
+    if(k==='ready'){lrpc('merchant_mark_ready',{p_order:o.id}).then(function(){return liveLoad()}).then(function(){U.tab.ord='ready';refresh();toast(o.id+' is marked ready. The rider will collect it.')},liveErr);return}
+    var cancel=k==='reject';
+    if(!cancel){
+      openM('<h3>Start preparing '+esc(o.id)+'?</h3><p class="muted">The customer is told you are preparing their order, and a nearby rider can accept it.</p>'+mfoot2('Start preparing',false),function(){
+        var b=$('#mf button[type=submit]');b.disabled=true;
+        lrpc('merchant_set_stage',{p_order:o.id,p_stage:'preparing'}).then(function(){return liveLoad()}).then(function(){U.tab.ord='preparing';closeM();refresh();toast('Preparing '+o.id+'.')},function(er){b.disabled=false;var m2=$('#merr');if(m2)m2.textContent=er.message});
+        return false});
+      return}
+    var reasons=['Item out of stock','Store closing early','Power or equipment problem','Too busy to take this order','Other'];
+    openM('<h3>Cancel '+esc(o.id)+'?</h3><p class="muted">'+(o.paid?'The customer has paid, so they are refunded in full to their ChowBuy wallet automatically.':'The customer pays on delivery, so nothing needs refunding.')+' Your reason is sent to ChowBuy admin.</p><div class="radios col" style="margin:1rem 0">'+reasons.map(function(x,i){return '<label class="rad"><input type="radio" name="reason" value="'+esc(x)+'"'+(i===0?' checked':'')+'><span>'+esc(x)+'</span></label>'}).join('')+'</div>'+inp('rn','If other, tell us why','','maxlength="150" placeholder="Reason"')+mfoot2('Cancel order and refund',true),function(d){
+      var why=d.reason==='Other'?(d.rn||'').trim():d.reason;if(!why||why.length<3)return 'Tell us why you are cancelling.';
+      var b=$('#mf button[type=submit]');b.disabled=true;
+      lrpc('merchant_cancel_order',{p_order:o.id,p_reason:why}).then(function(r){return liveLoad().then(function(){return r})}).then(function(r){U.tab.ord='cancelled';closeM();refresh();toast(o.id+' cancelled.'+(r&&r.refunded?' '+ngn(r.refunded)+' refunded to the customer.':''))},function(er){b.disabled=false;var m2=$('#merr');if(m2)m2.textContent=er.message});
+      return false});
+  };
+});
+function mfoot2(ok,danger){return '<div class="ft"><button type="button" class="btn" data-m="x">Back</button><button type="submit" class="btn '+(danger?'danger':'pri')+'">'+ok+'</button></div>'}
+ROUTES.forEach(function(r){r.lf={'':vDashLive,orders:vOrders,menu:vCatalogLive,products:vCatalogLive,settings:vSettingsLive}[r.p]});
+setInterval(function(){if(LV.on&&document.visibilityState==='visible'&&!$('#mwrap').classList.contains('show')&&!(document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)))liveLoad().then(function(){var r=cur();if(r&&(r.p===''||r.p==='orders'))refresh();else renderBar()},function(){})},20000);
+
 /* ---------- init ---------- */
 buildNav();
 setTheme(savedTheme||(mq.matches?'dark':'light'));
@@ -997,8 +1181,12 @@ $('#bell').innerHTML=ic('bell')+'<span class="dot" id="nbadge"></span>';
 $('#burger').addEventListener('click',openSide);$('#closeSide').addEventListener('click',closeSide);$('#scrim').addEventListener('click',closeSide);
 $('#nav').addEventListener('click',function(e){if(e.target.closest('a'))closeSide()});
 document.body.addEventListener('keydown',function(e){if(e.key==='Tab'&&$('#mwrap').classList.contains('show')){var f=[].filter.call($('#mbody').querySelectorAll('button,input,select,textarea,a[href],[tabindex="0"]'),function(x){return !x.disabled&&x.offsetParent!==null});if(!f.length)return;var a=f[0],z=f[f.length-1];if(e.shiftKey&&document.activeElement===a){e.preventDefault();z.focus()}else if(!e.shiftKey&&document.activeElement===z){e.preventDefault();a.focus()}}});
-render(false);
+var bootMsg=lget('cb-merch-msg');lset('cb-merch-msg','');
+if(lget('cb-merch-tok')){
+  $('#view').innerHTML='<div class="card pad"><p class="sub">Loading your store…</p></div>';
+  liveBoot().then(function(){buildNav();render(false)},function(e){LV.on=false;lset('cb-merch-tok','');lset('cb-merch-rt','');S=load();buildNav();render(false);toast(e.message,'err')});
+}else{render(false);if(bootMsg)toast(bootMsg,'warn')}
 setInterval(tick,1000);
-setInterval(function(){if(S.store.status!=='paused'&&document.visibilityState==='visible'&&!$('#mwrap').classList.contains('show')&&S.vertical!=='pharmacy'||0)simOrder(false)},45000);
+setInterval(function(){if(!LV.on&&S.store.status!=='paused'&&document.visibilityState==='visible'&&!$('#mwrap').classList.contains('show')&&S.vertical!=='pharmacy'||0)simOrder(false)},45000);
 window.addEventListener('storage',function(e){if(e.key===KEY)location.reload()});
 })();

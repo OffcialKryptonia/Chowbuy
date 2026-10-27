@@ -161,7 +161,7 @@ function barChart(vals,start){
 var RANGES=[['Last 7 days',.23],['Last 30 days',1],['Last 90 days',2.86]];
 function vDash(){
   if(beOn())return vDashLive();
-  return vDashDemo().replace('<div class="grid g4">',signInCard()+'<div class="grid g4">');
+  return vDashDemo().replace('<div class="grid g4">',modeCard()+'<div class="grid g4">');
 }
 function vDashDemo(){
   var r=RANGES[U.range],f=r[1],lb=r[0].replace('Last ','').replace(' days','d');
@@ -189,7 +189,7 @@ function vOrders(){
   var q=(U.q.orders||'').trim().toLowerCase(),tv=T('ordV','all'),ts=T('ordS','all'),live=liveOn();
   var list=(live?L.orders.rows:S.orders).filter(function(o){return(tv==='all'||o.vertical===tv)&&(ts==='all'||o.status===ts)&&(!q||(o.id+' '+o.customer+' '+o.merchant+' '+o.rider).toLowerCase().indexOf(q)>-1)});
   var pg=paged(list,'orders',12);
-  var rows=pg.rows.map(function(o){return '<tr><td class="mono nw"><b>'+esc(o.id)+'</b></td><td class="nw muted">'+fdt(o.placed)+'</td><td>'+vbadge(o.vertical)+'</td><td>'+esc(o.merchant)+'</td><td>'+esc(o.customer)+'</td><td>'+esc(o.city)+'</td><td class="r mono">'+ngn(o.total)+'</td><td class="r mono">'+ngn(o.commission)+'</td><td>'+pill(o.status)+'</td><td>'+(o.rider?esc(o.rider):'<span class="muted">'+(live&&o.status==='completed'?'—':'Unassigned')+'</span>')+'</td><td class="r">'+(live?'':btn(ic('edit')+'Manage','order',o.id))+'</td></tr>'}).join('');
+  var rows=pg.rows.map(function(o){return '<tr><td class="mono nw"><b>'+esc(o.id)+'</b></td><td class="nw muted">'+fdt(o.placed)+'</td><td>'+vbadge(o.vertical)+'</td><td>'+esc(o.merchant)+'</td><td>'+esc(o.customer)+'</td><td>'+esc(o.city)+'</td><td class="r mono">'+ngn(o.total)+'</td><td class="r mono">'+ngn(o.commission)+'</td><td>'+pill(o.status)+(live&&o.cancel_reason?'<div class="muted" style="font-size:.78rem;max-width:16rem;white-space:normal">'+(o.cancelled_by==='admin'?'Admin':'Merchant')+': '+esc(o.cancel_reason)+(o.refunded?' · refunded '+ngn(o.refunded):'')+'</div>':'')+'</td><td>'+(o.rider?esc(o.rider):'<span class="muted">'+(live&&o.status==='completed'?'—':'Unassigned')+'</span>')+'</td><td class="r">'+(live?'':btn(ic('edit')+'Manage','order',o.id))+'</td></tr>'}).join('');
   return head('Orders',live?'Real orders from your backend (latest 200).':'Every order across restaurants, super marts, pharmacies and packages.',btn(ic('down')+'Export CSV','csvOrders',null,'')) +liveBar()+
   '<div class="card"><div class="bar">'+search('orders','Search ref, customer, merchant or rider')+'</div><div class="bar" style="gap:1rem">'+tabs('ordV',[['all','All'],['restaurant','Restaurants'],['grocery','Super Marts'],['pharmacy','Pharmacies'],['package','Packages']],1)+tabs('ordS',[['all','All'],['processing','Processing'],['completed','Completed'],['pending','Pending'],['cancelled','Cancelled']],1)+'</div>'+
   (list.length?'<div class="tw"><table class="t" style="min-width:68rem"><thead><tr><th>Reference</th><th>Placed</th><th>Vertical</th><th>Merchant</th><th>Customer</th><th>City</th><th class="r">Total</th><th class="r">Commission</th><th>Status</th><th>Rider</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+pager(pg,'orders'):empty('search','No orders match','Try a different search or clear the filters.',btn('Clear filters','clear','orders','pri')))+'</div>';
@@ -212,13 +212,13 @@ function openOrder(id){
 }
 
 function vMerchants(){
-  var live=liveOn(),SRC=live?L.merchants.map(function(m){return{id:m.id,name:m.name,city:m.city,vertical:m.vertical,status:m.active?'active':'pending',branches:1,joined:null,orders30:m.orders30,gmv30:m.gmv30,rate:m.rating_pct,kyc:m.docs_ok>0?'verified':m.docs_pending>0?'in review':'pending'}}):S.merchants;
+  var live=liveOn(),SRC=live?L.merchants.map(function(m){return{id:m.id,name:m.name,city:m.city,vertical:m.vertical,status:m.active?'active':'pending',branches:1,joined:null,orders30:m.orders30,gmv30:m.gmv30,rate:m.rating_pct,kyc:m.docs_ok>0?'verified':m.docs_pending>0?'in review':'pending',owner:m.owner||''}}):S.merchants;
   var q=(U.q.merch||'').trim().toLowerCase(),tv=T('merV','all');
   var list=SRC.filter(function(m){return(tv==='all'||m.vertical===tv)&&(!q||(m.name+' '+m.city).toLowerCase().indexOf(q)>-1)});
   var pend=SRC.filter(function(m){return m.status==='pending'}).length;
   var rows=list.map(function(m){
-    var act=live?'':m.status==='pending'?btn(ic('check')+'Approve','approveM',m.id,'pri'):m.status==='active'?btn(ic('ban')+'Suspend','suspendM',m.id,'danger'):btn(ic('refresh')+'Reinstate','suspendM',m.id);
-    return '<tr><td><div class="who">'+tile(m.name,m.vertical)+'<div><b>'+esc(m.name)+'</b><small>'+esc(m.city)+' · '+m.branches+' branch'+(m.branches>1?'es':'')+(m.joined?' · Joined '+fdate(m.joined):'')+'</small></div></div></td><td>'+vbadge(m.vertical)+'</td><td class="r mono">'+num(m.orders30)+'</td><td class="r mono">'+ngn(m.gmv30)+'</td><td class="r mono">'+m.rate+'%</td><td>'+pill(m.kyc,null,m.kyc==='verified'?'shield':'')+'</td><td>'+pill(m.status)+'</td><td class="r">'+act+'</td></tr>'}).join('');
+    var act=live?btn(ic('users')+(m.owner?'Change owner':'Assign owner'),'merOwner',m.id):m.status==='pending'?btn(ic('check')+'Approve','approveM',m.id,'pri'):m.status==='active'?btn(ic('ban')+'Suspend','suspendM',m.id,'danger'):btn(ic('refresh')+'Reinstate','suspendM',m.id);
+    return '<tr><td><div class="who">'+tile(m.name,m.vertical)+'<div><b>'+esc(m.name)+'</b><small>'+esc(m.city)+' · '+m.branches+' branch'+(m.branches>1?'es':'')+(m.joined?' · Joined '+fdate(m.joined):'')+(live?' · '+(m.owner?'Owner: '+esc(m.owner):'No owner yet'):'')+'</small></div></div></td><td>'+vbadge(m.vertical)+'</td><td class="r mono">'+num(m.orders30)+'</td><td class="r mono">'+ngn(m.gmv30)+'</td><td class="r mono">'+m.rate+'%</td><td>'+pill(m.kyc,null,m.kyc==='verified'?'shield':'')+'</td><td>'+pill(m.status)+'</td><td class="r">'+act+'</td></tr>'}).join('');
   return head('Merchants',live?'Real merchants from your backend. Approve them under KYC review.':'Approve onboarding, review KYC and control who can sell on ChowBuy.',pend?'<span class="badge-un">'+pend+' '+(live?'not live yet':'awaiting approval')+'</span>':'')+liveBar()+
   '<div class="card"><div class="bar">'+search('merch','Search by business name or city')+tabs('merV',[['all','All'],['restaurant','Restaurant'],['grocery','Grocery'],['pharmacy','Pharmacy'],['package','Package']],1)+'</div>'+
   (list.length?'<div class="tw"><table class="t" style="min-width:60rem"><thead><tr><th>Merchant</th><th>Vertical</th><th class="r">Orders (30d)</th><th class="r">GMV (30d)</th><th class="r">Commission</th><th>KYC</th><th>Status</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="foot"><span>'+list.length+' merchant'+(list.length>1?'s':'')+'</span></div>':empty('building','No merchants found','Adjust your filters to see more.',btn('Clear filters','clear','merch','pri')))+'</div>';
@@ -640,7 +640,14 @@ function render(keep){
   var un=S.notifs.filter(function(n){return!n.read}).length,d=$('#nbadge');d.textContent=un;d.style.display=un?'':'none';
   $('#notifList').innerHTML=S.notifs.map(function(n){return '<button type="button" class="it'+(n.read?'':' unread')+'" data-act="readN" data-id="'+n.id+'" style="width:100%;text-align:left">'+ic(n.read?'check':'bell')+'<span>'+esc(n.t)+'</span></button>'}).join('');
   var av=$('#avTop');if(av){av.innerHTML=avHtml();av.setAttribute('style',avStyle())}
+  syncShell();
   if(!keep){window.scrollTo(0,0)}
+}
+function syncShell(){
+  var on=beOn(),l=$('#modeLive'),d=$('#modeDemo'),n=$('#modeNote'),r=$('#resetBtn');
+  if(l)l.setAttribute('aria-pressed',on);if(d)d.setAttribute('aria-pressed',!on);
+  if(n)n.textContent=on?'Real data from your backend.':'Sample data only. Nothing is sent.';
+  if(r)r.style.display=on?'none':'';
 }
 function refresh(){
   var a=document.activeElement,fid=a&&a.getAttribute&&a.getAttribute('data-fid'),s,e;
@@ -1546,28 +1553,41 @@ function eDirty(){return !!U.edraft&&JSON.stringify(U.edraft)!==JSON.stringify(S
 
 /* ---- backend connection (Supabase). Without it everything here runs as a demo on this browser only. ---- */
 var DEFAULT_URL='https://nhaxcyfkbrbwlqbpizjo.supabase.co',DEFAULT_ANON='sb_publishable_fEoqE8u49jwFe1v36CacDg_seaMgyUS';   /* publishable by design: every table is behind row-level security */
-var BE={url:'',anon:'',tok:'',who:''};
+var BE={url:'',anon:'',tok:'',rt:'',who:'',demo:false};
 try{var _b=JSON.parse(localStorage.getItem('cb-admin-be')||'{}');BE.url=_b.url||'';BE.anon=_b.anon||'';BE.who=_b.who||''}catch(e){}
 if(!BE.url)BE.url=DEFAULT_URL;if(!BE.anon)BE.anon=DEFAULT_ANON;
-try{BE.tok=sessionStorage.getItem('cb-admin-tok')||''}catch(e){}
-function beOn(){return !!(BE.url&&BE.anon&&BE.tok)}
-function beSaveLocal(){try{localStorage.setItem('cb-admin-be',JSON.stringify({url:BE.url,anon:BE.anon,who:BE.who}))}catch(e){}try{if(BE.tok)sessionStorage.setItem('cb-admin-tok',BE.tok);else sessionStorage.removeItem('cb-admin-tok')}catch(e){}}
-function beReq(path,method,body,tok){
+try{BE.tok=sessionStorage.getItem('cb-admin-tok')||'';BE.rt=sessionStorage.getItem('cb-admin-rt')||'';BE.demo=sessionStorage.getItem('cb-admin-mode')==='demo'}catch(e){}
+/* The sign-in page (gate.js) has already proved the account is an admin. Live = real backend; Demo = sample data, same session. */
+function beOn(){return !!(BE.url&&BE.anon&&BE.tok&&!BE.demo)}
+function beSaveLocal(){try{localStorage.setItem('cb-admin-be',JSON.stringify({url:BE.url,anon:BE.anon,who:BE.who}))}catch(e){}try{
+  if(BE.tok)sessionStorage.setItem('cb-admin-tok',BE.tok);else sessionStorage.removeItem('cb-admin-tok');
+  if(BE.rt)sessionStorage.setItem('cb-admin-rt',BE.rt);else sessionStorage.removeItem('cb-admin-rt');
+  if(BE.demo)sessionStorage.setItem('cb-admin-mode','demo');else sessionStorage.removeItem('cb-admin-mode')}catch(e){}}
+/* Leave the console and return to the sign-in page. */
+function beEnd(msg){BE.tok='';BE.rt='';BE.demo=false;beSaveLocal();try{if(msg)sessionStorage.setItem('cb-admin-msg',msg)}catch(e){}location.reload()}
+var refreshing=null;
+function beRefresh(){
+  if(!BE.rt)return Promise.reject(new Error('no refresh token'));
+  if(!refreshing)refreshing=fetch(BE.url.replace(/\/+$/,'')+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:BE.anon,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:BE.rt})})
+   .then(function(r){return r.json().then(function(j){if(!r.ok||!j.access_token)throw new Error('refresh failed');BE.tok=j.access_token;BE.rt=j.refresh_token||BE.rt;beSaveLocal();return BE.tok})})
+   .then(function(t){refreshing=null;return t},function(e){refreshing=null;throw e});
+  return refreshing;
+}
+function beReq(path,method,body,tok,retried){
   return fetch(BE.url.replace(/\/+$/,'')+path,{method:method||'GET',headers:{apikey:BE.anon,Authorization:'Bearer '+(tok||BE.tok||BE.anon),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined})
    .then(function(r){return r.text().then(function(t){var j={};try{j=t?JSON.parse(t):{}}catch(e){}
-     if(!r.ok){if(r.status===401&&BE.tok){BE.tok='';beSaveLocal()}throw new Error(j.message||j.msg||j.error_description||j.error||('Request failed ('+r.status+')'))}
-     return j})},function(){throw new Error('Could not reach the server. Check the project URL and your connection.')});
+     if(!r.ok){
+       if(r.status===401&&BE.tok&&!tok){
+         if(!retried&&BE.rt)return beRefresh().then(function(){return beReq(path,method,body,null,true)},function(){beEnd('Your session expired. Please sign in again.');throw new Error('Session expired')});
+         beEnd('Your session expired. Please sign in again.');
+       }
+       throw new Error(j.message||j.msg||j.error_description||j.error||('Request failed ('+r.status+')'))}
+     return j})},function(){throw new Error('Could not reach the server. Check your connection.')});
 }
 function beFn(name,body){return beReq('/functions/v1/'+name,'POST',body||{})}
-function beConnect(url,anon,email,pw){
-  url=String(url||'').trim().replace(/\/+$/,'');anon=String(anon||'').trim();
-  if(!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(url))return Promise.reject(new Error('The project URL looks like https://xxxx.supabase.co'));
-  if(anon.length<20)return Promise.reject(new Error('Paste the publishable (anon) key.'));
-  BE.url=url;BE.anon=anon;
-  return beReq('/auth/v1/token?grant_type=password','POST',{email:email,password:pw},anon).then(function(j){
-    BE.tok=j.access_token;BE.who=email;beSaveLocal();
-    return beReq('/functions/v1/admin-settings','GET').catch(function(e){BE.tok='';beSaveLocal();throw new Error(/admin/i.test(e.message)?'This account is not an admin.':'Signed in, but the admin functions are not deployed yet ('+e.message+').')});
-  }).then(function(j){
+/* Pull the saved email settings, templates and broadcast history once the console is in live mode. */
+function beHydrate(){
+  return beReq('/functions/v1/admin-settings','GET').then(function(j){
     var h={};Object.keys(j.hints||{}).forEach(function(k){h[k]=j.hints[k].hint});if(j.templates&&Array.isArray(j.templates.items))U.mailTemplates=j.templates.items;S.msg.email.hints=h;if(U.edraft)U.edraft.hints=h;
     return Promise.all([beReq('/rest/v1/platform_settings?key=in.(email,public)&select=key,value','GET'),beReq('/rest/v1/broadcasts?select=*&order=created_at.desc&limit=15','GET')]);
   }).then(function(r){
@@ -1577,7 +1597,7 @@ function beConnect(url,anon,email,pw){
     U.hist=r[1];save();
   });
 }
-function beDisconnect(){BE.tok='';beSaveLocal();U.hist=null;L.dash=L.orders=L.merchants=L.me=L.team=L.sessions=L.riders=L.fin=L.wt=L.cat=L.chat=L.chf=L.loc=L.groups=L.sc=null}
+function beDisconnect(){U.hist=null;L.dash=L.orders=L.merchants=L.me=L.team=L.sessions=L.riders=L.fin=L.wt=L.cat=L.chat=L.chf=L.loc=L.groups=L.sc=null}
 
 /* ---- live numbers: once connected, the dashboard, orders and merchants show the real backend instead of sample data ---- */
 var L={dash:null,orders:null,merchants:null,me:null,team:null,sessions:null,riders:null,fin:null,wt:null,cat:null,err:'',busy:false};
@@ -1590,13 +1610,11 @@ function liveLoad(){
    .then(function(){L.busy=false;refresh()});
 }
 function liveOn(){return beOn()&&!!L.orders}
-function signInCard(){
-  return '<div class="card pad" style="border-color:var(--warn,#F59E0B)"><h3>Demo data '+'<span class="pill warn">Not signed in</span></h3><p class="sub">The numbers below are examples. Sign in with your admin account to see your real ChowBuy numbers.</p>'+
-   '<form data-form="beConnect" style="display:grid;gap:.8rem;margin-top:.8rem"><input type="hidden" name="be-url" id="be-url" value="'+esc(BE.url)+'"><input type="hidden" name="be-anon" id="be-anon" value="'+esc(BE.anon)+'"><div class="frow">'+inp('be-em','Admin email',BE.who,'type="email" autocomplete="username"')+inp('be-pw','Password','','type="password" autocomplete="current-password"')+'</div>'+
-   '<div class="acts"><button type="submit" class="btn pri sm"'+(U.beBusy?' disabled':'')+'>'+(U.beBusy?'Signing in…':'Sign in')+'</button><small class="muted" role="status">'+esc(U.beMsg)+'</small></div></form></div>';
+function modeCard(){
+  return '<div class="card pad" style="border-color:var(--warn,#F59E0B)"><div class="acts" style="justify-content:space-between"><div><h3>Demo mode '+'<span class="pill warn">Sample data</span></h3><p class="sub">The numbers below are examples and nothing here reaches real users. Switch to Live to see and manage your real ChowBuy data.</p></div>'+btn('Switch to Live','modeLive',null,'pri')+'</div></div>';
 }
 function liveBar(){
-  if(!beOn())return signInCard();
+  if(!beOn())return modeCard();
   if(L.err)return '<div class="card pad" style="border-color:var(--red)"><b>Could not load your live data.</b> <span class="muted">'+esc(L.err)+'</span> <span class="acts" style="display:inline-flex;margin-left:.6rem">'+btn('Try again','liveReload')+'</span></div>';
   return '';
 }
@@ -1631,16 +1649,9 @@ function vDashLive(){
   '<div class="card pad"><div class="acts" style="justify-content:space-between"><div><h3>Recent activity</h3><p class="sub">Audit trail of operational changes</p></div></div><div class="feed" style="margin-top:.6rem">'+(feed||'<p class="sub">Nothing yet.</p>')+'</div></div>';
 }
 function beCard(){
-  if(beOn())return '<div class="card pad"><div class="acts" style="justify-content:space-between"><div><h3>Backend connected '+'<span class="pill ok">'+ic('checkc')+'Live</span></h3><p class="sub">Signed in as '+esc(BE.who)+'. Saving here writes to your Supabase project; broadcasts reach real users.</p></div>'+btn('Disconnect','beOff',null,'')+'</div></div>';
-  return '<div class="card pad" style="border-color:var(--warn,#F59E0B)"><h3>Demo mode '+'<span class="pill warn">Not connected</span></h3><p class="sub">Nothing here reaches a real server or real users until you connect your Supabase project. Sign in with an admin account (a profile whose role is <code>admin</code>).</p>'+
-   '<form data-form="beConnect" style="display:grid;gap:.8rem;margin-top:1rem"><div class="frow">'+inp('be-url','Project URL',BE.url,'placeholder="https://xxxx.supabase.co" autocomplete="off" spellcheck="false"')+inp('be-anon','Publishable key',BE.anon,'placeholder="sb_publishable_…" autocomplete="off" spellcheck="false"')+'</div><div class="frow">'+inp('be-em','Admin email',BE.who,'type="email" autocomplete="username"')+inp('be-pw','Password','','type="password" autocomplete="current-password"')+'</div>'+
-   '<div class="acts"><button type="submit" class="btn pri sm"'+(U.beBusy?' disabled':'')+'>'+(U.beBusy?'Connecting…':'Connect')+'</button><small class="muted" role="status">'+esc(U.beMsg)+'</small></div></form><small class="muted" style="display:block;margin-top:.6rem">The password is sent only to Supabase to sign in and is not stored. The session ends when you close this tab.</small></div>';
+  if(beOn())return '<div class="card pad"><div class="acts" style="justify-content:space-between"><div><h3>Live mode '+'<span class="pill ok">'+ic('checkc')+'Live</span></h3><p class="sub">Signed in as '+esc(BE.who)+'. Saving here writes to your ChowBuy backend; broadcasts reach real users.</p></div>'+btn('Switch to Demo','modeDemo',null,'')+'</div></div>';
+  return modeCard();
 }
-FORMS.beConnect=function(f){
-  var v=fd(f);U.beBusy=true;U.beMsg='';refresh();
-  beConnect(v['be-url'],v['be-anon'],v['be-em'],v['be-pw']).then(function(){U.beBusy=false;U.beMsg='';refresh();toast('Connected to your backend.');liveLoad()},function(e){U.beBusy=false;U.beMsg=e.message;refresh();toast(e.message,'err')});
-};
-
 /* ---- Settings: Email ---- */
 function vEmail(){
   var D=ed(),dirty=eDirty(),P=eprov(D.provider),live=beOn();
@@ -1677,7 +1688,16 @@ function eMissing(D){var P=eprov(D.provider),keys=D.provider==='ses'?['ses_acces
 Object.assign(INP,{email:function(k,v){var D=ee();if(k==='smtp.port')v=v.replace(/\D/g,'');if(/(^|\.)raw\./.test(k)&&v===''){delPath(D,k)}else setPath(D,k,v);refresh()}});
 Object.assign(CHG,{email:function(k,v){var D=ee();if(k==='smtp.secure')v=(v==='true');setPath(D,k,v);U.econn='';refresh()}});
 Object.assign(A,{
- beOff:function(){beDisconnect();refresh();toast('Disconnected. Back to demo mode.')},
+ merOwner:function(el){
+   var id=el.getAttribute('data-id'),m=(L.merchants||[]).filter(function(x){return x.id===id})[0];if(!m)return;
+   openM('<h3>Store owner for '+esc(m.name)+'</h3><p class="sub">The owner signs in at chowbuy.ng/merchant with this account to run the store. They must already have a ChowBuy account (sign up in the app). Leave empty to remove the owner.</p>'+inp('own','Owner email',m.owner||'','type="email" autocomplete="off" placeholder="owner@example.com"')+'<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Save</button></div>',function(d){
+     var b=$('#mf button[type=submit]');b.disabled=true;
+     beReq('/rest/v1/rpc/admin_merchant_owner','POST',{p_merchant:id,p_email:(d.own||'').trim()}).then(function(){return liveLoad()}).then(function(){closeM();refresh();toast(d.own&&d.own.trim()?'Owner saved.':'Owner removed.')},function(e){b.disabled=false;var er=$('#merr');if(er)er.textContent=e.message});
+     return false});
+ },
+ modeDemo:function(){BE.demo=true;beSaveLocal();beDisconnect();refresh();toast('Demo mode. You are looking at sample data.')},
+ modeLive:function(){BE.demo=false;beSaveLocal();refresh();toast('Live mode.');beHydrate().then(function(){refresh()},function(){});liveLoad()},
+ signOut:function(){var t=BE.tok,u=BE.url;try{if(t)fetch(u.replace(/\/+$/,'')+'/auth/v1/logout',{method:'POST',headers:{apikey:BE.anon,Authorization:'Bearer '+t}}).catch(function(){})}catch(e){}beEnd('')},
  emDiscard:function(){U.edraft=null;refresh();toast('Unsaved email changes discarded.')},
  emSave:function(){
    if(!eDirty()){toast('No email changes to save.','warn');return}
@@ -1805,7 +1825,7 @@ document.addEventListener('click',function(e){
 });
 document.addEventListener('submit',function(e){
   var f=e.target;
-  if(f.id==='mf'){e.preventDefault();var r=Mfn&&Mfn(fd(f));if(typeof r==='string'){var er=$('#merr');if(er)er.textContent=r;return}closeM();return}
+  if(f.id==='mf'){e.preventDefault();var r=Mfn&&Mfn(fd(f));if(typeof r==='string'){var er=$('#merr');if(er)er.textContent=r;return}if(r===false)return;closeM();return}
   var n=f.getAttribute&&f.getAttribute('data-form');if(n&&FORMS[n]){e.preventDefault();FORMS[n](f)}
 });
 document.addEventListener('input',function(e){var t=e.target;if(t.closest&&t.closest('[data-form=pw]')){pwLive();return}var k=t.getAttribute&&t.getAttribute('data-in');if(!k||t.composing)return;var p=k.split(':');INP[p[0]](p[1],t.value)});
@@ -2199,7 +2219,7 @@ $('#ctxIcon').innerHTML=ic('shield');$('#extIcon').innerHTML=ic('ext');
 setTheme(savedTheme||(mq.matches?'dark':'light'));
 if(mq.addEventListener)mq.addEventListener('change',function(e){if(!savedTheme)setTheme(e.matches?'dark':'light')});
 render(false);
-if(beOn())liveLoad();
+if(beOn()){beHydrate().then(function(){refresh()},function(){});liveLoad()}
 setInterval(function(){var r=cur();if(beOn()&&document.visibilityState==='visible'&&r&&(r.p===''||r.p==='orders'||r.p==='merchants'))liveLoad()},60000);
 setInterval(function(){var r=cur();if(beOn()&&document.visibilityState==='visible'&&r&&r.p==='riders')ridersLoad()},20000);
 })();
