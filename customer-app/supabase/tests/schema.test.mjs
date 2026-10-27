@@ -708,4 +708,40 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
   });
   await su(`reset role`);
 }
+
+/* ---- cancel with refund + reason, and mark ready ---- */
+{
+  const su = async sql => { await db.exec('reset role'); await db.exec(sql); };
+  await su(`update wallets set balance = 50000 where user_id = '${A}'; update merchants set owner_id = '${M}' where id = 'm1'`);
+  const bal = async () => (await q(`select balance from wallets where user_id = '${A}'`))[0].balance;
+  const paidO = (await as(A, () => q(`select place_order('m1', '[{"product_id":"p3","qty":1}]'::jsonb, 'wallet', $1, null) r`, [addr])))[0].r.order;
+  const paidTotal = (await q(`select total from orders where id = '${paidO.id}'`))[0].total;
+  const before = await bal();
+  await as(M, async () => {
+    await throws('cancel needs a reason', () => q(`select merchant_cancel_order($1, '')`, [paidO.id]), 'reason');
+    await throws('cancelling through set_stage is closed', () => q(`select merchant_set_stage($1, 'cancelled')`, [paidO.id]), 'only start preparing');
+    await throws('cannot mark ready before preparing', () => q(`select merchant_mark_ready($1)`, [paidO.id]), 'Start preparing');
+    await q(`select merchant_set_stage($1, 'preparing')`, [paidO.id]);
+    await q(`select merchant_mark_ready($1)`, [paidO.id]);
+    await q(`select merchant_mark_ready($1)`, [paidO.id]);
+    const row = (await q(`select merchant_orders('m1') r`))[0].r.find(x => x.id === paidO.id);
+    ok('ready is recorded once and shown to the merchant', row && row.stage === 'preparing' && !!row.times.ready, JSON.stringify(row && row.times));
+    const out = (await q(`select merchant_cancel_order($1, 'Item out of stock') r`, [paidO.id]))[0].r;
+    ok('cancelling a paid order reports the refund', out.refunded === paidTotal, JSON.stringify(out));
+    await throws('a second cancel is refused (no double refund)', () => q(`select merchant_cancel_order($1, 'again')`, [paidO.id]), 'no longer');
+  });
+  ok('customer wallet is refunded in full', (await bal()) === before + paidTotal, before + ' -> ' + (await bal()));
+  ok('refund appears in wallet history', (await q(`select 1 from wallet_txs where user_id = '${A}' and ref = 'refund:${paidO.id}' and dir = 1 and amount = ${paidTotal}`)).length === 1);
+  await as(ADM, async () => {
+    const r = (await q(`select admin_orders('all', '${paidO.id}', 10, 0) r`))[0].r.rows[0];
+    ok('admin sees the cancel reason, who cancelled and the refund', r.cancel_reason === 'Item out of stock' && r.cancelled_by === 'merchant' && r.refunded === paidTotal && r.status === 'cancelled', JSON.stringify(r));
+    ok('admin activity feed carries the reason', (await q(`select admin_dashboard(30) d`))[0].d.activity.some(a => /cancelled by .*Item out of stock/.test(a.action)));
+  });
+  const codO = (await as(A, () => q(`select place_order('m1', '[{"product_id":"p3","qty":1}]'::jsonb, 'cod', $1, null) r`, [addr])))[0].r.order;
+  const b2 = await bal();
+  await as(M, async () => { const out = (await q(`select merchant_cancel_order($1, 'Closing early') r`, [codO.id]))[0].r; ok('cancelling a cash order refunds nothing', out.refunded === 0); });
+  ok('wallet unchanged for cash order', (await bal()) === b2);
+  await as(B, async () => { await throws('another customer cannot cancel', () => q(`select merchant_cancel_order($1, 'nope')`, [codO.id]), 'not found'); });
+  await su(`reset role`);
+}
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

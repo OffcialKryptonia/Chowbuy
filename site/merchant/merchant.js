@@ -426,7 +426,8 @@ function oCard(o){
   else if(o.status==='ready')acts=btn(ic('bike')+'Hand to rider','handoff',o.id,'pri');
   else if(o.status==='out')acts=btn(ic('checkc')+'Mark delivered','deliver',o.id,'pri');
   else if(o.status==='completed')acts=btn(ic('swap')+'Refund','refund',o.id);
-  if(LV.on)acts=o.status==='new'?btn(ic('check')+'Start preparing','accept',o.id,'pri')+btn(ic('xc')+'Cancel','reject',o.id,'danger'):'';
+  if(LV.on){var cx=(o.stage==='received'||o.stage==='preparing')?btn(ic('xc')+'Cancel','reject',o.id,'danger'):'';
+    acts=o.status==='new'?btn(ic('check')+'Start preparing','accept',o.id,'pri')+cx:o.status==='preparing'?btn(ic('checkc')+'Mark ready','ready',o.id,'pri')+cx:o.status==='ready'?cx:''}
   return '<article class="oc '+o.status+'"><header><div><b class="mono">'+esc(o.id)+'</b><small class="muted"> · '+ago(o.ts)+'</small></div>'+pill(o.status,OPILL[o.status])+'</header>'+
   '<div class="acts" style="justify-content:space-between"><div><b>'+esc(o.customer)+'</b><div class="muted" style="font-size:.82rem">'+ic('pin')+' '+esc(o.addr)+'</div></div>'+(o.phone?'<a class="ib sm" href="tel:'+esc(o.phone.replace(/\s/g,''))+'" aria-label="Call '+esc(o.customer)+'" data-act="call" data-id="'+esc(o.id)+'">'+ic('phone')+'</a>':'')+'</div>'+
   '<div class="acts"><span class="pill '+(o.paid?'ok':'warn')+'">'+esc(o.pay)+' · '+(o.paid?'paid':'collect '+ngn(otot(o)))+'</span>'+cdBadge(o)+'</div>'+
@@ -1029,8 +1030,9 @@ var STG={received:'new',preparing:'preparing',rider_accepted:'ready',rider_at_st
 var PAYL={korapay:'Card',pocketfi:'Transfer',wallet:'Wallet',cod:'Cash on Delivery'};
 function mapOrder(o){
   var ts=Date.parse(o.created)||Date.now(),t=o.times||{},st=STG[o.stage]||'new',notes=[];
+  if(t.ready&&(o.stage==='preparing'||o.stage==='rider_accepted'||o.stage==='rider_at_store'))st='ready';else if(o.stage==='rider_accepted'||o.stage==='rider_at_store')st='preparing';
   var lines=(o.lines||[]).map(function(l){if(l.note)notes.push(l.name+': '+l.note);return{id:l.productId||'',name:l.name||'Item',qty:l.qty||1,price:l.unitPrice||0,mods:(l.mods||[]).map(function(m){return m.name||m.label||''}).filter(Boolean),extra:0,note:l.note||''}});
-  var a=o.addr||{},r={id:o.id,ts:ts,status:st,customer:o.customer||'Customer',phone:'',addr:[a.line,a.area].filter(Boolean).join(', ')+(a.landmark?' (near '+a.landmark+')':''),pay:PAYL[o.pay]||o.pay,paid:!!o.paid,lines:lines,sub:o.subtotal||0,fee:o.fee||0,note:notes.join(' · '),rider:o.rider?{name:o.rider.name||'Rider',plate:o.rider.plate||'',eta:0}:null};
+  var a=o.addr||{},r={id:o.id,ts:ts,status:st,customer:o.customer||'Customer',phone:'',addr:[a.line,a.area].filter(Boolean).join(', ')+(a.landmark?' (near '+a.landmark+')':''),pay:PAYL[o.pay]||o.pay,paid:!!o.paid,lines:lines,sub:o.subtotal||0,fee:o.fee||0,note:notes.join(' · '),rider:o.rider?{name:o.rider.name||'Rider',plate:o.rider.plate||'',eta:0}:null,stage:o.stage,cancelReason:o.cancelReason||'',refunded:o.refunded||0};
   if(st!=='new'&&st!=='cancelled'){r.acceptedAt=Number(t.preparing)||ts;r.prep=25;r.due=r.acceptedAt+25*60000}
   return r;
 }
@@ -1143,7 +1145,7 @@ Object.assign(A,{
  pDel:function(el){var p=find(LV.products,el.getAttribute('data-id'));if(!p)return;confirmM('Delete '+esc(p.name)+'?','Customers will no longer see it. Past orders are not affected.','Delete',function(){lrpc('merchant_product_delete',{p_id:p.id}).then(function(){return liveLoad()}).then(function(){refresh();toast('Deleted.')},liveErr)},true)},
  lsOpen:function(){var v=!LV.store.open;lrpc('merchant_set_open',{p_merchant:LV.store.id,p_open:v}).then(function(){LV.store.open=v;buildLiveS();refresh();toast(v?'Store is open for orders.':'Store paused. Customers see it as closed.')},liveErr)}
 });
-['accept','reject','status','signout','odetail'].forEach(function(k){
+['accept','reject','ready','status','signout','odetail'].forEach(function(k){
   var orig=A[k];
   A[k]=function(el,e){
     if(!LV.on)return orig(el,e);
@@ -1151,10 +1153,19 @@ Object.assign(A,{
     if(k==='status'){var v=el.getAttribute('data-id');if(v==='rush')return;if((v==='open')===LV.store.open)return;return A.lsOpen()}
     var o=find(S.orders,el.getAttribute('data-id'));if(!o)return;
     if(k==='odetail'){openM('<h3>'+esc(o.id)+' '+pill(o.status,OPILL[o.status])+'</h3><div class="kv"><span>Customer</span><b>'+esc(o.customer)+'</b><span>Delivery address</span><b>'+esc(o.addr)+'</b><span>Placed</span><b>'+dstr(o.ts)+'</b><span>Payment</span><b>'+esc(o.pay)+(o.paid?' (paid)':' (collect on delivery)')+'</b><span>Rider</span><b>'+(o.rider?esc(o.rider.name+(o.rider.plate?' · '+o.rider.plate:'')):'Not assigned yet')+'</b></div><ul class="ol" style="margin-top:1rem">'+o.lines.map(lineHtml).join('')+'</ul>'+(o.note?'<p class="onote">'+ic('msg')+esc(o.note)+'</p>':'')+'<div class="kv tot"><span>Items</span><b class="mono">'+ngn(o.sub)+'</b><span>Delivery fee</span><b class="mono">'+ngn(o.fee)+'</b></div><div class="ft"><button type="button" class="btn" data-m="x">Close</button></div>');return}
+    if(k==='ready'){lrpc('merchant_mark_ready',{p_order:o.id}).then(function(){return liveLoad()}).then(function(){U.tab.ord='ready';refresh();toast(o.id+' is marked ready. The rider will collect it.')},liveErr);return}
     var cancel=k==='reject';
-    openM('<h3>'+(cancel?'Cancel ':'Start preparing ')+esc(o.id)+'?</h3><p class="muted">'+(cancel?'Only cancel if you cannot make this order. '+(o.paid?'The customer has already paid, and paid orders are not refunded automatically yet. ChowBuy support will refund them, so please tell support.':'The customer pays on delivery, so nothing needs refunding.'):'The customer is told you are preparing their order, and a nearby rider can accept it.')+'</p>'+mfoot2(cancel?'Cancel order':'Start preparing',cancel),function(){
+    if(!cancel){
+      openM('<h3>Start preparing '+esc(o.id)+'?</h3><p class="muted">The customer is told you are preparing their order, and a nearby rider can accept it.</p>'+mfoot2('Start preparing',false),function(){
+        var b=$('#mf button[type=submit]');b.disabled=true;
+        lrpc('merchant_set_stage',{p_order:o.id,p_stage:'preparing'}).then(function(){return liveLoad()}).then(function(){U.tab.ord='preparing';closeM();refresh();toast('Preparing '+o.id+'.')},function(er){b.disabled=false;var m2=$('#merr');if(m2)m2.textContent=er.message});
+        return false});
+      return}
+    var reasons=['Item out of stock','Store closing early','Power or equipment problem','Too busy to take this order','Other'];
+    openM('<h3>Cancel '+esc(o.id)+'?</h3><p class="muted">'+(o.paid?'The customer has paid, so they are refunded in full to their ChowBuy wallet automatically.':'The customer pays on delivery, so nothing needs refunding.')+' Your reason is sent to ChowBuy admin.</p><div class="radios col" style="margin:1rem 0">'+reasons.map(function(x,i){return '<label class="rad"><input type="radio" name="reason" value="'+esc(x)+'"'+(i===0?' checked':'')+'><span>'+esc(x)+'</span></label>'}).join('')+'</div>'+inp('rn','If other, tell us why','','maxlength="150" placeholder="Reason"')+mfoot2('Cancel order and refund',true),function(d){
+      var why=d.reason==='Other'?(d.rn||'').trim():d.reason;if(!why||why.length<3)return 'Tell us why you are cancelling.';
       var b=$('#mf button[type=submit]');b.disabled=true;
-      lrpc('merchant_set_stage',{p_order:o.id,p_stage:cancel?'cancelled':'preparing'}).then(function(){return liveLoad()}).then(function(){U.tab.ord=cancel?'cancelled':'preparing';closeM();refresh();toast(cancel?o.id+' cancelled.':'Preparing '+o.id+'.')},function(er){b.disabled=false;var m=$('#merr');if(m)m.textContent=er.message});
+      lrpc('merchant_cancel_order',{p_order:o.id,p_reason:why}).then(function(r){return liveLoad().then(function(){return r})}).then(function(r){U.tab.ord='cancelled';closeM();refresh();toast(o.id+' cancelled.'+(r&&r.refunded?' '+ngn(r.refunded)+' refunded to the customer.':''))},function(er){b.disabled=false;var m2=$('#merr');if(m2)m2.textContent=er.message});
       return false});
   };
 });
