@@ -212,13 +212,13 @@ function openOrder(id){
 }
 
 function vMerchants(){
-  var live=liveOn(),SRC=live?L.merchants.map(function(m){return{id:m.id,name:m.name,city:m.city,vertical:m.vertical,status:m.active?'active':'pending',branches:1,joined:null,orders30:m.orders30,gmv30:m.gmv30,rate:m.rating_pct,kyc:m.docs_ok>0?'verified':m.docs_pending>0?'in review':'pending'}}):S.merchants;
+  var live=liveOn(),SRC=live?L.merchants.map(function(m){return{id:m.id,name:m.name,city:m.city,vertical:m.vertical,status:m.active?'active':'pending',branches:1,joined:null,orders30:m.orders30,gmv30:m.gmv30,rate:m.rating_pct,kyc:m.docs_ok>0?'verified':m.docs_pending>0?'in review':'pending',owner:m.owner||''}}):S.merchants;
   var q=(U.q.merch||'').trim().toLowerCase(),tv=T('merV','all');
   var list=SRC.filter(function(m){return(tv==='all'||m.vertical===tv)&&(!q||(m.name+' '+m.city).toLowerCase().indexOf(q)>-1)});
   var pend=SRC.filter(function(m){return m.status==='pending'}).length;
   var rows=list.map(function(m){
-    var act=live?'':m.status==='pending'?btn(ic('check')+'Approve','approveM',m.id,'pri'):m.status==='active'?btn(ic('ban')+'Suspend','suspendM',m.id,'danger'):btn(ic('refresh')+'Reinstate','suspendM',m.id);
-    return '<tr><td><div class="who">'+tile(m.name,m.vertical)+'<div><b>'+esc(m.name)+'</b><small>'+esc(m.city)+' · '+m.branches+' branch'+(m.branches>1?'es':'')+(m.joined?' · Joined '+fdate(m.joined):'')+'</small></div></div></td><td>'+vbadge(m.vertical)+'</td><td class="r mono">'+num(m.orders30)+'</td><td class="r mono">'+ngn(m.gmv30)+'</td><td class="r mono">'+m.rate+'%</td><td>'+pill(m.kyc,null,m.kyc==='verified'?'shield':'')+'</td><td>'+pill(m.status)+'</td><td class="r">'+act+'</td></tr>'}).join('');
+    var act=live?btn(ic('users')+(m.owner?'Change owner':'Assign owner'),'merOwner',m.id):m.status==='pending'?btn(ic('check')+'Approve','approveM',m.id,'pri'):m.status==='active'?btn(ic('ban')+'Suspend','suspendM',m.id,'danger'):btn(ic('refresh')+'Reinstate','suspendM',m.id);
+    return '<tr><td><div class="who">'+tile(m.name,m.vertical)+'<div><b>'+esc(m.name)+'</b><small>'+esc(m.city)+' · '+m.branches+' branch'+(m.branches>1?'es':'')+(m.joined?' · Joined '+fdate(m.joined):'')+(live?' · '+(m.owner?'Owner: '+esc(m.owner):'No owner yet'):'')+'</small></div></div></td><td>'+vbadge(m.vertical)+'</td><td class="r mono">'+num(m.orders30)+'</td><td class="r mono">'+ngn(m.gmv30)+'</td><td class="r mono">'+m.rate+'%</td><td>'+pill(m.kyc,null,m.kyc==='verified'?'shield':'')+'</td><td>'+pill(m.status)+'</td><td class="r">'+act+'</td></tr>'}).join('');
   return head('Merchants',live?'Real merchants from your backend. Approve them under KYC review.':'Approve onboarding, review KYC and control who can sell on ChowBuy.',pend?'<span class="badge-un">'+pend+' '+(live?'not live yet':'awaiting approval')+'</span>':'')+liveBar()+
   '<div class="card"><div class="bar">'+search('merch','Search by business name or city')+tabs('merV',[['all','All'],['restaurant','Restaurant'],['grocery','Grocery'],['pharmacy','Pharmacy'],['package','Package']],1)+'</div>'+
   (list.length?'<div class="tw"><table class="t" style="min-width:60rem"><thead><tr><th>Merchant</th><th>Vertical</th><th class="r">Orders (30d)</th><th class="r">GMV (30d)</th><th class="r">Commission</th><th>KYC</th><th>Status</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="foot"><span>'+list.length+' merchant'+(list.length>1?'s':'')+'</span></div>':empty('building','No merchants found','Adjust your filters to see more.',btn('Clear filters','clear','merch','pri')))+'</div>';
@@ -1688,6 +1688,13 @@ function eMissing(D){var P=eprov(D.provider),keys=D.provider==='ses'?['ses_acces
 Object.assign(INP,{email:function(k,v){var D=ee();if(k==='smtp.port')v=v.replace(/\D/g,'');if(/(^|\.)raw\./.test(k)&&v===''){delPath(D,k)}else setPath(D,k,v);refresh()}});
 Object.assign(CHG,{email:function(k,v){var D=ee();if(k==='smtp.secure')v=(v==='true');setPath(D,k,v);U.econn='';refresh()}});
 Object.assign(A,{
+ merOwner:function(el){
+   var id=el.getAttribute('data-id'),m=(L.merchants||[]).filter(function(x){return x.id===id})[0];if(!m)return;
+   openM('<h3>Store owner for '+esc(m.name)+'</h3><p class="sub">The owner signs in at chowbuy.ng/merchant with this account to run the store. They must already have a ChowBuy account (sign up in the app). Leave empty to remove the owner.</p>'+inp('own','Owner email',m.owner||'','type="email" autocomplete="off" placeholder="owner@example.com"')+'<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Save</button></div>',function(d){
+     var b=$('#mf button[type=submit]');b.disabled=true;
+     beReq('/rest/v1/rpc/admin_merchant_owner','POST',{p_merchant:id,p_email:(d.own||'').trim()}).then(function(){return liveLoad()}).then(function(){closeM();refresh();toast(d.own&&d.own.trim()?'Owner saved.':'Owner removed.')},function(e){b.disabled=false;var er=$('#merr');if(er)er.textContent=e.message});
+     return false});
+ },
  modeDemo:function(){BE.demo=true;beSaveLocal();beDisconnect();refresh();toast('Demo mode. You are looking at sample data.')},
  modeLive:function(){BE.demo=false;beSaveLocal();refresh();toast('Live mode.');beHydrate().then(function(){refresh()},function(){});liveLoad()},
  signOut:function(){var t=BE.tok,u=BE.url;try{if(t)fetch(u.replace(/\/+$/,'')+'/auth/v1/logout',{method:'POST',headers:{apikey:BE.anon,Authorization:'Bearer '+t}}).catch(function(){})}catch(e){}beEnd('')},
@@ -1818,7 +1825,7 @@ document.addEventListener('click',function(e){
 });
 document.addEventListener('submit',function(e){
   var f=e.target;
-  if(f.id==='mf'){e.preventDefault();var r=Mfn&&Mfn(fd(f));if(typeof r==='string'){var er=$('#merr');if(er)er.textContent=r;return}closeM();return}
+  if(f.id==='mf'){e.preventDefault();var r=Mfn&&Mfn(fd(f));if(typeof r==='string'){var er=$('#merr');if(er)er.textContent=r;return}if(r===false)return;closeM();return}
   var n=f.getAttribute&&f.getAttribute('data-form');if(n&&FORMS[n]){e.preventDefault();FORMS[n](f)}
 });
 document.addEventListener('input',function(e){var t=e.target;if(t.closest&&t.closest('[data-form=pw]')){pwLive();return}var k=t.getAttribute&&t.getAttribute('data-in');if(!k||t.composing)return;var p=k.split(':');INP[p[0]](p[1],t.value)});

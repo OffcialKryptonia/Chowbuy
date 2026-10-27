@@ -28,6 +28,7 @@ await db.exec(fs.readFileSync(root + 'migrations/20261101000004_group_orders.sql
 await db.exec(fs.readFileSync(root + 'migrations/20261101000005_smart_cart_events.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261101000006_public_catalog.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261101000007_admin_customer_tools.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261101000008_merchant_live.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -657,5 +658,54 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
   await as(ADM, async () => {
     ok('verified status follows the auth record', (await q(`select admin_customer_profile('${cust}') p`))[0].p.verified === true);
   });
+}
+
+/* ---- merchant live dashboard and store-owner assignment ---- */
+{
+  const su = async sql => { await db.exec('reset role'); await db.exec(sql); };
+  await as(M, async () => {
+    const me = (await q(`select merchant_me() r`))[0].r;
+    ok('merchant_me lists the owner\'s store', Array.isArray(me.stores) && me.stores.length === 1 && me.stores[0].id === 'm1');
+    const ords = (await q(`select merchant_orders('m1') r`))[0].r;
+    ok('merchant sees their store orders', Array.isArray(ords) && ords.length >= 1 && ords.every(o => typeof o.customer === 'string' && !('phone' in o) && !('customer_id' in o)), JSON.stringify(ords).slice(0, 200));
+    ok('orders carry no customer phone or id', !/\+234803/.test(JSON.stringify(ords)));
+    const id = (await q(`select merchant_product_save('m1', null, ' Test Jollof ', 'Spicy', 3500, 'Rice', true, true) id`))[0].id;
+    ok('merchant adds a product', (await q(`select name, price, in_stock, rx from products where id = $1`, [id]))[0].name === 'Test Jollof');
+    await q(`select merchant_product_save('m1', $1, 'Test Jollof XL', 'Bigger', 4200, 'Rice', true, false)`, [id]);
+    ok('merchant edits a product', (await q(`select price from products where id = $1`, [id]))[0].price === 4200);
+    await q(`select merchant_product_stock($1, false)`, [id]);
+    ok('merchant toggles availability', (await q(`select in_stock from products where id = $1`, [id]))[0].in_stock === false);
+    await throws('price must be valid', () => q(`select merchant_product_save('m1', null, 'X', '', -5, '', true, false)`), 'valid price');
+    await throws('name is required', () => q(`select merchant_product_save('m1', null, '  ', '', 100, '', true, false)`), 'name');
+    await q(`select merchant_set_open('m1', false)`);
+    ok('merchant closes the store', (await q(`select open from merchants where id = 'm1'`))[0].open === false);
+    await q(`select merchant_set_open('m1', true)`);
+    await q(`select merchant_product_delete($1)`, [id]);
+    ok('merchant deletes a product', (await q(`select 1 from products where id = $1`, [id])).length === 0);
+    await throws('owner cannot change their own rating directly', () => q(`update merchants set rating_pct = 100 where id = 'm1'`), 'permission denied');
+    await throws('owner cannot make themselves a different store owner', () => q(`update merchants set owner_id = '${A}' where id = 'm1'`), 'permission denied');
+    await throws('owner cannot create a live store directly', () => q(`insert into merchants (id, owner_id, name, vertical, lat, lng) values ('mx', '${M}', 'Mine', 'restaurant', 1, 1)`), 'permission denied');
+    await q(`update merchants set name = 'Mama Put Kitchen' where id = 'm1'`);
+    ok('owner can still rename the store', (await q(`select name from merchants where id = 'm1'`))[0].name === 'Mama Put Kitchen');
+  });
+  await as(A, async () => {
+    await throws('a customer is not a merchant', () => q(`select merchant_me()`), 'not linked');
+    await throws('a customer cannot read store orders', () => q(`select merchant_orders('m1')`), 'not found');
+    await throws('a customer cannot add products to a store', () => q(`select merchant_product_save('m1', null, 'Hack', '', 100, '', true, false)`), 'not found');
+    await throws('a customer cannot close a store', () => q(`select merchant_set_open('m1', false)`), 'not found');
+    await throws('a customer cannot assign owners', () => q(`select admin_merchant_owner('m1', 'bola@x.ng')`), 'admin');
+  });
+  await as(ADM, async () => {
+    await throws('unknown email is refused', () => q(`select admin_merchant_owner('m1', 'nobody@x.ng')`), 'No ChowBuy account');
+    await throws('rider accounts cannot own a store', () => q(`select admin_merchant_owner('m1', 'rider@x.ng')`), 'cannot own');
+    await throws('unknown store is refused', () => q(`select admin_merchant_owner('nope', 'bola@x.ng')`), 'Store not found');
+    await q(`select admin_merchant_owner('m1', ' Bola@X.ng ')`);
+    ok('assigning an owner links the store and sets the merchant role', (await q(`select m.owner_id = '${B}' as linked, p.role::text as role from merchants m, profiles p where m.id = 'm1' and p.id = '${B}'`))[0].linked === true && (await q(`select role::text r from profiles where id = '${B}'`))[0].r === 'merchant');
+    ok('admin_merchants shows the owner email', (await q(`select admin_merchants() r`))[0].r.some(x => x.id === 'm1' && x.owner === 'bola@x.ng'));
+    await q(`select admin_merchant_owner('m1', '')`);
+    ok('clearing the owner works', (await q(`select owner_id from merchants where id = 'm1'`))[0].owner_id === null);
+    await q(`select admin_merchant_owner('m1', 'merchant@x.ng')`);
+  });
+  await su(`reset role`);
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

@@ -21,10 +21,10 @@ function refresh(){var rt=ss('cb-admin-rt');if(!rt)return Promise.reject(new Err
 function loadScript(src){return new Promise(function(ok,no){var s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=function(){no(new Error('Could not load '+src))};document.body.appendChild(s)})}
 function boot(){
   show('busy');
-  return fetch('console.html?v=20261041',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('The console could not be loaded.');return r.text()}).then(function(html){
+  return fetch('console.html?v=20261042',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('The console could not be loaded.');return r.text()}).then(function(html){
     $('#gate').hidden=true;var root=$('#root');root.innerHTML=html;root.hidden=false;
     window.__CMS_ADMIN=1;
-    return loadScript('../assets/content.js?v=20261022').then(function(){return loadScript('data.js?v=20261022')}).then(function(){return loadScript('admin.js?v=20261041')});
+    return loadScript('../assets/content.js?v=20261022').then(function(){return loadScript('data.js?v=20261022')}).then(function(){return loadScript('admin.js?v=20261042')});
   }).catch(function(e){$('#gate').hidden=false;$('#root').hidden=true;$('#root').innerHTML='';show('form',e.message)});
 }
 function start(){
