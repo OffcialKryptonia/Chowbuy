@@ -30,3 +30,6 @@ insert into public.chat_filters (id,name,enabled,action,words,builtin) values
  ('ph','Phone numbers and contact sharing',true,'mask',array[]::text[],true) on conflict do nothing;
 insert into public.platform_settings (key,value) values ('public', '{"gateways":{"korapay":{"enabled":true,"publicKey":"","live":false},"pocketfi":{"enabled":true,"live":false},"cod":{"enabled":true,"maxAmount":20000},"wallet":{"enabled":true}},"realtime":{"provider":"off"},"push":{"fcmEnabled":false},"maps":{"directionsViaProxy":true},"loyalty":{"reviewPoints":50}}'::jsonb) on conflict do nothing;
 
+
+-- Development fixtures only. These rows are marked is_demo and pre-approved so local tests can place orders; production must never run this file.
+update public.merchants set is_demo = true, application_status = 'APPROVED', verified = true where id in ('m1','m2','m3','m4','m5','m6','m7');

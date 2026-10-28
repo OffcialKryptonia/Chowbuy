@@ -29,6 +29,7 @@ await db.exec(fs.readFileSync(root + 'migrations/20261101000005_smart_cart_event
 await db.exec(fs.readFileSync(root + 'migrations/20261101000006_public_catalog.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261101000007_admin_customer_tools.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261101000008_merchant_live.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261101000009_merchant_onboarding.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -685,11 +686,14 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
     await throws('owner cannot change their own rating directly', () => q(`update merchants set rating_pct = 100 where id = 'm1'`), 'permission denied');
     await throws('owner cannot make themselves a different store owner', () => q(`update merchants set owner_id = '${A}' where id = 'm1'`), 'permission denied');
     await throws('owner cannot create a live store directly', () => q(`insert into merchants (id, owner_id, name, vertical, lat, lng) values ('mx', '${M}', 'Mine', 'restaurant', 1, 1)`), 'permission denied');
-    await q(`update merchants set name = 'Mama Put Kitchen' where id = 'm1'`);
-    ok('owner can still rename the store', (await q(`select name from merchants where id = 'm1'`))[0].name === 'Mama Put Kitchen');
+    await throws('owner cannot update the store table directly any more', () => q(`update merchants set name = 'Hack' where id = 'm1'`), 'permission denied');
+    await q(`select merchant_store_update('m1', 'Mama Put Kitchen', '8am - 9pm', 600, 10, 20)`);
+    ok('owner can still rename the store (through the function)', (await q(`select name from merchants where id = 'm1'`))[0].name === 'Mama Put Kitchen');
   });
   await as(A, async () => {
-    await throws('a customer is not a merchant', () => q(`select merchant_me()`), 'not linked');
+    const none = (await q(`select merchant_me() r`))[0].r;
+    ok('a customer with no business gets no workspaces (and no arbitrary store)', none.stores.length === 0 && none.workspaces.length === 0 && none.invitations.length === 0);
+    await throws('a customer cannot rename a store', () => q(`select merchant_store_update('m1', 'Hack', '', 0, 5, 9)`), 'not found');
     await throws('a customer cannot read store orders', () => q(`select merchant_orders('m1')`), 'not found');
     await throws('a customer cannot add products to a store', () => q(`select merchant_product_save('m1', null, 'Hack', '', 100, '', true, false)`), 'not found');
     await throws('a customer cannot close a store', () => q(`select merchant_set_open('m1', false)`), 'not found');
@@ -743,5 +747,244 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
   ok('wallet unchanged for cash order', (await bal()) === b2);
   await as(B, async () => { await throws('another customer cannot cancel', () => q(`select merchant_cancel_order($1, 'nope')`, [codO.id]), 'not found'); });
   await su(`reset role`);
+}
+
+/* ---- merchant registration, onboarding, review, ownership ---- */
+{
+  const su = async sql => { await db.exec('reset role'); await db.exec(sql); };
+  const qj = (sql, obj) => q(sql, [JSON.stringify(obj)]);
+  const N1 = await mk('nkechi@shop.ng', '08032220001'), N2 = await mk('pharma@shop.ng', '08032220002'), N3 = await mk('logi@shop.ng', '08032220003'), N4 = await mk('grocer@shop.ng', '08032220004'), U0 = await mk('raw@shop.ng', '08032220005');
+  await su(`update auth.users set email_confirmed_at = now() where id in ('${N1}', '${N2}', '${N3}', '${N4}', '${ADM}', '${R}')`);
+  const biz = { trading_name: 'Nkechi Kitchen', registered_name: 'Nkechi Foods Ltd', description: 'Home-style Nigerian meals made fresh daily.', cac_status: 'registered', cac_number: 'RC1234567', business_email: 'hello@nkechi.ng', business_phone: '08032220001', website: '' };
+  const own = { full_name: 'Nkechi Okoro', phone: '08032220001', email: 'nkechi@shop.ng', position: 'owner', authorized: true, id_type: 'nin' };
+  const loc = { country: 'Nigeria', state: 'Lagos', city: 'Lagos', area: 'Lekki Phase 1', address: '12 Admiralty Way, Lekki Phase 1', postal: '106104', branch: 'Main', lat: 6.45, lng: 3.47 };
+  const spec = { cuisines: ['Local Swallows', 'Grills'], hours: '8am - 10pm daily', prep_model: 'kitchen', menu_status: 'building', prep_minutes: 25, pickup: true, delivery: true };
+  let mid, aid, pidShared;
+
+  await as(U0, async () => { await throws('unconfirmed email cannot start an application', () => q(`select merchant_app_start('RESTAURANT')`), 'Verify your email'); });
+  await as(ADM, async () => { await throws('admin accounts cannot register a business', () => q(`select merchant_app_start('RESTAURANT')`), 'cannot register'); });
+  await as(R, async () => { await throws('rider accounts cannot register a business', () => q(`select merchant_app_start('RESTAURANT')`), 'cannot register'); });
+  await as(N1, async () => {
+    await throws('only the four business types exist', () => q(`select merchant_app_start('CLOUD_KITCHEN')`), 'four business types');
+    await throws('a combined type is refused', () => q(`select merchant_app_start('RESTAURANT,PHARMACY')`), 'four business types');
+    const r = (await q(`select merchant_app_start('RESTAURANT') r`))[0].r; mid = r.merchant; aid = r.application;
+    ok('starting creates a business, an application and the membership together', !!mid && !!aid && (await q(`select 1 from merchants m join merchant_members mm on mm.merchant_id = m.id and mm.user_id = '${N1}' where m.id = '${mid}' and m.application_status = 'DRAFT' and not m.active and m.business_type = 'RESTAURANT' and m.vertical = 'restaurant'`)).length === 1);
+    const again = (await q(`select merchant_app_start('RESTAURANT') r`))[0].r;
+    ok('a second tap reuses the draft (no duplicate business)', again.merchant === mid && again.reused === true && (await q(`select count(*)::int n from merchant_members where user_id = '${N1}'`))[0].n === 1);
+    const sw = (await q(`select merchant_app_start('GROCERY_SUPERMARKET') r`))[0].r;
+    ok('changing the type of a draft re-types it instead of creating another business', sw.merchant === mid && (await q(`select business_type, vertical from merchants where id = '${mid}'`))[0].vertical === 'grocery');
+    await q(`select merchant_app_start('RESTAURANT')`);
+
+    await throws('a bad business phone is refused', () => qj(`select merchant_app_save('${mid}', 'business', $1::jsonb)`, { ...biz, business_phone: '12345' }), 'phone');
+    await throws('a registered business needs a CAC number', () => qj(`select merchant_app_save('${mid}', 'business', $1::jsonb)`, { ...biz, cac_number: 'abc' }), 'CAC');
+    await throws('a CAC status must be chosen', () => qj(`select merchant_app_save('${mid}', 'business', $1::jsonb)`, { ...biz, cac_status: '' }), 'CAC');
+    await qj(`select merchant_app_save('${mid}', 'business', $1::jsonb)`, { ...biz, cac_status: 'sole_proprietor', cac_number: '' });
+    ok('a sole proprietor is not forced to invent a CAC number', (await q(`select data->'business'->>'cac_number' c from merchant_applications where id = '${aid}'`))[0].c === '');
+    await qj(`select merchant_app_save('${mid}', 'business', $1::jsonb)`, biz);
+    ok('the store name is mirrored onto the business', (await q(`select name from merchants where id = '${mid}'`))[0].name === 'Nkechi Kitchen');
+    await throws('the representative must confirm authorisation', () => qj(`select merchant_app_save('${mid}', 'owner', $1::jsonb)`, { ...own, authorized: false }), 'authorised');
+    await throws('the position must be one of the choices', () => qj(`select merchant_app_save('${mid}', 'owner', $1::jsonb)`, { ...own, position: 'ceo' }), 'connected');
+    ok('before declaring ownership the applicant is a manager, not the owner', (await q(`select role from merchant_members where merchant_id = '${mid}' and user_id = '${N1}'`))[0].role === 'manager');
+    await qj(`select merchant_app_save('${mid}', 'owner', $1::jsonb)`, own);
+    ok('declaring ownership records an auditable owner membership', (await q(`select mm.role, mm.relationship, m.owner_id = '${N1}' as linked from merchant_members mm join merchants m on m.id = mm.merchant_id where mm.merchant_id = '${mid}' and mm.user_id = '${N1}'`))[0].role === 'owner');
+    await throws('the location must be in Nigeria', () => qj(`select merchant_app_save('${mid}', 'location', $1::jsonb)`, { ...loc, lat: 51.5, lng: -0.1 }), 'inside Nigeria');
+    await throws('only Nigeria is accepted as a country', () => qj(`select merchant_app_save('${mid}', 'location', $1::jsonb)`, { ...loc, country: 'Ghana' }), 'Nigeria');
+    const lr = (await qj(`select merchant_app_save('${mid}', 'location', $1::jsonb) r`, loc))[0].r;
+    ok('a live city is marked serviceable, set by the server', lr.data.serviceable === true);
+    const lr2 = (await qj(`select merchant_app_save('${mid}', 'location', $1::jsonb) r`, { ...loc, city: 'Sokoto', serviceable: true, lat: '', lng: '' }))[0].r;
+    ok('an unserved city is recorded as awaiting availability (client flag ignored)', lr2.data.serviceable === false);
+    await qj(`select merchant_app_save('${mid}', 'location', $1::jsonb)`, loc);
+    await throws('restaurant details are validated', () => qj(`select merchant_app_save('${mid}', 'specific', $1::jsonb)`, { ...spec, prep_minutes: 500 }), 'preparation time');
+    await throws('restaurant needs delivery or pickup', () => qj(`select merchant_app_save('${mid}', 'specific', $1::jsonb)`, { ...spec, pickup: false, delivery: false }), 'delivery, pickup');
+    await qj(`select merchant_app_save('${mid}', 'specific', $1::jsonb)`, spec);
+    ok('a restaurant is not asked for pharmacy fields', !('premises_licence_no' in (await q(`select data->'specific' s from merchant_applications where id = '${aid}'`))[0].s));
+
+    await throws('submitting early lists what is missing', () => q(`select merchant_app_submit('${mid}')`), 'Still needed');
+    await throws('account number must be 10 digits', () => q(`select merchant_settlement_save('${mid}', 'Nkechi Okoro', 'GTBank', '12345')`), '10-digit');
+    await q(`select merchant_settlement_save('${mid}', 'Nkechi Okoro', 'GTBank', '0123 456 789')`);
+    const got = (await q(`select merchant_app_get('${mid}') r`))[0].r;
+    ok('bank details come back masked and unverified', got.settlement.last4 === '6789' && got.settlement.status === 'PENDING_VERIFICATION' && !JSON.stringify(got).includes('0123456789'));
+    await throws('a document path for another folder is refused', () => q(`select merchant_doc_submit('${mid}', 'owner_id', 'someone-else/id.pdf')`), 'again');
+    await throws('an unknown document type is refused', () => q(`select merchant_doc_submit('${mid}', 'passport_scan', '${mid}/x.pdf')`), 'Unknown document');
+    await throws('path traversal is refused', () => q(`select merchant_doc_submit('${mid}', 'owner_id', '${mid}/../x.pdf')`), 'again');
+    ok('a restaurant that says it is registered needs CAC and a food permit', ['owner_id', 'cac', 'food_permit'].every(d => got.required.includes(d)) && !got.required.includes('pcn_premises'));
+    for (const d of ['owner_id', 'cac', 'food_permit']) await q(`select merchant_doc_submit('${mid}', '${d}', '${mid}/${d}.pdf')`);
+    await throws('direct writes to the application table are closed', () => q(`update merchant_applications set status = 'APPROVED' where id = '${aid}'`), 'permission denied');
+    await throws('direct writes to the business table are closed', () => q(`update merchants set active = true, application_status = 'APPROVED' where id = '${mid}'`), 'permission denied');
+    await throws('the bank table cannot be read directly', () => q(`select * from merchant_settlement`), 'permission denied');
+    await throws('a merchant cannot approve themselves', () => q(`select admin_application_decide('${aid}', 'approve', '')`), 'admin');
+    await throws('products cannot be listed before approval', () => q(`select merchant_product_save('${mid}', null, 'Jollof', '', 3000, 'Rice', true, false)`), 'approved');
+    ok('submit succeeds once everything is in', (await q(`select merchant_app_submit('${mid}') r`))[0].r.status === 'SUBMITTED');
+    ok('submitting twice does nothing', (await q(`select merchant_app_submit('${mid}') r`))[0].r.already === true);
+    await throws('a submitted application can no longer be edited', () => qj(`select merchant_app_save('${mid}', 'business', $1::jsonb)`, biz), 'no longer be edited');
+  });
+
+  await as(A, async () => { ok('the business is invisible to customers while a draft', (await q(`select 1 from merchants where id = '${mid}'`)).length === 0); });
+  await as(N4, async () => {
+    await throws('another merchant cannot read the application', () => q(`select merchant_app_get('${mid}')`), 'not found');
+    await throws('another merchant cannot save to it', () => qj(`select merchant_app_save('${mid}', 'business', $1::jsonb)`, biz), 'not found');
+    await throws('another merchant cannot submit it', () => q(`select merchant_app_submit('${mid}')`), 'not found');
+    await throws('another merchant cannot read its bank details', () => q(`select merchant_settlement_get('${mid}')`), 'not found');
+    await throws('another merchant cannot read its team', () => q(`select merchant_team('${mid}')`), 'not found');
+    ok('another merchant sees no foreign application rows', (await q(`select 1 from merchant_applications`)).length === 0 && (await q(`select 1 from merchant_members where merchant_id = '${mid}'`)).length === 0);
+    await throws('another merchant cannot invite into it', () => q(`select merchant_invite('${mid}', 'bola@x.ng', 'staff')`), 'owner');
+  });
+
+  await as(ADM, async () => {
+    const list = (await q(`select admin_applications('SUBMITTED', 'RESTAURANT', 'nkechi') r`))[0].r;
+    ok('admin sees the submitted application in a filtered list', list.length === 1 && list[0].merchant === mid && list[0].docs_required === 3);
+    ok('filters exclude other statuses and types', (await q(`select admin_applications('APPROVED', 'all', '') r`))[0].r.every(x => x.status === 'APPROVED') && (await q(`select admin_applications('all', 'PHARMACY', '') r`))[0].r.length === 0);
+    const det = (await q(`select admin_application('${aid}') r`))[0].r;
+    ok('admin detail shows owner declaration, documents, members and the full account for verification', det.data.owner.position === 'owner' && det.docs.length === 3 && det.members.length === 1 && det.settlement.account === '0123456789');
+    await throws('approval is blocked until required documents are approved', () => q(`select admin_application_decide('${aid}', 'approve', '')`), 'Approve these documents');
+    await throws('sending back needs a reason', () => q(`select admin_application_decide('${aid}', 'request_info', '')`), 'Say what');
+    await q(`select admin_application_decide('${aid}', 'start_review', '')`);
+    await q(`select admin_application_decide('${aid}', 'request_info', 'The ID photo is cropped. Please upload the full card.')`);
+    await q(`select admin_kyc_set('merchant', '${mid}', 'owner_id', 'declined', 'The ID photo is cropped.')`);
+  });
+  await as(N1, async () => {
+    const g = (await q(`select merchant_app_get('${mid}') r`))[0].r;
+    ok('the merchant sees ACTION_REQUIRED with the reviewer\'s actual reason', g.status === 'ACTION_REQUIRED' && /cropped/.test(g.note) && g.docs.find(d => d.doc === 'owner_id').status === 'declined');
+    await qj(`select merchant_app_save('${mid}', 'business', $1::jsonb)`, { ...biz, description: 'Home-style Nigerian meals, made fresh daily in Lekki.' });
+    await q(`select merchant_doc_submit('${mid}', 'owner_id', '${mid}/owner_id-full.pdf')`);
+    ok('the merchant can fix and resubmit', (await q(`select merchant_app_submit('${mid}') r`))[0].r.status === 'SUBMITTED');
+  });
+  await as(ADM, async () => {
+    for (const d of ['owner_id', 'cac', 'food_permit']) await q(`select admin_kyc_set('merchant', '${mid}', '${d}', 'approved', '')`);
+    await throws('reject needs a reason', () => q(`select admin_application_decide('${aid}', 'reject', '')`), 'reason');
+    const r = (await q(`select admin_application_decide('${aid}', 'approve', '') r`))[0].r;
+    ok('admin approves once documents are approved', r.status === 'APPROVED');
+    const m = (await q(`select active, verified, open, application_status from merchants where id = '${mid}'`))[0];
+    ok('approval activates the business but leaves it closed until the merchant opens it', m.active && m.verified && m.open === false && m.application_status === 'APPROVED');
+    ok('approval is in the audit trail with who did it', (await q(`select admin_application('${aid}') r`))[0].r.history.some(h => h.action === 'merchant_application_approve' && h.by === 'admin@x.ng'));
+  });
+  await as(N1, async () => {
+    const me = (await q(`select merchant_me() r`))[0].r;
+    ok('the approved business appears as an openable store', me.stores.length === 1 && me.stores[0].id === mid && me.stores[0].role === 'owner' && me.workspaces.length === 1);
+    ok('profile became a merchant after approval', (await q(`select role::text r from profiles where id = '${N1}'`))[0].r === 'merchant');
+    let ck = (await q(`select merchant_checklist('${mid}') r`))[0].r; const done = k => ck.find(c => c.key === k).done;
+    ok('restaurant checklist has restaurant tasks only', ['menu_categories', 'menu_items', 'prices', 'prep_times', 'accept_orders'].every(k => ck.some(c => c.key === k)) && !ck.some(c => c.key === 'regulatory' || c.key === 'service_areas'));
+    ok('tasks are not complete just because they exist', !done('menu_items') && !done('settlement') && !done('notifications') && done('prep_times') && done('address'));
+    const pid = (await q(`select merchant_product_save('${mid}', null, 'Party Jollof', 'Smoky', 3500, 'Rice', true, false) id`))[0].id;
+    ck = (await q(`select merchant_checklist('${mid}') r`))[0].r;
+    ok('adding a dish completes the menu tasks from real data', done('menu_items') && done('menu_categories') && done('prices'));
+    await q(`select merchant_checklist_ack('${mid}', 'policies')`);
+    await throws('only manual tasks can be confirmed by hand', () => q(`select merchant_checklist_ack('${mid}', 'settlement')`), 'Unknown task');
+    ck = (await q(`select merchant_checklist('${mid}') r`))[0].r;
+    ok('confirming policies completes only that task', done('policies') && !done('notifications'));
+    await q(`select merchant_set_open('${mid}', true)`);
+    ok('the approved merchant can open for orders', (await q(`select open from merchants where id = '${mid}'`))[0].open === true);
+    pidShared = pid;
+  });
+  await as(A, async () => { ok('the public can now see the approved store and its dish', (await q(`select 1 from merchants where id = '${mid}'`)).length === 1 && (await q(`select 1 from products where id = '${pidShared}'`)).length === 1); });
+  await as(N1, async () => { await q(`select merchant_set_open('${mid}', false)`); });
+  await as(ADM, async () => {
+    await throws('settlement cannot be verified by the merchant, only admin (and needs a reason to fail it)', () => q(`select admin_settlement_status('${mid}', 'FAILED', '')`), 'what was wrong');
+    await q(`select admin_settlement_status('${mid}', 'VERIFIED', '')`);
+  });
+  await as(N1, async () => { ok('verifying settlement completes that task', (await q(`select merchant_checklist('${mid}') r`))[0].r.find(c => c.key === 'settlement').done === true); });
+  await as(N4, async () => { await throws('an unrelated merchant cannot change the catalogue', () => q(`select merchant_product_save('${mid}', null, 'Hack', '', 100, '', true, false)`), 'not found'); });
+
+  /* team: invitations, roles, removal */
+  await as(N1, async () => {
+    await throws('invites need an existing account', () => q(`select merchant_invite('${mid}', 'ghost@x.ng', 'staff')`), 'No ChowBuy account');
+    await throws('the owner role cannot be handed out by invite', () => q(`select merchant_invite('${mid}', 'grocer@shop.ng', 'owner')`), 'manager or staff');
+    await q(`select merchant_invite('${mid}', 'grocer@shop.ng', 'staff')`);
+  });
+  await as(N4, async () => {
+    const me = (await q(`select merchant_me() r`))[0].r;
+    ok('the invitee sees an invitation, and no access yet', me.invitations.length === 1 && me.invitations[0].id === mid && me.workspaces.length === 0);
+    await throws('no access to orders until accepted', () => q(`select merchant_orders('${mid}')`), 'not found');
+    await q(`select merchant_invite_respond('${mid}', true)`);
+    ok('accepting gives staff access', (await q(`select merchant_orders('${mid}') r`))[0].r.length === 0);
+    await throws('staff cannot edit the catalogue', () => q(`select merchant_product_save('${mid}', null, 'X', '', 100, '', true, false)`), 'owner or manager');
+    await throws('staff cannot see applications or bank details', () => q(`select merchant_settlement_get('${mid}')`), 'not found');
+    await throws('staff cannot invite', () => q(`select merchant_invite('${mid}', 'bola@x.ng', 'staff')`), 'owner');
+  });
+  await as(N1, async () => {
+    await throws('the owner cannot remove themselves', () => q(`select merchant_member_remove('${mid}', '${N1}')`), 'yourself');
+    await q(`select merchant_member_remove('${mid}', '${N4}')`);
+  });
+  await as(N4, async () => { await throws('a removed member loses access immediately', () => q(`select merchant_orders('${mid}')`), 'not found'); });
+
+  /* suspension and reinstatement */
+  await as(ADM, async () => {
+    await throws('suspending needs a reason', () => q(`select admin_application_decide('${aid}', 'suspend', '')`), 'reason');
+    await q(`select admin_application_decide('${aid}', 'suspend', 'Customer complaints under investigation')`);
+  });
+  await as(N1, async () => {
+    const me = (await q(`select merchant_me() r`))[0].r;
+    ok('a suspended business shows its status but cannot open the dashboard', me.workspaces[0].status === 'SUSPENDED' && me.stores.length === 0);
+    await throws('a suspended store cannot open for orders', () => q(`select merchant_set_open('${mid}', true)`), 'approved and activated');
+  });
+  await as(ADM, async () => { await q(`select admin_application_decide('${aid}', 'reinstate', '')`); ok('reinstating restores the business', (await q(`select active from merchants where id = '${mid}'`))[0].active === true); });
+
+  /* pharmacy: regulatory gate */
+  let pm, pa;
+  await as(N2, async () => {
+    const r = (await q(`select merchant_app_start('PHARMACY') r`))[0].r; pm = r.merchant; pa = r.application;
+    await qj(`select merchant_app_save('${pm}', 'business', $1::jsonb)`, { ...biz, trading_name: 'CarePlus Pharmacy', cac_status: 'in_progress', cac_number: '', business_email: 'care@plus.ng', business_phone: '08032220002' });
+    await qj(`select merchant_app_save('${pm}', 'owner', $1::jsonb)`, { ...own, full_name: 'Dr Ada Obi', phone: '08032220002', email: 'pharma@shop.ng', position: 'director' });
+    ok('a director is not silently made the legal owner', (await q(`select role, relationship from merchant_members where merchant_id = '${pm}' and user_id = '${N2}'`))[0].role === 'manager');
+    await qj(`select merchant_app_save('${pm}', 'location', $1::jsonb)`, loc);
+    const pspec = { pharmacy_category: 'community', premises_licence_no: 'PCN-12345', licence_expiry: '2020-01-01', pharmacist_name: 'Dr Ada Obi', pharmacist_reg_no: 'PCN/998877', hours: '8am - 9pm' };
+    await throws('an expired premises licence is refused', () => qj(`select merchant_app_save('${pm}', 'specific', $1::jsonb)`, pspec), 'expired');
+    await throws('a missing pharmacist registration is refused', () => qj(`select merchant_app_save('${pm}', 'specific', $1::jsonb)`, { ...pspec, licence_expiry: '2030-01-01', pharmacist_reg_no: '' }), 'pharmacist');
+    await qj(`select merchant_app_save('${pm}', 'specific', $1::jsonb)`, { ...pspec, licence_expiry: '2030-01-01' });
+    const g = (await q(`select merchant_app_get('${pm}') r`))[0].r;
+    ok('a pharmacy must always supply CAC, premises licence and pharmacist licence', ['owner_id', 'cac', 'pcn_premises', 'pharmacist_licence'].every(d => g.required.includes(d)));
+    await q(`select merchant_settlement_save('${pm}', 'CarePlus Pharmacy', 'Access Bank', '0987654321')`);
+    await throws('the pharmacy cannot submit without the licence documents', () => q(`select merchant_app_submit('${pm}')`), 'Document: cac');
+    for (const d of ['owner_id', 'cac', 'pcn_premises', 'pharmacist_licence']) await q(`select merchant_doc_submit('${pm}', '${d}', '${pm}/${d}.pdf')`);
+    await q(`select merchant_app_submit('${pm}')`);
+    await throws('an unverified pharmacy cannot list medicines', () => q(`select merchant_product_save('${pm}', null, 'Amoxicillin', '', 3000, 'Rx', true, true)`), 'verification');
+    const ck = (await q(`select merchant_checklist('${pm}') r`))[0].r;
+    ok('pharmacy checklist is regulatory, with no restaurant tasks', ck.some(c => c.key === 'regulatory' && c.done === false) && !ck.some(c => c.key === 'menu_items'));
+  });
+  await as(ADM, async () => {
+    for (const d of ['owner_id', 'cac', 'pcn_premises']) await q(`select admin_kyc_set('merchant', '${pm}', '${d}', 'approved', '')`);
+    await throws('a pharmacy cannot be approved with the pharmacist licence still unreviewed', () => q(`select admin_application_decide('${pa}', 'approve', '')`), 'pharmacist_licence');
+    await q(`select admin_kyc_set('merchant', '${pm}', 'pharmacist_licence', 'approved', '')`);
+    await q(`select admin_application_decide('${pa}', 'approve', '')`);
+  });
+  await as(N2, async () => { await q(`select merchant_product_save('${pm}', null, 'Paracetamol 500mg', '', 600, 'Pain', true, true)`); ok('once verified, the pharmacy can list (and flag Rx items)', (await q(`select rx from products where merchant_id = '${pm}'`))[0].rx === true); });
+
+  /* logistics and grocery get their own requirements and checklist */
+  let lm;
+  await as(N3, async () => {
+    lm = (await q(`select merchant_app_start('PACKAGE_LOGISTICS') r`))[0].r.merchant;
+    await throws('logistics needs service types', () => qj(`select merchant_app_save('${lm}', 'specific', $1::jsonb)`, { logistics_name: 'Swift Dispatch', service_types: [], operating_regions: ['Lagos'], package_types: ['parcels'], pickup_dropoff: true, fleet_size: 12, hours: '7am - 8pm' }), 'service types');
+    await throws('logistics rejects an invented service type', () => qj(`select merchant_app_save('${lm}', 'specific', $1::jsonb)`, { logistics_name: 'Swift Dispatch', service_types: ['teleport'], operating_regions: ['Lagos'], package_types: ['parcels'], fleet_size: 12, hours: '7am - 8pm' }), 'not an option');
+    await qj(`select merchant_app_save('${lm}', 'specific', $1::jsonb)`, { logistics_name: 'Swift Dispatch', service_types: ['same_day', 'intercity'], operating_regions: ['Lagos', 'Ogun'], package_types: ['parcels', 'documents'], pickup_dropoff: true, fleet_size: 12, hours: '7am - 8pm' });
+    const g = (await q(`select merchant_app_get('${lm}') r`))[0].r;
+    ok('logistics is not asked for a pharmacy licence or a food permit', g.required.join() === 'owner_id' && g.type === 'PACKAGE_LOGISTICS');
+    ok('logistics checklist has logistics tasks only', (await q(`select merchant_checklist('${lm}') r`))[0].r.every(c => !['menu_items', 'regulatory', 'products'].includes(c.key)));
+  });
+  await as(N4, async () => {
+    const gm = (await q(`select merchant_app_start('GROCERY_SUPERMARKET') r`))[0].r.merchant;
+    await qj(`select merchant_app_save('${gm}', 'specific', $1::jsonb)`, { store_category: 'minimart', product_categories: ['Staples', 'Drinks'], hours: '8am - 9pm', inventory_pref: 'manual', cold_chain: false, catalog_status: 'building' });
+    ok('a grocery checklist has product tasks and no prescription tasks', (await q(`select merchant_checklist('${gm}') r`))[0].r.some(c => c.key === 'products') && !(await q(`select merchant_checklist('${gm}') r`))[0].r.some(c => c.key === 'regulatory'));
+    ok('a user can run several businesses, each with its own workspace', (await q(`select count(*)::int n from merchant_members where user_id = '${N4}' and status = 'active'`))[0].n === 1);
+  });
+
+  /* the original bug: setting owner_id by any route now creates the membership, and survives sign-out/in (a new session) */
+  await su(`update merchants set owner_id = '${N3}' where id = 'm3'`);
+  await as(N3, async () => {
+    const me = (await q(`select merchant_me() r`))[0].r;
+    ok('linking a store by owner_id also creates the membership (the "not assigned owner" cause)', me.workspaces.some(w => w.id === 'm3' && w.role === 'owner'));
+  });
+  await as(N3, async () => { ok('the link persists for a fresh session', (await q(`select merchant_me() r`))[0].r.stores.some(w => w.id === 'm3')); });
+  await su(`update merchants set owner_id = null where id = 'm3'; update merchant_members set status = 'removed' where merchant_id = 'm3'`);
+
+  /* demo cleanup: flagged by id + name + no owner, reversible, history untouched */
+  const ordersBefore = (await q(`select count(*)::int n from orders`))[0].n, walletBefore = (await q(`select coalesce(sum(balance),0)::int s from wallets`))[0].s, txBefore = (await q(`select count(*)::int n from wallet_txs`))[0].n;
+  await su(fs.readFileSync(root + 'migrations/20261101000010_demo_cleanup.sql', 'utf8'));
+  ok('only the seeded sample stores are flagged as demo', (await q(`select count(*)::int n from merchants where is_demo and id not in ('m1','m2','m3','m4','m5','m6','m7')`))[0].n === 0 && (await q(`select count(*)::int n from merchants where not is_demo and id in ('${mid}', '${pm}')`))[0].n === 2);
+  ok('demo stores no longer appear to customers', (await as(A, () => q(`select id from merchants where active`))).every(x => !/^m[1-7]$/.test(x.id)));
+  ok('real approved merchants are untouched by the cleanup', (await q(`select active from merchants where id = '${mid}'`))[0].active === true);
+  await throws('nobody can order from a demo store', () => as(A, () => q(`select place_order('m1', '[{"product_id":"p1","qty":1}]'::jsonb, 'wallet', '${addr}', null)`)), 'not available');
+  ok('orders, wallets and the ledger are intact after cleanup', (await q(`select count(*)::int n from orders`))[0].n === ordersBefore && (await q(`select coalesce(sum(balance),0)::int s from wallets`))[0].s === walletBefore && (await q(`select count(*)::int n from wallet_txs`))[0].n === txBefore);
+  ok('the cleanup is idempotent', (await su(fs.readFileSync(root + 'migrations/20261101000010_demo_cleanup.sql', 'utf8')), (await q(`select count(*)::int n from merchants where is_demo and active`))[0].n === 0));
+  ok('re-running the onboarding migration does not re-approve drafts', (await su(fs.readFileSync(root + 'migrations/20261101000009_merchant_onboarding.sql', 'utf8')), (await q(`select application_status s from merchants where id = '${lm}'`))[0].s === 'DRAFT'));
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
