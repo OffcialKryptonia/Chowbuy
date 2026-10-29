@@ -9,6 +9,10 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '@/lib/theme';
 import '@/lib/location-task';
+import { useEffect } from 'react';
+import { registerRiderPush } from '@/lib/push';
+import * as live from '@/lib/live';
+import { LIVE } from '@/lib/config';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -16,6 +20,7 @@ export default function Root() {
   const p = useTheme();
   const [loaded] = useFonts({ Sora_700Bold, Sora_800ExtraBold, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
   useEffect(() => { if (loaded) SplashScreen.hideAsync().catch(() => {}); }, [loaded]);
+  useEffect(() => { let cancelled = false; if (!LIVE) return; void live.session().then((sess: any) => { const uid = sess?.user?.id; if (uid && !cancelled) registerRiderPush(uid).catch(() => {}); }).catch(() => {}); return () => { cancelled = true; }; }, []);
   if (!loaded) return null;
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
