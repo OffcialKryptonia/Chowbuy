@@ -5,7 +5,7 @@
 var SIMPLE = {A:1,B:1,STRONG:1,EM:1,I:1,BR:1}, RICH = {A:1,B:1,STRONG:1,EM:1,I:1,BR:1,SPAN:1,SMALL:1,MARK:1,U:1};
 var SEL = 'h1,h2,h3,h4,h5,p,li,figcaption,blockquote,td,th,label,.eyebrow,.lead,.tag,a.btn,button.btn';
 var SKIP = 'script,style,svg,noscript,[data-cms-skip],[data-cms-cities],.post-grid,.jobs,.faq-list,#faq,.toasts,.sheet,[data-to],.cat-tabs,.doc .prose,.toc,.crumbs,.hsearch,.map,.phone,.pill-row';
-var DEFAULT_CITIES = [{n:'Lagos',s:'Lagos'},{n:'Abuja',s:'Abuja'},{n:'Port Harcourt',s:'PH'},{n:'Ibadan',s:'Ibadan'},{n:'Kano',s:'Kano'},{n:'Enugu',s:'Enugu'}];
+var DEFAULT_CITIES = [{n:'Lagos',s:'Lagos'},{n:'Abuja',s:'Abuja'},{n:'Port Harcourt',s:'PH'},{n:'Ibadan',s:'Ibadan'},{n:'Kano',s:'Kano'},{n:'Enugu',s:'Enugu'},{n:'Lokoja',s:'Lokoja'}];
 var LEGAL = {privacy:1, terms:1, cookies:1, 'rider-agreement':1};
 var NUM = ['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen','twenty'];
 
