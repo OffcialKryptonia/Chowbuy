@@ -16,6 +16,8 @@ import { useTracking } from '@/lib/tracking';
 import { useRider } from '@/stores/rider';
 import { useApply } from '@/stores/apply';
 import { LIVE } from '@/lib/config';
+import * as liveApi from '@/lib/live';
+import { flexAvailabilityText, modelLabel } from '@/lib/models';
 
 const ZONES = [
   { label: 'Victoria Island', mult: 1.5, at: { lat: 6.4281, lng: 3.4219 } },
@@ -31,6 +33,8 @@ export default function Home() {
   const verified = useApply((s) => s.verified);
   const fleet = type === 'fleet';
   const s = useRider();
+  const flex = type === 'flex' ? s.me?.flex : undefined;
+  useEffect(() => { if (LIVE && type === 'flex') void liveApi.me().then((m) => m && useRider.getState().hydrateMe(m)).catch(() => {}); }, [type]);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(t); }, []);
   useTracking(s.active?.stage === 'at_restaurant');
@@ -48,13 +52,21 @@ export default function Home() {
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 110, gap: 16, maxWidth: 640, width: '100%', alignSelf: 'center' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View>
-            <Txt size={24} weight="display">{fleet ? 'ChowBuy Fleet' : 'ChowBuy Partner'}</Txt>
+            <Txt size={24} weight="display">{modelLabel(type)}</Txt>
             <Txt size={13} color={p.mute}>{fleet ? s.hub : s.city}{verified ? (LIVE ? ' · Verified' : ' · Verified demo rider') : ''}</Txt>
           </View>
           <Pill label={!s.online ? 'Offline' : s.onBreak ? 'On break' : a ? 'On delivery' : 'Online'} color={!s.online ? p.mute : s.onBreak ? p.warn : a ? p.info : p.ok} />
         </View>
 
-        {LIVE && !verified ? (
+        {LIVE && flex && (flex.status !== 'approved' || flex.availability === 'unavailable' || flex.availability === 'suspended') ? (
+          <Card style={{ borderColor: flex.availability === 'suspended' || flex.status === 'rejected' ? p.bad : p.warn }}>
+            <Txt size={16} weight="bold">{flex.status === 'approved' ? 'Flex is not available right now' : flex.status === 'draft' || flex.status === 'action_required' ? 'Finish your Flex application' : 'Flex application ' + (flex.status ?? '').replace('_', ' ')}</Txt>
+            <Txt size={13} color={p.mute}>{flex.status === 'approved' ? flexAvailabilityText(flex) : flex.note || 'Approval does not guarantee deliveries. You can go online only once approved and Flex is open in your area.'}</Txt>
+            {flex.status === 'draft' || flex.status === 'action_required' ? <Button label="Continue application" variant="soft" onPress={() => r.push('/flex')} /> : null}
+          </Card>
+        ) : null}
+
+        {LIVE && !verified && type !== 'flex' ? (
           <Card style={{ borderColor: p.warn }}>
             <Txt size={16} weight="bold">Waiting for approval</Txt>
             <Txt size={13} color={p.mute}>ChowBuy is reviewing your application. Add your documents in Profile, Documents and verification. You can go online as soon as you are approved.</Txt>
@@ -88,9 +100,10 @@ export default function Home() {
                 <Txt size={16} weight="bold">{s.online ? 'You are online' : 'You are offline'}</Txt>
                 <Txt size={13} color={p.mute}>{s.online ? 'New orders can ring you now.' : 'Go online to receive orders.'}</Txt>
               </View>
-              <Switch value={s.online} disabled={LIVE && !verified} onValueChange={s.setOnline} trackColor={{ true: p.ok, false: p.line }} accessibilityLabel="Go online" />
+              <Switch value={s.online} disabled={LIVE && (!verified || (!!flex && flex.availability === 'unavailable') || (!!flex && flex.availability === 'suspended'))} onValueChange={s.setOnline} trackColor={{ true: p.ok, false: p.line }} accessibilityLabel="Go online" />
             </View>
-            {s.online ? <Button label={s.onBreak ? 'End break' : 'Take a break (stops tracking)'} variant="soft" onPress={s.toggleBreak} /> : null}
+            {s.online && flex ? <Button label={flex.paused ? 'Resume offers' : 'Pause offers'} variant="soft" onPress={() => { void liveApi.flexPause(!flex.paused).then(() => liveApi.me()).then((m) => m && useRider.getState().hydrateMe(m)).catch(() => {}); }} /> : null}
+            {s.online && !flex ? <Button label={s.onBreak ? 'End break' : 'Take a break (stops tracking)'} variant="soft" onPress={s.toggleBreak} /> : null}
           </Card>
         )}
 

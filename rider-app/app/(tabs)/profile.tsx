@@ -2,7 +2,7 @@ import React from 'react';
 import { ScrollView, Switch, View, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Check, FileCheck2, HeartHandshake, LogOut, Play } from 'lucide-react-native';
+import { Check, FileCheck2, HeartHandshake, LogOut, Play, Zap } from 'lucide-react-native';
 import { Button, Txt, tap } from '@/components/ui';
 import { Card, Heading, IconRow, Pill } from '@/components/kit';
 import { SosButton } from '@/components/Sos';
@@ -14,6 +14,7 @@ import { usePrefs } from '@/stores/prefs';
 import { useApply } from '@/stores/apply';
 import { useRider } from '@/stores/rider';
 import { LIVE } from '@/lib/config';
+import { FLEX_STATUS_LABEL } from '@/lib/models';
 import { endSession } from '@/lib/live-session';
 
 export default function Profile() {
@@ -27,6 +28,7 @@ export default function Profile() {
   const k = kycSummary(docs, verified ? Object.fromEntries(docs.map((d) => [d.id, 'approved'])) : kyc);
   const current: RingId = isRingId(ring) ? ring : DEFAULT_RING;
   const fleet = type === 'fleet';
+  const flexInfo = useRider((x) => x.me?.flex);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: p.bg }}>
@@ -35,13 +37,14 @@ export default function Profile() {
         <Card>
           <Txt size={18} weight="bold">{(LIVE ? apply.name : '') || email || 'ChowBuy rider'}</Txt>{LIVE && email ? <Txt size={13} color={p.mute}>{email}</Txt> : null}
           <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-            <Pill label={fleet ? 'Fleet · salaried' : 'Partner · per ride'} color={p.brand} soft />
+            <Pill label={fleet ? 'Fleet · salaried' : type === 'flex' ? 'Flex' : 'Partner · per ride'} color={p.brand} soft />
             {vehicle ? <Pill label={vehicle[0].toUpperCase() + vehicle.slice(1)} color={p.info} soft /> : null}
             {fleet ? <Pill label={hub} color={p.mute} soft /> : null}
           </View>
         </Card>
 
         <Card>
+          {LIVE && type === 'flex' && flexInfo ? <IconRow icon={Zap} title="ChowBuy Flex application" note={`${flexInfo.status ? FLEX_STATUS_LABEL[flexInfo.status] : 'Draft'}${flexInfo.city ? ' · ' + flexInfo.city : ''}${flexInfo.agreementVersion ? ' · agreement ' + flexInfo.agreementVersion : ''}`} onPress={() => r.push('/flex')} /> : null}
           <IconRow icon={FileCheck2} title="Documents and verification" note={k.state === 'verified' ? 'All documents approved' : `${k.approved} of ${k.total} approved`} onPress={() => r.push('/kyc')}
             right={<Pill label={k.state === 'verified' ? 'Verified' : k.state === 'in_review' ? 'In review' : 'Action needed'} color={k.state === 'verified' ? p.ok : k.state === 'in_review' ? p.info : p.warn} soft />} />
           <IconRow icon={HeartHandshake} title="Emergency contacts" note={validContacts(contacts).length >= 2 ? '2 contacts saved' : 'Add two people we can alert'} onPress={() => r.push('/emergency-contacts')} />

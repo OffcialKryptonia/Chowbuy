@@ -9,9 +9,16 @@ export interface LiveOrder {
   pickup: LatLng & { label: string }; drop: LatLng & { label: string }; km: number;
   items: { id: string; name: string; qty: number }[]; cod: number; fee: number; tip: number;
 }
+export type FlexStatus = 'draft' | 'submitted' | 'under_review' | 'action_required' | 'approved' | 'rejected' | 'suspended';
+export interface LiveFlex {
+  status: FlexStatus | null; city: string | null; note: string; paused: boolean; agreementVersion: string | null; agreementAt: string | null;
+  currentAgreementVersion: string | null; registrationOpen: boolean; regions: string[]; blockedReason: string | null;
+  availability: 'offline' | 'online' | 'paused' | 'unavailable' | 'suspended';
+  settlement: { bank: string; accountName: string; last4: string; status: 'pending_verification' } | null;
+}
 export interface LiveMe {
   id: string; name: string; plate: string; vehicle: 'Bike' | 'Car'; verified: boolean; online: boolean; rating: number; ratingCount: number;
-  model: 'fleet' | 'partner'; tier: string; docs: Record<string, { status: 'pending' | 'approved' | 'declined'; note: string }>;
+  model: 'fleet' | 'partner' | 'flex'; appliedModel?: 'fleet' | 'partner' | 'flex' | null; flex?: LiveFlex; tier: string; docs: Record<string, { status: 'pending' | 'approved' | 'declined'; note: string }>;
   contacts: { name: string; phone: string }[]; deliveriesToday: number; wallet: number; earnings?: number;
 }
 

@@ -12,7 +12,7 @@ export async function startSession(email?: string): Promise<LiveMe> {
   let me = await live.me();
   const a = useApply.getState();
   if (!me && a.name && a.phone) {
-    await live.apply({ name: a.name, plate: a.vehicle === 'bicycle' ? 'BICYCLE' : a.plate || 'PENDING', vehicle: toBackendVehicle(a.vehicle), phone: a.phone });
+    await live.apply({ name: a.name, plate: a.vehicle === 'bicycle' ? 'BICYCLE' : a.plate || 'PENDING', vehicle: toBackendVehicle(a.vehicle), phone: a.phone, type: a.type ?? undefined });
     me = await live.me();
   }
   if (!me) {

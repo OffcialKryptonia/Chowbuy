@@ -29,7 +29,7 @@ export function passwordRules(pw: string): PasswordRule[] {
 
 export const passwordOk = (pw: string): boolean => passwordRules(pw).every((r) => r.ok);
 
-export type RiderType = 'fleet' | 'partner';
+export type RiderType = 'fleet' | 'partner' | 'flex';
 export type Vehicle = 'motorcycle' | 'bicycle' | 'car' | 'truck' | 'van';
 
 /** Fleet riders are employed staff on company bikes; partners bring their own vehicle. Truck and van are for dispatch only. */
@@ -42,4 +42,6 @@ export const VEHICLES: Record<RiderType, { id: Vehicle; label: string; note?: st
     { id: 'truck', label: 'Truck', note: 'Dispatch only' },
     { id: 'van', label: 'Van', note: 'Dispatch only' },
   ],
+  // Flex riders use their own vehicle. Which types are open is a ChowBuy setting and is checked on the server.
+  flex: [{ id: 'motorcycle', label: 'Motorcycle' }, { id: 'bicycle', label: 'Bicycle' }, { id: 'car', label: 'Car' }],
 };
