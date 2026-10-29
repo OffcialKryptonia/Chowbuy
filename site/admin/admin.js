@@ -1462,7 +1462,7 @@ Object.assign(A,{
    var payload={provider:provider};
    if(provider==='livekit')payload.url=D.livekit.url;
    if(provider==='agora')payload.appId=D.agora.appId;
-   if(provider==='proxy'){payload.selectedProvider=D.proxy.provider;payload.pool=D.proxy.pool}
+   if(provider==='proxy'){payload.selectedProvider=D.proxy.provider;payload.pool=D.proxy.pool;payload.username=D.proxy.username;payload.accountSid=D.proxy.accountSid;payload.serviceSid=D.proxy.serviceSid}
    if(provider==='onesignal')payload.appId=D.push.onesignal.appId;
    U.conn[k]='testing';refresh();
    beFn('admin-provider-test',payload).then(function(r){
