@@ -1488,11 +1488,14 @@ Object.assign(A,{
      else if(!has(D.push.onesignal,'restKey'))warnM='OneSignal REST API key'}
    [['livekit'],['agora'],['proxy'],['push','fcm'],['push','onesignal']].forEach(function(p){var o=p.length===1?D[p[0]]:D[p[0]][p[1]],r=o.raw||{};Object.keys(r).forEach(function(k){if(!bad&&k!=='serviceAccount'&&r[k].length<12&&!(p[0]==='agora'))bad='That secret looks too short. Paste the full key.'})});
    if(bad){toast(bad,'err');return}
-   [['livekit'],['agora'],['proxy'],['push','fcm'],['push','onesignal']].forEach(function(p){var o=p.length===1?D[p[0]]:D[p[0]][p[1]],r=o.raw||{};o.hints=o.hints||{};Object.keys(r).forEach(function(k){if(k!=='serviceAccount'||!o.hints.serviceAccount||true){if(k!=='serviceAccount')o.hints[k]=mask(r[k])}});delete o.raw});
+   // Capture secret drafts BEFORE masking and deleting raw input values.
+   var rawLive=(D.livekit.raw||{}),rawAgora=(D.agora.raw||{}),rawProxy=(D.proxy.raw||{}),rawOs=(D.push.onesignal.raw||{});
+   var livekitApiKey=(D.livekit.apiKey||'').trim();
+   [['livekit'],['agora'],['proxy'],['push','fcm'],['push','onesignal']].forEach(function(p){var o=p.length===1?D[p[0]]:D[p[0]][p[1]],r=o.raw||{};o.hints=o.hints||{};Object.keys(r).forEach(function(k){if(k!=='serviceAccount')o.hints[k]=mask(r[k])});delete o.raw});
    var commitLocal=function(){upd(function(){S.rt=D;U.rdraft=null;U.conn={};log('Realtime and push settings updated','settings');audit('Realtime and push settings updated')});toast(warnM?'Saved. Add the '+warnM+' before going live.':'Realtime settings saved.',warnM?'warn':'')};
    if(beOn()){
-     var secrets={},rawLive=(D.livekit.raw||{}),rawAgora=(D.agora.raw||{}),rawProxy=(D.proxy.raw||{}),rawOs=(D.push.onesignal.raw||{});
-     if(D.livekit.apiKey)secrets.livekit_api_key=D.livekit.apiKey;
+     var secrets={};
+     if(livekitApiKey)secrets.livekit_api_key=livekitApiKey;
      if(rawLive.apiSecret)secrets.livekit_api_secret=rawLive.apiSecret;
      if(rawAgora.certificate)secrets.agora_app_certificate=rawAgora.certificate;
      if(rawProxy.apiKey)secrets.proxy_call_api_key=rawProxy.apiKey;
