@@ -92,7 +92,22 @@ Deno.serve(handle(async (req) => {
   }
   if (provider === 'proxy') {
     const selected = String(b.selectedProvider ?? '');
-    if (selected === 'termii') throw new HttpError(400, 'Termii Voice needs a provider-specific account/voice configuration check. This screen currently has only an API key and number pool, which are not enough to confirm a working masked-call route.');
+    const apiKey = await secret('proxy_call_api_key');
+    if (!apiKey) throw new HttpError(400, 'Save the selected masked-call provider API key in Admin settings first.');
+    if (selected === 'termii') {
+      let res: Response;
+      try {
+        res = await fetch('https://api.ng.termii.com/api/get-balance?api_key=' + encodeURIComponent(apiKey));
+      } catch {
+        throw new HttpError(502, 'Could not reach Termii. Try again later.');
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.code === 'invalid_api_key' || data.message?.toLowerCase?.().includes('invalid api')) {
+        console.error('Termii credential test rejected', res.status);
+        throw new HttpError(res.status === 401 || res.status === 403 ? 400 : 502, 'Termii rejected the API key or returned an unexpected response. Confirm the key and regional API base URL.');
+      }
+      return json({ provider, selectedProvider: selected, status: 'verified', message: 'Termii accepted the API key and returned an account response. This verifies API access, not that a masked voice number is provisioned.' });
+    }
     if (selected === 'at') throw new HttpError(400, 'Africa’s Talking requires its username and voice-enabled account configuration in addition to the API key. Add those fields before enabling a live provider test.');
     if (selected === 'twilio') throw new HttpError(400, 'Twilio Proxy requires an Account SID, Auth Token and Proxy Service SID. The current single API-key field is insufficient to verify a working proxy service.');
     throw new HttpError(400, 'Select a supported masked-call provider.');
