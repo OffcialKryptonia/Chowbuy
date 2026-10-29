@@ -1097,7 +1097,7 @@ function fld(root,path,label,val,o){o=o||{};var id=root+'-'+path.replace(/\./g,'
 function sfld(root,prov,key,label,D){var raw=(D.raw||{})[key],hint=(D.hints||{})[key],id=root+'-'+prov+'-'+key,shown=U.reveal[id];
   return '<div class="f"><label for="'+id+'">'+label+'</label><div class="acts" style="flex-wrap:nowrap"><input id="'+id+'" data-fid="'+id+'" data-in="'+root+':'+(prov?prov+'.':'')+'raw.'+key+'" type="'+(shown?'text':'password')+'" value="'+esc(raw||'')+'" placeholder="'+(hint?esc(hint)+' (saved)':'Not set')+'" autocomplete="off" spellcheck="false"><button type="button" class="ib" style="width:2.4rem;height:2.4rem;flex:none" data-act="reveal" data-id="'+id+'" aria-label="'+(shown?'Hide':'Reveal')+' '+esc(label)+'">'+ic(shown?'eyeoff':'eye')+'</button></div></div>'}
 function envSeg(prov,live){return '<div class="tabs sm" role="group" aria-label="Environment"><button type="button" data-act="payenv" data-id="'+prov+'" data-v="test" aria-pressed="'+!live+'">Sandbox / Test</button><button type="button" data-act="payenv" data-id="'+prov+'" data-v="live" aria-pressed="'+live+'">Live / Production</button></div>'}
-function connBadge(k){var c=U.conn[k];return c==='ok'?'<span class="pill ok">'+ic('checkc')+'Connected (simulated)</span>':c==='testing'?'<span class="pill info">Testing…</span>':c&&c.indexOf('fail')===0?'<span class="pill bad">'+ic('xc')+esc(c.slice(5))+'</span>':''}
+function connBadge(k){var c=U.conn[k];return c==='verified'?'<span class="pill ok">'+ic('checkc')+'Verified</span>':c==='local'?'<span class="pill warn">'+ic('alert')+'Format checked only</span>':c==='testing'?'<span class="pill info">Testing…</span>':c&&c.indexOf('fail')===0?'<span class="pill bad">'+ic('xc')+esc(c.slice(5))+'</span>':''}
 function gwCard(title,sub,prov,D,inner,test){return '<div class="card pad"><div class="acts" style="justify-content:space-between;flex-wrap:nowrap"><div><h3>'+title+'</h3><p class="sub">'+sub+'</p></div>'+sw(D.enabled,'paysw',prov+'.enabled','Enable '+title)+'</div>'+(D.enabled?'<div style="display:grid;gap:.9rem;margin-top:1.1rem">'+inner+(test?'<div class="acts">'+btn(ic('zap')+test,'testPay',prov,'')+connBadge(prov)+'</div>':'')+'</div>':'<p class="sub" style="margin-top:1rem">Disabled. Customers will not see this option at checkout.</p>')+'</div>'}
 function vPayments(){
   var D=pd(),K=D.korapay,Pf=D.pocketfi,C=D.cod,W=D.wallet,dirty=pDirty();
@@ -1432,7 +1432,7 @@ function vRealtime(){
   var lk=rtCard('LiveKit','In-app voice calls between customer and rider.',fld('rt','livekit.url','Server URL',L.url,{copy:1,ph:'wss://your-project.livekit.cloud'})+fld('rt','livekit.apiKey','API key',L.apiKey,{copy:1})+sfld('rt','livekit','apiSecret','API secret',L),'Test LiveKit credentials','rt-livekit');
   var ag=rtCard('Agora','Alternative voice provider. Select it above to use it.',fld('rt','agora.appId','App ID',Ag.appId,{copy:1,ph:'32 character App ID'})+sfld('rt','agora','certificate','App certificate',Ag),'Test Agora credentials','rt-agora');
   var px=rtCard('Masked call number','Call Rider connects through a ChowBuy number so neither side sees the other\'s real phone number.',
-    '<div class="f"><label for="px-p">Provider</label><select id="px-p" data-ch="rt:proxy.provider"><option value="termii"'+(Px.provider==='termii'?' selected':'')+'>Termii Voice</option><option value="at"'+(Px.provider==='at'?' selected':'')+'>Africa\'s Talking</option><option value="twilio"'+(Px.provider==='twilio'?' selected':'')+'>Twilio Proxy</option></select></div>'+fld('rt','proxy.pool','Number pool',Px.pool)+sfld('rt','proxy','apiKey','Provider API key',Px),'Test number provider','rt-proxy');
+    '<div class="f"><label for="px-p">Provider</label><select id="px-p" data-ch="rt:proxy.provider"><option value="termii"'+(Px.provider==='termii'?' selected':'')+'>Termii Voice</option><option value="at"'+(Px.provider==='at'?' selected':'')+'>Africa\'s Talking</option><option value="twilio"'+(Px.provider==='twilio'?' selected':'')+'>Twilio Proxy</option></select></div>'+fld('rt','proxy.pool','Number pool',Px.pool)+(Px.provider==='at'?fld('rt','proxy.username','Africa\'s Talking username',Px.username,{ph:'Your AT username'}):'')+(Px.provider==='twilio'?fld('rt','proxy.accountSid','Twilio Account SID',Px.accountSid,{ph:'AC…'})+fld('rt','proxy.serviceSid','Twilio Proxy Service SID',Px.serviceSid,{ph:'KS…'})+sfld('rt','proxy','authToken','Twilio Auth Token',Px):'')+sfld('rt','proxy','apiKey',Px.provider==='twilio'?'Fallback API key':'Provider API key',Px),'Test number provider','rt-proxy');
   var fcm=rtCard('Firebase Cloud Messaging','Push to Android and, through APNs, to iOS.',fld('rt','push.fcm.projectId','Firebase project ID',P.fcm.projectId,{copy:1})+sfld('rt','push.fcm','serviceAccount','Service account JSON',P.fcm)+'<small class="muted">Paste the whole JSON from Firebase, Project settings, Service accounts. Only the account email is kept for display.</small>','Test FCM credentials','rt-fcm');
   var os=rtCard('OneSignal','Alternative to FCM. Select it above to use it.',fld('rt','push.onesignal.appId','App ID',P.onesignal.appId,{copy:1,ph:'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'})+sfld('rt','push.onesignal','restKey','REST API key',P.onesignal),'Test OneSignal credentials','rt-os');
   return head('Settings & pricing','Voice calls, masked numbers and push notifications for the customer and rider apps.',(dirty?'<span class="badge-un">Unsaved changes</span>'+btn('Discard','rtDiscard',null,''):'')+btn(ic('check')+'Save realtime settings','rtSave',null,'pri'))+setTabs()+
@@ -1457,13 +1457,17 @@ Object.assign(A,{
      },function(e){U.conn[k]='fail:'+e.message;refresh();toast(e.message||'Firebase credential test failed.','err')});
      return;
    }
-   var has=function(o,key){return (o.raw&&o.raw[key])||(o.hints&&o.hints[key])};
-   if(k==='rt-livekit')bad=!/^wss:\/\/[A-Za-z0-9.-]+/.test(D.livekit.url||'')?'Server URL must start with wss://':!/^[A-Za-z0-9]{8,}$/.test(D.livekit.apiKey||'')?'Enter the LiveKit API key':!has(D.livekit,'apiSecret')?'Add the API secret first':'';
-   else if(k==='rt-agora')bad=!/^[0-9a-f]{32}$/i.test(D.agora.appId||'')?'App ID is 32 hex characters':!has(D.agora,'certificate')?'Add the App certificate first':'';
-   else if(k==='rt-proxy')bad=!D.proxy.pool?'Enter the number pool':!has(D.proxy,'apiKey')?'Add the provider API key first':'';
-   else bad=!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(D.push.onesignal.appId||'')?'App ID must be a UUID':!has(D.push.onesignal,'restKey')?'Add the REST API key first':'';
-   if(bad){U.conn[k]='fail:'+bad;refresh();toast(bad,'err');return}
-   U.conn[k]='testing';refresh();setTimeout(function(){U.conn[k]='ok';refresh();toast('Credentials look valid (format check only; no live provider handshake was performed).')},900)},
+   if(!beOn()){toast('Connect the Admin Console to the live Supabase backend before testing provider credentials.','err');return}
+   var provider=k==='rt-livekit'?'livekit':k==='rt-agora'?'agora':k==='rt-proxy'?'proxy':'onesignal';
+   var payload={provider:provider};
+   if(provider==='livekit')payload.url=D.livekit.url;
+   if(provider==='agora')payload.appId=D.agora.appId;
+   if(provider==='proxy'){payload.selectedProvider=D.proxy.provider;payload.pool=D.proxy.pool;payload.username=D.proxy.username;payload.accountSid=D.proxy.accountSid;payload.serviceSid=D.proxy.serviceSid}
+   if(provider==='onesignal')payload.appId=D.push.onesignal.appId;
+   U.conn[k]='testing';refresh();
+   beFn('admin-provider-test',payload).then(function(r){
+     U.conn[k]=r.status==='verified'?'verified':'local';refresh();toast(r.message||'Provider check completed.',r.status==='verified'?'':'warn');
+   },function(e){U.conn[k]='fail:'+e.message;refresh();toast(e.message||'Provider credential test failed.','err')})},
  rtSave:function(){
    if(!rDirty()){toast('No realtime changes to save.','warn');return}
    var D=U.rdraft,bad='',warnM='',fcmSecret=(U.rdraft.push.fcm.raw||{}).serviceAccount||'',has=function(o,key){return (o.raw&&o.raw[key])||(o.hints&&o.hints[key])};
@@ -1486,10 +1490,17 @@ Object.assign(A,{
    if(bad){toast(bad,'err');return}
    [['livekit'],['agora'],['proxy'],['push','fcm'],['push','onesignal']].forEach(function(p){var o=p.length===1?D[p[0]]:D[p[0]][p[1]],r=o.raw||{};o.hints=o.hints||{};Object.keys(r).forEach(function(k){if(k!=='serviceAccount'||!o.hints.serviceAccount||true){if(k!=='serviceAccount')o.hints[k]=mask(r[k])}});delete o.raw});
    var commitLocal=function(){upd(function(){S.rt=D;U.rdraft=null;U.conn={};log('Realtime and push settings updated','settings');audit('Realtime and push settings updated')});toast(warnM?'Saved. Add the '+warnM+' before going live.':'Realtime settings saved.',warnM?'warn':'')};
-   if(beOn()&&D.push.provider==='fcm'){
-     var payload={public:{push:{provider:'fcm',fcmEnabled:true}}};
-     if(fcmSecret)payload.secrets={fcm_service_account:fcmSecret};
-     beFn('admin-settings',payload).then(function(){commitLocal()},function(e){toast('Could not securely save Firebase settings: '+e.message,'err')});
+   if(beOn()){
+     var secrets={},rawLive=(D.livekit.raw||{}),rawAgora=(D.agora.raw||{}),rawProxy=(D.proxy.raw||{}),rawOs=(D.push.onesignal.raw||{});
+     if(D.livekit.apiKey)secrets.livekit_api_key=D.livekit.apiKey;
+     if(rawLive.apiSecret)secrets.livekit_api_secret=rawLive.apiSecret;
+     if(rawAgora.certificate)secrets.agora_app_certificate=rawAgora.certificate;
+     if(rawProxy.apiKey)secrets.proxy_call_api_key=rawProxy.apiKey;
+     if(rawProxy.authToken)secrets.twilio_auth_token=rawProxy.authToken;
+     if(rawOs.restKey)secrets.onesignal_rest_key=rawOs.restKey;
+     if(fcmSecret)secrets.fcm_service_account=fcmSecret;
+     var pub={realtime:{provider:D.provider,livekitUrl:D.livekit.url,agoraAppId:D.agora.appId,proxyProvider:D.proxy.provider,proxyNumberPool:D.proxy.pool,africasTalkingUsername:D.proxy.username||'',twilioAccountSid:D.proxy.accountSid||'',twilioProxyServiceSid:D.proxy.serviceSid||''},push:{provider:D.push.provider,fcmEnabled:D.push.provider==='fcm',onesignalAppId:D.push.onesignal.appId}};
+     beFn('admin-settings',{public:pub,secrets:secrets}).then(function(){commitLocal()},function(e){toast('Could not securely save provider settings: '+e.message,'err')});
      return;
    }
    commitLocal()},

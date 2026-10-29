@@ -2,7 +2,7 @@ import { admin, handle, HttpError, json, requireAdmin } from '../_shared/util.ts
 
 const ALLOWED_SECRETS = new Set([
   'korapay_secret_key', 'korapay_encryption_key', 'pocketfi_secret_key', 'pocketfi_webhook_secret', 'pocketfi_base_url',
-  'livekit_api_key', 'livekit_api_secret', 'agora_app_certificate', 'fcm_service_account', 'onesignal_rest_key', 'proxy_call_api_key',
+  'livekit_api_key', 'livekit_api_secret', 'agora_app_certificate', 'fcm_service_account', 'onesignal_rest_key', 'proxy_call_api_key', 'twilio_auth_token',
   'google_directions_key', 'google_geocoding_key',
   // email providers (smtp_password for SMTP) and push
   'smtp_password', 'resend_api_key', 'sendgrid_api_key', 'brevo_api_key', 'mailgun_api_key', 'postmark_server_token', 'ses_access_key_id', 'ses_secret_access_key', 'expo_access_token',
