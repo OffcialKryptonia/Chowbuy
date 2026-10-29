@@ -1445,17 +1445,28 @@ Object.assign(A,{
  rtProv:function(el){var D=re();setPath(D,el.getAttribute('data-id'),el.getAttribute('data-v'));refresh()},
  rtDiscard:function(){U.rdraft=null;refresh();toast('Unsaved realtime changes discarded.')},
  testRt:function(el){
-   var k=el.getAttribute('data-id'),D=rd(),has=function(o,key){return (o.raw&&o.raw[key])||(o.hints&&o.hints[key])},bad='';
+   var k=el.getAttribute('data-id'),D=rd(),bad='';
+   if(k==='rt-fcm'){
+     if(!beOn()){toast('Connect the Admin Console to the live Supabase backend before testing Firebase credentials.','err');return}
+     if(!D.push.fcm.projectId){toast('Enter the Firebase project ID.','err');return}
+     if(D.push.fcm.raw&&D.push.fcm.raw.serviceAccount){toast('Save realtime settings first so the service account is stored securely on the server, then run this test.','warn');return}
+     U.conn[k]='testing';refresh();
+     beFn('admin-fcm-test',{projectId:D.push.fcm.projectId}).then(function(r){
+       U.conn[k]='ok';refresh();
+       toast('Firebase authenticated successfully for '+r.projectId+'. This checks server credentials only; it does not send a device notification.');
+     },function(e){U.conn[k]='fail:'+e.message;refresh();toast(e.message||'Firebase credential test failed.','err')});
+     return;
+   }
+   var has=function(o,key){return (o.raw&&o.raw[key])||(o.hints&&o.hints[key])};
    if(k==='rt-livekit')bad=!/^wss:\/\/[A-Za-z0-9.-]+/.test(D.livekit.url||'')?'Server URL must start with wss://':!/^[A-Za-z0-9]{8,}$/.test(D.livekit.apiKey||'')?'Enter the LiveKit API key':!has(D.livekit,'apiSecret')?'Add the API secret first':'';
    else if(k==='rt-agora')bad=!/^[0-9a-f]{32}$/i.test(D.agora.appId||'')?'App ID is 32 hex characters':!has(D.agora,'certificate')?'Add the App certificate first':'';
    else if(k==='rt-proxy')bad=!D.proxy.pool?'Enter the number pool':!has(D.proxy,'apiKey')?'Add the provider API key first':'';
-   else if(k==='rt-fcm')bad=!D.push.fcm.projectId?'Enter the Firebase project ID':!has(D.push.fcm,'serviceAccount')?'Paste the service account JSON first':'';
    else bad=!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(D.push.onesignal.appId||'')?'App ID must be a UUID':!has(D.push.onesignal,'restKey')?'Add the REST API key first':'';
    if(bad){U.conn[k]='fail:'+bad;refresh();toast(bad,'err');return}
-   U.conn[k]='testing';refresh();setTimeout(function(){U.conn[k]='ok';refresh();toast('Credentials look valid (format check only; the real handshake runs on your server).')},900)},
+   U.conn[k]='testing';refresh();setTimeout(function(){U.conn[k]='ok';refresh();toast('Credentials look valid (format check only; no live provider handshake was performed).')},900)},
  rtSave:function(){
    if(!rDirty()){toast('No realtime changes to save.','warn');return}
-   var D=U.rdraft,bad='',warnM='',has=function(o,key){return (o.raw&&o.raw[key])||(o.hints&&o.hints[key])};
+   var D=U.rdraft,bad='',warnM='',fcmSecret=(U.rdraft.push.fcm.raw||{}).serviceAccount||'',has=function(o,key){return (o.raw&&o.raw[key])||(o.hints&&o.hints[key])};
    if(D.provider==='livekit'){
      if(!/^wss:\/\/[A-Za-z0-9.-]+/.test(D.livekit.url||''))bad='The LiveKit server URL must start with wss://';
      else if(!/^[A-Za-z0-9]{8,}$/.test(D.livekit.apiKey||''))bad='Enter the LiveKit API key.';
@@ -1474,7 +1485,14 @@ Object.assign(A,{
    [['livekit'],['agora'],['proxy'],['push','fcm'],['push','onesignal']].forEach(function(p){var o=p.length===1?D[p[0]]:D[p[0]][p[1]],r=o.raw||{};Object.keys(r).forEach(function(k){if(!bad&&k!=='serviceAccount'&&r[k].length<12&&!(p[0]==='agora'))bad='That secret looks too short. Paste the full key.'})});
    if(bad){toast(bad,'err');return}
    [['livekit'],['agora'],['proxy'],['push','fcm'],['push','onesignal']].forEach(function(p){var o=p.length===1?D[p[0]]:D[p[0]][p[1]],r=o.raw||{};o.hints=o.hints||{};Object.keys(r).forEach(function(k){if(k!=='serviceAccount'||!o.hints.serviceAccount||true){if(k!=='serviceAccount')o.hints[k]=mask(r[k])}});delete o.raw});
-   upd(function(){S.rt=D;U.rdraft=null;U.conn={};log('Realtime and push settings updated','settings');audit('Realtime and push settings updated')});toast(warnM?'Saved. Add the '+warnM+' before going live.':'Realtime settings saved. Secrets are stored masked only.',warnM?'warn':'')},
+   var commitLocal=function(){upd(function(){S.rt=D;U.rdraft=null;U.conn={};log('Realtime and push settings updated','settings');audit('Realtime and push settings updated')});toast(warnM?'Saved. Add the '+warnM+' before going live.':'Realtime settings saved.',warnM?'warn':'')};
+   if(beOn()&&D.push.provider==='fcm'){
+     var payload={public:{push:{provider:'fcm',fcmEnabled:true}}};
+     if(fcmSecret)payload.secrets={fcm_service_account:fcmSecret};
+     beFn('admin-settings',payload).then(function(){commitLocal()},function(e){toast('Could not securely save Firebase settings: '+e.message,'err')});
+     return;
+   }
+   commitLocal()},
  /* chat supervision */
  chF:function(el){U.chF=el.getAttribute('data-v');U.chSel=null;refresh()},
  chSel:function(el){U.chSel=el.getAttribute('data-id');U.chmsg='';refresh()},
