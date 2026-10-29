@@ -145,3 +145,10 @@ Both switches default to off, and the buttons only appear in the app while on. A
 
 - The Admin web console calls the backend only for email settings, sign-in methods, broadcasts and push promotions; the rest of it is still the localStorage demo.
 - None of the email providers, Expo push, Google or Apple sign-in has been exercised against the real services.
+
+## Merchant self-service onboarding (migrations 0009 and 0010)
+
+- `0009_merchant_onboarding.sql` adds `merchant_members` (who may act for a business), `merchant_applications`, `merchant_settlement` (payout account, RPC-only) and the RPCs behind the merchant sign-up flow at `/merchant/` and the admin "Applications" page. A business exists only through `merchant_app_start`, which creates the merchant, the creator's membership and the application in one transaction. Setting `merchants.owner_id` (admin tool or SQL) now also creates the membership through a trigger, so an owner is never left without access.
+- Merchants cannot write to `merchants` directly. Store details go through `merchant_store_update`; products and opening need `application_status = 'APPROVED'` and `verified`.
+- `0010_demo_cleanup.sql` deactivates the sample stores (`is_demo`, ids m1 to m7 with no owner). Nothing is deleted, orders and wallets are untouched. Rollback: `update public.merchants set active = true, open = true where is_demo;`
+- Documents use the existing private `kyc` bucket (8 MB, JPG/PNG/WebP/PDF), paths `<merchant_id>/<doc>-<timestamp>.<ext>`; admins view them through short-lived signed links.

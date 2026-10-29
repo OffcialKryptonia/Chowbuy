@@ -1,0 +1,38 @@
+<div class="shell">
+  <aside class="side" id="side" aria-label="Merchant navigation">
+    <div class="side-top">
+      <a class="brand" href="#/"><img src="../assets/logo.png" alt="" width="36" height="36"><span>ChowBuy</span><span class="chip">Merchant</span></a>
+      <button type="button" class="ib burger" id="closeSide" aria-label="Close menu"></button>
+    </div>
+    <div class="ctx"><div class="av" id="ctxIcon" aria-hidden="true"></div><div><b id="ctxName" style="font-size:.9rem">Store</b><span id="ctxSub"></span></div></div>
+    <nav class="nav" id="nav" aria-label="Sections"></nav>
+    <div class="side-foot"><div id="liveBox"></div><a href="../index.html"><span>ChowBuy home</span></a></div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+  <div class="main">
+    <header class="top">
+      <button type="button" class="ib burger" id="burger" aria-label="Open menu" aria-controls="side" aria-expanded="false"></button>
+      <div class="ttl"><b><span id="crumb">Dashboard</span></b></div>
+      <div class="stat" id="stat" role="group" aria-label="Store status"></div>
+      <select class="sel" id="brSel" aria-label="Branch"></select>
+      <button type="button" class="ib" id="snd" data-act="sound" aria-label="Order chime" aria-pressed="true"></button>
+      <button type="button" class="btn sm" data-act="testSound" id="testbell">Test sound</button>
+      <button type="button" class="ib" data-act="storefront" aria-label="View customer storefront" title="Customer storefront"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 9 1.5-5h15L21 9M3 9v11h18V9M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/></svg></button>
+      <button type="button" class="ib" id="theme" data-act="theme" aria-label="Toggle theme"></button>
+      <div style="position:relative">
+        <button type="button" class="ib" id="bell" data-act="bell" aria-label="Notifications" aria-haspopup="true" aria-expanded="false"></button>
+        <div class="pop" id="pop" role="region" aria-label="Notifications"><div class="hd"><span>Notifications</span><button type="button" class="btn sm" data-act="readAll">Mark all read</button></div><div id="notifList"></div></div>
+      </div>
+      <div style="position:relative">
+        <button type="button" class="av" id="avTop" data-act="prof" aria-label="Profile menu" aria-haspopup="true">CE</button>
+        <div id="profMenu" role="menu" aria-label="Profile"></div>
+      </div>
+    </header>
+    <div class="banner" id="banner" role="status"></div>
+    <main class="view" id="view" tabindex="-1"><noscript>The merchant dashboard needs JavaScript.</noscript></main>
+  </div>
+</div>
+<nav class="btm" id="btm" aria-label="Quick navigation"></nav>
+<div class="mwrap" id="mwrap" role="dialog" aria-modal="true"><div class="modal" id="mbody"></div></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<span id="roleTag" hidden></span>

@@ -2196,8 +2196,98 @@ Object.assign(A,{
      if(beOn()){beReq('/rest/v1/rpc/admin_emergency_delete','POST',{p_id:id}).then(done,function(er){toast(er.message,'err')});return}done()},true)},
  sosOpen:function(el){sosOpen(el.getAttribute('data-id'))}
 });
+/* merchant applications: review of self-service registrations (backed by admin_applications / admin_application / admin_application_decide) */
+U.app={list:null,load:false,err:'',det:null};
+var APP_TY={RESTAURANT:'Restaurant',GROCERY_SUPERMARKET:'Groceries / Super Mart',PHARMACY:'Pharmacy',PACKAGE_LOGISTICS:'Package & Logistics'};
+var APP_DOC={owner_id:'Owner’s government ID',cac:'CAC registration certificate',food_permit:'Food business permit',pcn_premises:'PCN premises licence',pharmacist_licence:'Pharmacist licence'};
+var APP_PILL={DRAFT:'',EMAIL_VERIFICATION_PENDING:'warn',SUBMITTED:'info',UNDER_REVIEW:'info',ACTION_REQUIRED:'warn',APPROVED:'ok',REJECTED:'bad',SUSPENDED:'bad'};
+function aLoad(force){
+  if(!beOn()||U.app.load||(U.app.list&&!force))return;U.app.load=true;
+  beReq('/rest/v1/rpc/admin_applications','POST',{p_status:T('appS','all'),p_type:T('appT','all'),p_search:''}).then(function(j){U.app.list=j;U.app.load=false;U.app.err='';refresh()},function(e){U.app.err=e.message;U.app.list=[];U.app.load=false;refresh()});
+}
+function aPill(s){return pill(String(s||'').replace(/_/g,' ').toLowerCase().replace(/^./,function(c){return c.toUpperCase()}),APP_PILL[s]||'')}
+function vApps(){
+  aLoad(false);
+  var q=(U.q.apps||'').trim().toLowerCase(),all=U.app.list||[];
+  var list=all.filter(function(x){return(T('appS','all')==='all'||x.status===T('appS','all'))&&(T('appT','all')==='all'||x.type===T('appT','all'))&&(!q||(x.name+' '+x.applicant+' '+x.applicant_name+' '+x.city).toLowerCase().indexOf(q)>-1)});
+  var cnt=function(s){return all.filter(function(x){return x.status===s}).length};
+  var rows=list.map(function(x){
+    return '<tr><td><div class="who">'+tile(x.name,({RESTAURANT:'restaurant',GROCERY_SUPERMARKET:'grocery',PHARMACY:'pharmacy',PACKAGE_LOGISTICS:'package'})[x.type])+'<div><b>'+esc(x.name)+'</b><small>'+esc(APP_TY[x.type]||x.type)+(x.city?' · '+esc(x.city):'')+'</small></div></div></td><td>'+esc(x.applicant_name||'')+'<small style="display:block" class="muted">'+esc(x.applicant)+'</small></td><td>'+aPill(x.status)+'</td><td class="mono">'+x.docs_ok+' / '+x.docs_required+(x.docs_pending?' <small class="muted">('+x.docs_pending+' to review)</small>':'')+'</td><td>'+(x.serviceable?pill('In service area','ok'):pill('Check area','warn'))+'</td><td>'+(x.submitted_at?esc(fdt(x.submitted_at)):'<span class="muted">Not submitted</span>')+'</td><td class="r"><div class="rowact">'+btn(ic('eye')+'Review','appOpen',x.id,'pri')+'</div></td></tr>'}).join('');
+  var banner=!beOn()?'<span class="pill" title="Connect the backend in Messaging to review real applications.">'+ic('alert')+'Backend not connected</span>':U.app.err?'<div class="card pad" style="border-color:var(--bad)"><b>Could not load applications.</b> <span class="muted">'+esc(U.app.err)+'. Apply the 20261101000009 migration to your Supabase project, then reload.</span></div>':'<span class="pill ok">'+ic('checkc')+'Live data</span>';
+  return head('Merchant applications','Businesses that registered themselves. Nothing goes live until you approve it, and approval needs every required document accepted.',banner+btn(ic('refresh')+'Refresh','appRefresh',null,''))+
+  '<div class="grid g3">'+kpi('Waiting for you',num(cnt('SUBMITTED')+cnt('UNDER_REVIEW')),'submitted or in review','clock','n')+kpi('Sent back',num(cnt('ACTION_REQUIRED')),'waiting on the merchant','alert')+kpi('Approved',num(cnt('APPROVED')),'','shield','g')+'</div>'+
+  '<div class="card"><div class="bar">'+search('apps','Search business, applicant or city')+tabs('appS',[['all','All'],['SUBMITTED','Submitted'],['UNDER_REVIEW','In review'],['ACTION_REQUIRED','Action required'],['APPROVED','Approved'],['REJECTED','Rejected'],['SUSPENDED','Suspended'],['DRAFT','Drafts']],1)+tabs('appT',[['all','Any type'],['RESTAURANT','Restaurant'],['GROCERY_SUPERMARKET','Groceries'],['PHARMACY','Pharmacy'],['PACKAGE_LOGISTICS','Logistics']],1)+'</div>'+
+  (list.length?'<div class="tw"><table class="t" style="min-width:58rem"><thead><tr><th>Business</th><th>Applicant</th><th>Status</th><th>Documents</th><th>Area</th><th>Submitted</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="foot"><span>'+list.length+' application'+(list.length>1?'s':'')+'</span></div>':(U.app.load?empty('shield','Loading','Fetching from your project…'):empty('shield','No applications','When a business registers it will show up here.')))+'</div>';
+}
+function aKv(o,labels){return '<div class="kv">'+labels.filter(function(l){var v=o&&o[l[0]];return v!==undefined&&v!==null&&v!==''}).map(function(l){var v=o[l[0]];if(Array.isArray(v))v=v.join(', ');if(v===true)v='Yes';if(v===false)v='No';return '<span>'+esc(l[1])+'</span><b>'+esc(String(v))+'</b>'}).join('')+'</div>'}
+function aOpen(id){
+  openM('<h3>Loading…</h3><p class="muted">Fetching the application.</p>',function(){closeM()});
+  beReq('/rest/v1/rpc/admin_application','POST',{p_id:id}).then(function(a){U.app.det=a;aRender()},function(e){closeM();toast(e.message,'err')});
+}
+function aRender(){
+  var a=U.app.det;if(!a)return;var d=a.data||{},b=d.business||{},o=d.owner||{},l=d.location||{},s=d.specific||{},st=a.settlement;
+  var docs={};(a.docs||[]).forEach(function(x){docs[x.doc]=x});
+  var drows=(a.required||[]).map(function(k){var c=docs[k]||{};
+    return '<div class="it" style="align-items:flex-start;justify-content:space-between;gap:.6rem;border-bottom:1px solid var(--line);padding:.5rem 0"><div><b>'+esc(APP_DOC[k]||k)+'</b><div>'+kBadge(c.status)+'</div>'+(c.note?'<div class="muted" style="font-size:.82rem">Note: '+esc(c.note)+'</div>':'')+'</div><div class="acts">'+(c.file?btn(ic('eye')+'View','appDocView',c.file):'')+btn('Decide','appDoc',k)+'</div></div>'}).join('');
+  var can=function(){return Array.prototype.slice.call(arguments).indexOf(a.status)>-1};
+  var acts=(can('SUBMITTED')?'<button type="button" class="btn" data-act="appDecide" data-id="start_review">Start review</button>':'')+
+    (can('SUBMITTED','UNDER_REVIEW')?'<button type="button" class="btn" data-act="appDecide" data-id="request_info">'+ic('alert')+'Ask for changes</button>':'')+
+    (can('SUBMITTED','UNDER_REVIEW','ACTION_REQUIRED')?'<button type="button" class="btn danger" data-act="appDecide" data-id="reject">'+ic('ban')+'Reject</button>':'')+
+    (can('SUBMITTED','UNDER_REVIEW')?'<button type="button" class="btn pri" data-act="appDecide" data-id="approve">'+ic('check')+'Approve</button>':'')+
+    (can('REJECTED')?'<button type="button" class="btn" data-act="appDecide" data-id="reopen">Reopen</button>':'')+
+    (can('APPROVED')?'<button type="button" class="btn danger" data-act="appDecide" data-id="suspend">Suspend</button>':'')+
+    (can('SUSPENDED')?'<button type="button" class="btn pri" data-act="appDecide" data-id="reinstate">Reinstate</button>':'');
+  var hist=(a.history||[]).slice(0,12).map(function(h){return '<div class="it" style="justify-content:space-between;gap:.6rem;font-size:.84rem"><span>'+esc(String(h.action||'').replace(/^merchant_application_/,'').replace(/_/g,' '))+(h.meta&&h.meta.note?' · '+esc(h.meta.note):'')+'</span><span class="muted">'+esc(h.by)+' · '+esc(fdt(h.at))+'</span></div>'}).join('');
+  var mem=(a.members||[]).map(function(m){return '<div class="it" style="justify-content:space-between;gap:.6rem"><span><b>'+esc(m.name||'')+'</b> <small class="muted">'+esc(m.email||'')+'</small></span><span>'+pill(m.role,'')+' '+pill(m.status,m.status==='active'?'ok':'warn')+'</span></div>'}).join('');
+  var html='<h3>'+esc(a.name)+' '+aPill(a.status)+'</h3><p class="muted">'+esc(APP_TY[a.type]||a.type)+(a.submittedAt?' · submitted '+esc(fdt(a.submittedAt)):' · not submitted yet')+'</p>'+
+   (a.note?'<div class="card pad" style="margin:.5rem 0"><b>Last note:</b> '+esc(a.note)+'</div>':'')+
+   ((a.missing||[]).length&&can('DRAFT','ACTION_REQUIRED')?'<div class="card pad" style="margin:.5rem 0"><b>Still missing:</b> '+esc(a.missing.join(', '))+'</div>':'')+
+   '<h4>Applicant</h4>'+aKv(a.applicant||{},[['name','Name'],['email','Email'],['phone','Phone']])+
+   '<h4>Business</h4>'+aKv(b,[['trading_name','Trading name'],['legal_name','Legal name'],['cac_status','CAC status'],['cac_number','CAC number'],['business_phone','Phone'],['business_email','Email'],['website','Website'],['description','About']])+
+   '<h4>Owner or representative</h4>'+aKv(o,[['full_name','Name'],['position','Position'],['phone','Phone'],['email','Email'],['authorized','Authorised to act for the business']])+
+   '<h4>Location</h4>'+aKv(l,[['address','Address'],['area','Area'],['city','City'],['state','State'],['serviceable','Inside a ChowBuy service area']])+
+   '<h4>Business details</h4>'+aKv(s,Object.keys(s).map(function(k){return [k,k.replace(/_/g,' ').replace(/^./,function(c){return c.toUpperCase()})]}))+
+   '<h4>Documents</h4>'+(drows||'<p class="muted">No documents required.</p>')+
+   '<h4>Payout account</h4>'+(st?aKv(st,[['beneficiary','Account name'],['bank','Bank'],['account','Account number'],['status','Status'],['note','Note']])+'<div class="acts" style="margin-top:.4rem">'+btn('Mark verified','appSettle','VERIFIED')+btn('Mark failed','appSettle','FAILED','danger')+'</div>':'<p class="muted">Not provided yet.</p>')+
+   '<h4>People</h4>'+(mem||'<p class="muted">None.</p>')+(hist?'<h4>History</h4>'+hist:'')+
+   '<div class="ft" style="flex-wrap:wrap;gap:.5rem"><button type="button" class="btn" data-m="x">Close</button>'+acts+'</div>';
+  openM(html,function(){closeM()});
+}
+function aReload(){return beReq('/rest/v1/rpc/admin_application','POST',{p_id:U.app.det.id}).then(function(a){U.app.det=a;U.app.list=null;aLoad(true);aRender()})}
+function aDecide(action,note){
+  var a=U.app.det;
+  return beReq('/rest/v1/rpc/admin_application_decide','POST',{p_id:a.id,p_action:action,p_note:note||''}).then(function(){log(a.name+' · application '+action.replace(/_/g,' '),'kyc');audit('Application '+action+' · '+a.name);return aReload()}).then(function(){toast('Done.')},function(e){toast(e.message,'err')});
+}
+function aDocForm(doc){
+  var a=U.app.det,c=(a.docs||[]).filter(function(x){return x.doc===doc})[0]||{};
+  openM('<h3>'+esc(APP_DOC[doc]||doc)+'</h3><p class="muted">'+esc(a.name)+'</p>'+sel('ks','Decision',[['approved','Accept'],['declined','Decline'],['pending','Keep in review']],c.status==='declined'?'declined':c.status==='approved'?'approved':'pending')+inp('kn','Note for the merchant (required when declining)',c.note||'','maxlength="160" placeholder="e.g. Photo is blurry, please send again"')+'<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Save</button></div>',function(v){
+    var status=v.ks,note=String(v.kn||'').trim();if(status==='declined'&&note.length<3)return 'Say why it was declined so the merchant can fix it.';
+    beReq('/rest/v1/rpc/admin_kyc_set','POST',{p_kind:'merchant',p_subject:a.merchant,p_doc:doc,p_status:status,p_note:note,p_path:null}).then(function(){log(a.name+' · '+(APP_DOC[doc]||doc)+' '+status,'kyc');audit('KYC '+status+' · '+a.name+' · '+doc);return aReload()}).then(function(){toast('Saved.')},function(e){toast(e.message,'err')});
+  });
+}
+function aNoteForm(action){
+  var a=U.app.det,T2={request_info:['Ask for changes','What does the merchant need to fix? They will see this exactly as written.',true,'Send back'],reject:['Reject application','Give the reason. The merchant will see it.',true,'Reject'],suspend:['Suspend merchant','Give the reason. The store closes immediately and the merchant will see this.',true,'Suspend'],approve:['Approve '+a.name,'The store becomes active but stays closed until the merchant opens it. Every required document must already be accepted.',false,'Approve'],start_review:['Start review','Move this application into review.',false,'Start'],reopen:['Reopen application','The merchant can edit and resubmit.',false,'Reopen'],reinstate:['Reinstate merchant','The merchant can open the store again.',false,'Reinstate']}[action];
+  openM('<h3>'+T2[0]+'</h3><p class="muted">'+T2[1]+'</p>'+(T2[2]?'<div class="f"><label for="an">Message</label><textarea id="an" name="an" rows="4" maxlength="500"></textarea></div>':'')+'<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn '+(action==='reject'||action==='suspend'?'danger':'pri')+'">'+T2[3]+'</button></div>',function(v){
+    var n=String(v.an||'').trim();if(T2[2]&&n.length<5)return 'Write at least a few words.';
+    aDecide(action,n);
+  });
+}
+function aDocView(path){
+  fetch(BE.url.replace(/\/+$/,'')+'/storage/v1/object/sign/kyc/'+path.split('/').map(encodeURIComponent).join('/'),{method:'POST',headers:{apikey:BE.anon,Authorization:'Bearer '+BE.tok,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:120})}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.message||'Could not open the file.');return j})}).then(function(j){var u=j.signedURL||j.signedUrl;if(!u)throw new Error('Could not open the file.');window.open(BE.url.replace(/\/+$/,'')+'/storage/v1'+u,'_blank','noopener')}).catch(function(e){toast(e.message,'err')});
+}
+Object.assign(A,{
+ appOpen:function(el){aOpen(el.getAttribute('data-id'))},
+ appRefresh:function(){U.app.list=null;aLoad(true);refresh()},
+ appDoc:function(el){aDocForm(el.getAttribute('data-id'))},
+ appDocView:function(el){aDocView(el.getAttribute('data-id'))},
+ appDecide:function(el){aNoteForm(el.getAttribute('data-id'))},
+ appSettle:function(el){var a=U.app.det,v=el.getAttribute('data-id');
+   var go=function(note){beReq('/rest/v1/rpc/admin_settlement_status','POST',{p_merchant:a.merchant,p_status:v,p_note:note||''}).then(function(){audit('Payout '+v+' · '+a.name);return aReload()}).then(function(){toast('Payout marked '+v.toLowerCase()+'.')},function(e){toast(e.message,'err')})};
+   if(v==='VERIFIED')return confirmM('Mark payout verified?','Only do this after you have checked the account name with the bank.','Mark verified',function(){go('')});
+   openM('<h3>Payout account failed</h3><p class="muted">Say what was wrong so the merchant can correct it.</p><div class="f"><label for="an">Reason</label><input id="an" name="an" maxlength="200"></div><div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn danger">Mark failed</button></div>',function(x){if(String(x.an||'').trim().length<3)return 'Say what was wrong.';go(String(x.an).trim())})}
+});
 Object.assign(IC,{clock:IC.clock||'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',phone:IC.phone||'<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.100 4.200 2 2 0 0 1 4.100 2h3a2 2 0 0 1 2 1.700c.1 1 .4 1.900.7 2.800a2 2 0 0 1-.5 2.100L8.100 9.900a16 16 0 0 0 6 6l1.300-1.300a2 2 0 0 1 2.100-.4c.9.300 1.800.6 2.800.7a2 2 0 0 1 1.700 2z"/>'});
-ROUTES.splice(ROUTES.map(function(r){return r.p}).indexOf('riders')+1,0,{p:'kyc',n:'KYC review',i:'shield',g:'Marketplace',v:vKyc},{p:'emergency',n:'Emergency services',i:'alert',g:'Marketplace',v:vEmergency});
+ROUTES.splice(ROUTES.map(function(r){return r.p}).indexOf('riders')+1,0,{p:'applications',n:'Applications',i:'file',g:'Marketplace',v:vApps},{p:'kyc',n:'KYC review',i:'shield',g:'Marketplace',v:vKyc},{p:'emergency',n:'Emergency services',i:'alert',g:'Marketplace',v:vEmergency});
 buildNav();
 
 registerMailHandlers();

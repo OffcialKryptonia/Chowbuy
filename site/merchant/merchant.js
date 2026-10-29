@@ -229,7 +229,7 @@ function barcode(txt){var h=fnv(txt),o='',x=0,i;for(i=0;i<46;i++){h=Math.imul(h^
 /* ---------- router & shell ---------- */
 var A={},INP={},CHG={},FORMS={};
 function visible(r){return(!LV.on||!!r.lf)&&(!r.v||r.v.indexOf(S.vertical)>=0)}
-function cur(){var h=location.hash.replace(/^#\/?/,'').split('?')[0].replace(/\/$/,'');return ROUTES.filter(function(r){return r.p===h})[0]||null}
+function cur(){var h=location.hash.replace(/^#\/?/,'').split('?')[0].replace(/\/$/,'');if(h==='dashboard')h='';if(h==='settings/profile')h='settings';return ROUTES.filter(function(r){return r.p===h})[0]||null}
 function lbl(r){return typeof r.n==='function'?r.n():r.n}
 function buildNav(){
   var g='',html='';
@@ -250,13 +250,13 @@ function renderBar(){
   $('#ctxIcon').innerHTML=ic(VI[S.vertical]);$('#ctxIcon').style.background=VC[S.vertical];
   $('#avTop').textContent=initials(S.me.name);
   $('#roleTag').textContent=ROLE[role()];
-  var m=$('#profMenu');m.innerHTML='<div class="hd"><b>'+esc(S.me.name)+'</b><small class="muted">'+esc(S.me.email)+'</small></div><div class="grp2">View dashboard as</div>'+Object.keys(ROLE).filter(function(r){return r!=='pharmacist'||S.vertical==='pharmacy'}).map(function(r){return '<button type="button" class="it" data-act="role" data-id="'+r+'" aria-pressed="'+(role()===r)+'">'+ic(role()===r?'checkc':'users')+ROLE[r]+'</button>'}).join('')+'<hr><button type="button" class="it" data-act="goto" data-id="settings">'+ic('settings')+'Store settings</button><button type="button" class="it" data-act="goto" data-id="support">'+ic('help')+'Support & help</button><button type="button" class="it" data-act="testSound">'+ic('volume')+'Test order sound</button><button type="button" class="it mob" data-act="theme">'+ic('moon')+'Switch theme</button><button type="button" class="it" data-act="signout">'+ic('logout')+'Sign out (demo)</button>';
+  var m=$('#profMenu');m.innerHTML='<div class="hd"><b>'+esc(S.me.name)+'</b><small class="muted">'+esc(S.me.email)+'</small></div><div class="grp2">View dashboard as</div>'+Object.keys(ROLE).filter(function(r){return r!=='pharmacist'||S.vertical==='pharmacy'}).map(function(r){return '<button type="button" class="it" data-act="role" data-id="'+r+'" aria-pressed="'+(role()===r)+'">'+ic(role()===r?'checkc':'users')+ROLE[r]+'</button>'}).join('')+'<hr><button type="button" class="it" data-act="goto" data-id="settings">'+ic('settings')+'Store settings</button><button type="button" class="it" data-act="switchBiz">'+ic('store')+'My businesses</button><button type="button" class="it" data-act="goto" data-id="support">'+ic('help')+'Support & help</button><button type="button" class="it" data-act="testSound">'+ic('volume')+'Test order sound</button><button type="button" class="it mob" data-act="theme">'+ic('moon')+'Switch theme</button><button type="button" class="it" data-act="signout">'+ic('logout')+'Sign out (demo)</button>';
   var un=S.notifs.filter(function(n){return!n.read}).length,d=$('#nbadge');d.textContent=un;d.style.display=un?'':'none';
   $('#notifList').innerHTML=S.notifs.length?S.notifs.slice(0,12).map(function(n){return '<button type="button" class="it'+(n.read?'':' unread')+'" data-act="readN" data-id="'+n.id+'" style="width:100%;text-align:left">'+ic(n.read?'check':n.k)+'<span>'+esc(n.t)+'<small class="muted" style="display:block">'+ago(n.at)+'</small></span></button>'}).join(''):'<p class="muted" style="padding:1rem">No notifications yet.</p>';
   if(LV.on){
     $('#stat').innerHTML=[['open','Open','checkc'],['paused','Paused','ban']].map(function(x){return '<button type="button" data-act="status" data-id="'+x[0]+'" aria-pressed="'+(st===x[0])+'" class="s-'+x[0]+'">'+ic(x[2])+'<span>'+x[1]+'</span></button>'}).join('');
     $('#brSel').innerHTML=LV.me.stores.map(function(x){return '<option value="'+esc(x.id)+'"'+(x.id===LV.store.id?' selected':'')+'>'+esc(x.name)+'</option>'}).join('');
-    m.innerHTML='<div class="hd"><b>'+esc(S.me.name)+'</b><small class="muted">'+esc(S.me.email)+'</small></div><button type="button" class="it" data-act="goto" data-id="settings">'+ic('settings')+'Store settings</button><button type="button" class="it" data-act="testSound">'+ic('volume')+'Test order sound</button><button type="button" class="it mob" data-act="theme">'+ic('moon')+'Switch theme</button><button type="button" class="it" data-act="signout">'+ic('logout')+'Sign out</button>';
+    m.innerHTML='<div class="hd"><b>'+esc(S.me.name)+'</b><small class="muted">'+esc(S.me.email)+'</small></div><button type="button" class="it" data-act="goto" data-id="settings">'+ic('settings')+'Store settings</button><button type="button" class="it" data-act="testSound">'+ic('volume')+'Test order sound</button><button type="button" class="it mob" data-act="theme">'+ic('moon')+'Switch theme</button><button type="button" class="it" data-act="switchBiz">'+ic('store')+'My businesses</button><button type="button" class="it" data-act="signout">'+ic('logout')+'Sign out</button>';
   }
   renderLiveBox();
   var np=pendingCount();[].forEach.call(document.querySelectorAll('[data-badge]'),function(e){e.textContent=np;e.style.display=np?'':'none'});
@@ -1004,12 +1004,12 @@ var ROUTES=[
 var LAPI={url:'https://nhaxcyfkbrbwlqbpizjo.supabase.co',anon:'sb_publishable_fEoqE8u49jwFe1v36CacDg_seaMgyUS'};   /* publishable by design: every table is behind row-level security */
 function lget(k){try{return sessionStorage.getItem(k)||''}catch(e){return ''}}
 function lset(k,v){try{if(v)sessionStorage.setItem(k,v);else sessionStorage.removeItem(k)}catch(e){}}
-function lend(msg){lset('cb-merch-tok','');lset('cb-merch-rt','');lset('cb-merch-store','');if(msg)lset('cb-merch-msg',msg);location.reload()}
+function lend(msg){lset('cb-merch-tok','');lset('cb-merch-rt','');lset('cb-merch-store','');try{localStorage.removeItem('cb-merch-rt')}catch(e){}if(msg)lset('cb-merch-msg',msg);location.replace('./')}
 var lrefreshing=null;
 function lrefresh(){
   var rt=lget('cb-merch-rt');if(!rt)return Promise.reject(new Error('no refresh token'));
   if(!lrefreshing)lrefreshing=fetch(LAPI.url+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:LAPI.anon,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:rt})})
-    .then(function(r){return r.json().then(function(j){if(!r.ok||!j.access_token)throw new Error('refresh failed');lset('cb-merch-tok',j.access_token);lset('cb-merch-rt',j.refresh_token||rt);return j.access_token})})
+    .then(function(r){return r.json().then(function(j){if(!r.ok||!j.access_token)throw new Error('refresh failed');lset('cb-merch-tok',j.access_token);lset('cb-merch-rt',j.refresh_token||rt);try{if(localStorage.getItem('cb-merch-rt'))localStorage.setItem('cb-merch-rt',j.refresh_token||rt)}catch(e){}return j.access_token})})
     .then(function(t){lrefreshing=null;return t},function(e){lrefreshing=null;throw e});
   return lrefreshing;
 }
@@ -1039,7 +1039,7 @@ function mapOrder(o){
 function buildLiveS(){
   var st=LV.store,snd=S.sound!==false,base=window.MSEED(st.vertical);
   S=base;S.sound=snd;S.vertical=st.vertical;
-  S.me={name:LV.me.name||LV.me.email,email:LV.me.email,role:'owner'};
+  S.me={name:LV.me.name||LV.me.email,email:LV.me.email,role:{owner:'owner',manager:'manager',staff:'kitchen'}[st.role]||'kitchen'};
   S.store=Object.assign(S.store,{name:st.name,phone:'',email:LV.me.email,addr:st.area,logo:'',cover:'',status:st.open?'open':'paused',pauseReason:''});
   S.branches=[{id:'B1',name:st.area||'Main store',addr:st.area||'',status:st.open?'open':'closed',f:1}];S.branch='B1';
   S.notifs=[];S.activity=[];S.items=[];S.cats=[];S.ships=[];S.rx=[];S.reviews=[];
@@ -1056,25 +1056,15 @@ function liveLoad(){
 }
 function liveBoot(){
   return lrpc('merchant_me').then(function(me){
+    if(!me.stores||!me.stores.length)throw new Error('This account has no approved business yet.');
     LV.me=me;var want=lget('cb-merch-store');LV.store=me.stores.filter(function(s){return s.id===want})[0]||me.stores[0];lset('cb-merch-store',LV.store.id);LV.on=true;
     return liveLoad();
   });
 }
-function lsignIn(email,pw){
-  return fetch(LAPI.url+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:LAPI.anon,'Content-Type':'application/json'},body:JSON.stringify({email:email,password:pw})})
-   .then(function(r){return r.json().then(function(j){if(!r.ok||!j.access_token)throw new Error(/invalid/i.test(j.error_description||j.msg||'')?'Wrong email or password.':(j.error_description||j.msg||'Could not sign in.'));return j})},function(){throw new Error('Could not reach the server. Check your connection.')})
-   .then(function(j){
-     lset('cb-merch-tok',j.access_token);lset('cb-merch-rt',j.refresh_token||'');try{localStorage.setItem('cb-merch-who',email)}catch(e){}
-     return liveBoot().then(function(){buildNav();render(false)},function(e){
-       fetch(LAPI.url+'/auth/v1/logout',{method:'POST',headers:{apikey:LAPI.anon,Authorization:'Bearer '+j.access_token}}).catch(function(){});
-       lset('cb-merch-tok','');lset('cb-merch-rt','');LV.on=false;throw e});
-   });
-}
 function lsignOut(){var t=lget('cb-merch-tok');if(t)fetch(LAPI.url+'/auth/v1/logout',{method:'POST',headers:{apikey:LAPI.anon,Authorization:'Bearer '+t}}).catch(function(){});lend('')}
 function renderLiveBox(){
   var b=$('#liveBox');if(!b)return;
-  b.innerHTML=LV.on?'<div class="lbox on"><b>'+ic('checkc')+' Live</b><small class="muted">Real orders and menu for '+esc(LV.store.name)+'. Other pages are not connected yet.</small><button type="button" class="btn sm" data-act="signout" style="width:100%">Sign out</button></div>'
-   :'<div class="lbox"><b>Demo data</b><small class="muted">Everything here is sample data. Go live to run your real store.</small><button type="button" class="btn sm pri" data-act="goLive" style="width:100%">Go live</button></div>';
+  b.innerHTML='<div class="lbox on"><b>'+ic('checkc')+' Live</b><small class="muted">Real orders and menu for '+esc(LV.store.name)+'. Other pages are not connected yet.</small><button type="button" class="btn sm" data-act="signout" style="width:100%">Sign out</button></div>';
 }
 function liveErr(e){toast(e.message||'Something went wrong.','err')}
 function lagosDay(ts){return new Date(ts).toLocaleDateString('en-CA',{timeZone:'Africa/Lagos'})}
@@ -1087,7 +1077,7 @@ function vDashLive(){
   (st.active?'':'<div class="card pad" style="border-color:var(--amber,#F59E0B);margin-bottom:1rem"><b>Your store is not visible to customers yet.</b> <span class="muted">ChowBuy has not activated it. You can set up your menu in the meantime.</span></div>')+
   '<div class="grid g5">'+kpi('Orders today',today.length,'','bag')+kpi('Sales today',ngn(sales),'','trend','g','Items only, cancelled excluded')+kpi('Active orders',active.length,'','list','n')+kpi('Waiting for you',nw.length,'','clock')+kpi('Store rating',rt?rt.toFixed(1)+' / 5':'New','','star','n',num(st.ratingCount)+' rating'+(st.ratingCount===1?'':'s'))+'</div>'+
   (nw.length?'<div class="card pad" style="margin-top:1rem"><h3>Needs your attention</h3><p class="sub">New orders waiting to be accepted</p><div class="ribbon" style="margin-top:.8rem">'+nw.slice(0,10).map(function(o){return '<a class="rb" href="#/orders"><b class="mono">'+esc(o.id)+'</b><span>'+esc(o.customer)+' · '+ngn(o.sub)+'</span>'+pill('new','warn')+'</a>'}).join('')+'</div></div>':'')+
-  '<div class="card pad" style="margin-top:1rem"><h3>Recent orders</h3>'+(recent?'<ul class="feed">'+recent+'</ul>':empty('bag','No orders yet','Orders from customers will appear here as soon as they pay.'))+'</div>';
+  (O.length?'':'<div class="card pad" style="margin-top:1rem"><h3>Finish setting up</h3><p class="sub">'+esc(CKHELP[LV.store.type]||'')+'</p><p style="margin-top:.8rem"><a class="btn pri" href="#/onboarding">Open setup checklist</a></p></div>')+'<div class="card pad" style="margin-top:1rem"><h3>Recent orders</h3>'+(recent?'<ul class="feed">'+recent+'</ul>':empty('bag','No orders yet','Orders from customers will appear here as soon as they pay.'))+'</div>';
 }
 function lcat(p){return p.category||'Other'}
 function vCatalogLive(){
@@ -1097,7 +1087,7 @@ function vCatalogLive(){
   return head(rest?'Menu':'Products','What customers can order from you. Changes are live straight away.',btn(ic('plus')+'Add '+(rest?'dish':'product'),'pNew','','pri'))+
   '<div class="card"><div class="bar"><div class="tabs" role="group"><button type="button" data-act="tab" data-k="lcat" data-v="all" aria-pressed="'+(t==='all')+'">All <em>'+P.length+'</em></button>'+cats.map(function(c){return '<button type="button" data-act="tab" data-k="lcat" data-v="'+esc(c)+'" aria-pressed="'+(t===c)+'">'+esc(c)+'</button>'}).join('')+'</div>'+search('lcat','Search items')+'</div>'+
   (rows.length?'<div class="tw"><table class="t" style="min-width:36rem"><thead><tr><th>Item</th><th>Category</th><th style="text-align:right">Price</th><th>Available</th><th></th></tr></thead><tbody>'+rows.map(function(p){return '<tr><td><b>'+esc(p.name)+'</b>'+(p.rx?' '+pill('Rx','warn'):'')+(p.descr?'<div class="muted" style="font-size:.8rem">'+esc(p.descr.length>70?p.descr.slice(0,70)+'…':p.descr)+'</div>':'')+'</td><td>'+esc(lcat(p))+'</td><td class="mono" style="text-align:right">'+ngn(p.price)+'</td><td>'+sw(p.in_stock,'pStock',p.id,'Available to order')+'</td><td><div class="acts">'+btn('Edit','pEdit',p.id)+btn('Delete','pDel',p.id,'danger')+'</div></td></tr>'}).join('')+'</tbody></table></div>'
-    :empty('bag',P.length?'No match':'Nothing here yet',P.length?'Try another category or clear the search.':'Add your first '+(rest?'dish':'product')+' so customers can order it.',P.length?'':btn('Add '+(rest?'dish':'product'),'pNew','','pri')))+'</div>';
+    :empty('bag',P.length?'No match':(rest?'Your menu is ready to be created':'Your catalogue is empty'),P.length?'Try another category or clear the search.':(CKHELP[LV.store.type]||'Add your first product.'),P.length?'':btn('Add '+(rest?'dish':'product'),'pNew','','pri')))+'</div>';
 }
 function pForm(p){
   var rest=S.vertical==='restaurant',cats=[];(LV.products||[]).forEach(function(x){if(cats.indexOf(lcat(x))<0)cats.push(lcat(x))});
@@ -1127,17 +1117,9 @@ FORMS.lstore=function(f){
   if(d.sn.trim().length<2){toast('Enter a store name.','warn');return}
   if(!(fee>=0&&fee<=100000)){toast('Enter a delivery fee in naira.','warn');return}
   if(!(a>=1&&b>=a&&b<=240)){toast('Enter a delivery time range, fastest first.','warn');return}
-  lreq('/rest/v1/merchants?id=eq.'+encodeURIComponent(LV.store.id),'PATCH',{name:d.sn.trim(),hours:d.sh.trim(),delivery_fee:fee,eta_min:a,eta_max:b}).then(function(){return liveBoot()}).then(function(){buildNav();refresh();toast('Saved.')},liveErr);
+  lrpc('merchant_store_update',{p_merchant:LV.store.id,p_name:d.sn.trim(),p_hours:d.sh.trim(),p_fee:fee,p_eta_min:a,p_eta_max:b}).then(function(){return liveBoot()}).then(function(){buildNav();refresh();toast('Saved.')},liveErr);
 };
 Object.assign(A,{
- goLive:function(){
-   var who='';try{who=localStorage.getItem('cb-merch-who')||''}catch(e){}
-   openM('<h3>Go live</h3><p class="muted">Sign in with the account linked to your store to see your real orders and menu instead of sample data.</p>'+inp('le','Email',who,'type="email" autocomplete="username" autocapitalize="off"')+inp('lp','Password','','type="password" autocomplete="current-password"')+'<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Sign in</button></div>',function(d){
-     if(!d.le.trim()||!d.lp)return 'Enter your email and password.';
-     var b=$('#mf button[type=submit]');b.disabled=true;b.textContent='Signing in…';
-     lsignIn(d.le.trim(),d.lp).then(function(){closeM();toast('You are live. This is your real store.')},function(e){var er=$('#merr');if(er)er.textContent=e.message;b.disabled=false;b.textContent='Sign in'});
-     return false});
- },
  liveRefresh:function(){liveLoad().then(function(){refresh();toast('Up to date.')},liveErr)},
  pNew:function(){openM(pForm(null),pSubmit(null))},
  pEdit:function(el){var p=find(LV.products,el.getAttribute('data-id'));if(p)openM(pForm(p),pSubmit(p.id))},
@@ -1170,7 +1152,52 @@ Object.assign(A,{
   };
 });
 function mfoot2(ok,danger){return '<div class="ft"><button type="button" class="btn" data-m="x">Back</button><button type="submit" class="btn '+(danger?'danger':'pri')+'">'+ok+'</button></div>'}
-ROUTES.forEach(function(r){r.lf={'':vDashLive,orders:vOrders,menu:vCatalogLive,products:vCatalogLive,settings:vSettingsLive}[r.p]});
+/* ---------- setup checklist, team and payout account (live, from the database) ---------- */
+function liveBlank(t,msg){return head(t,'')+'<div class="card pad"><p class="sub">'+msg+'</p></div>'}
+var CKHELP={RESTAURANT:'Your menu is ready to be created.',GROCERY_SUPERMARKET:'Add your first products to begin building your catalog.',PHARMACY:'Complete the required verification before activating your pharmacy catalog.',PACKAGE_LOGISTICS:'Configure your service areas and delivery capabilities.'};
+function ckLoad(){if(LV.ck||LV.ckBusy)return;LV.ckBusy=true;lrpc('merchant_checklist',{p_merchant:LV.store.id}).then(function(r){LV.ck=r;LV.ckBusy=false;refresh()},function(e){LV.ckBusy=false;LV.ck=[];refresh();liveErr(e)})}
+function vChecklistLive(){
+  ckLoad();var C=LV.ck;
+  if(!C)return head('Setup checklist','Finish these to start operating.')+'<div class="card pad"><p class="sub">Loading…</p></div>';
+  var done=C.filter(function(x){return x.done}).length,pct=C.length?Math.round(done/C.length*100):0;
+  return head('Setup checklist',CKHELP[LV.store.type]||'Finish these to start operating.')+
+  '<div class="card pad"><div class="acts" style="justify-content:space-between"><b>'+done+' of '+C.length+' done</b><span class="muted">'+pct+'%</span></div><div style="height:.5rem;border-radius:99px;background:var(--fill);margin-top:.6rem;overflow:hidden"><i style="display:block;height:100%;width:'+pct+'%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></i></div></div>'+
+  '<div class="card pad" style="margin-top:1rem"><ul class="feed">'+C.map(function(x){return '<li class="it" style="align-items:center"><span class="ico'+(x.done?' g':'')+'">'+ic(x.done?'checkc':'clock')+'</span><span style="flex:1"><b>'+esc(x.label)+'</b><small style="display:block">'+(x.done?'Done':x.manual?'Confirm when you have done this.':'Completes automatically when it is set up.')+'</small></span>'+(x.done?'':x.manual?btn('Mark done','ckAck',x.key,'pri'):ckLink(x.key))+'</li>'}).join('')+'</ul></div>';
+}
+function ckLink(k){var m={menu_categories:'menu',menu_items:'menu',prices:'menu',product_categories:'products',products:'products',prices_stock:'products',catalog:'products',hours:'settings',accept_orders:'settings',settlement:'settings/settlement'}[k];return m?'<a class="btn sm" href="#/'+m+'">Open</a>':''}
+function teamLoad(){if(LV.team||LV.teamBusy)return;LV.teamBusy=true;lrpc('merchant_team',{p_merchant:LV.store.id}).then(function(r){LV.team=r;LV.teamBusy=false;refresh()},function(e){LV.teamBusy=false;LV.team=[];LV.teamErr=e.message;refresh()})}
+function vTeamLive(){
+  if(LV.store.role==='staff')return head('Team','')+'<div class="card pad"><p class="sub">Only the owner or a manager can see the team.</p></div>';
+  teamLoad();var T=LV.team,own=LV.store.role==='owner';
+  if(!T)return head('Team','')+'<div class="card pad"><p class="sub">Loading…</p></div>';
+  return head('Team','People who can work in '+esc(LV.store.name)+'.',own?btn(ic('plus')+'Invite someone','tmInvite','','pri'):'')+
+  '<div class="card"><div class="tw"><table class="t" style="min-width:34rem"><thead><tr><th>Name</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody>'+T.map(function(m){return '<tr><td><b>'+esc(m.name||m.email)+'</b>'+(m.me?' '+pill('You','acc'):'')+'<div class="muted" style="font-size:.8rem">'+esc(m.email)+'</div></td><td>'+esc(m.role)+(m.role==='owner'||!m.relationship?'':' <small class="muted">('+esc(m.relationship)+')</small>')+'</td><td>'+(m.status==='invited'?pill('Invited','warn'):pill('Active','ok'))+'</td><td>'+(own&&!m.me&&m.role!=='owner'?btn('Remove','tmRemove',m.user,'danger'):'')+'</td></tr>'}).join('')+'</tbody></table></div></div>'+
+  '<p class="muted" style="font-size:.84rem;margin-top:1rem">Owners and managers can edit the catalogue and settings. Staff can work orders. Invited people must accept from their own sign-in. Ownership never changes by invitation.</p>';
+}
+function settleLoad(){if(LV.settle!==undefined||LV.settleBusy)return;LV.settleBusy=true;lrpc('merchant_settlement_get',{p_merchant:LV.store.id}).then(function(r){LV.settle=r;LV.settleBusy=false;refresh()},function(e){LV.settleBusy=false;LV.settle=null;refresh();liveErr(e)})}
+function vSettleLive(){
+  if(LV.store.role!=='owner')return head('Payout account','')+'<div class="card pad"><p class="sub">Only the owner can see or change payout details.</p></div>';
+  settleLoad();var st=LV.settle;
+  if(st===undefined)return head('Payout account','')+'<div class="card pad"><p class="sub">Loading…</p></div>';
+  var stat=st?(st.status==='VERIFIED'?pill('Verified','ok','checkc'):st.status==='FAILED'?pill('Could not be verified','bad'):pill('Pending verification','warn','clock')):'';
+  return head('Payout account','Where ChowBuy pays your earnings.',btn(st?'Change account':'Add account','stEdit','','pri'))+
+  '<div class="card pad">'+(st?'<div class="kv"><span>Account name</span><b>'+esc(st.beneficiary)+'</b><span>Bank</span><b>'+esc(st.bank)+'</b><span>Account number</span><b class="mono">•••• '+esc(st.last4)+'</b><span>Status</span><b>'+stat+'</b></div>'+(st.status==='FAILED'&&st.note?'<p class="err" style="margin-top:.8rem">'+esc(st.note)+'</p>':'')+'<p class="muted" style="margin-top:1rem;font-size:.84rem">ChowBuy confirms the account name with your bank before the first payout. Changing the details restarts that check.</p>':empty('wallet','No payout account yet','Add the account where you want to be paid.',btn('Add account','stEdit','','pri')))+'</div>';
+}
+Object.assign(A,{
+ ckAck:function(el){lrpc('merchant_checklist_ack',{p_merchant:LV.store.id,p_key:el.getAttribute('data-id')}).then(function(){LV.ck=null;refresh();toast('Marked done.')},liveErr)},
+ tmInvite:function(){openM('<h3>Invite someone</h3><p class="muted">They need a ChowBuy account already. They will see the invitation when they sign in and must accept it.</p>'+inp('ie','Their email','','type="email" autocapitalize="off"')+'<div class="f"><label for="ir">Role</label><select id="ir" name="ir"><option value="staff">Staff: work orders</option><option value="manager">Manager: also edit catalogue and settings</option></select></div><div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Send invitation</button></div>',function(d){
+   if(!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test((d.ie||'').trim()))return 'Enter a valid email.';
+   var b=$('#mf button[type=submit]');b.disabled=true;
+   lrpc('merchant_invite',{p_merchant:LV.store.id,p_email:d.ie.trim(),p_role:d.ir}).then(function(){LV.team=null;closeM();refresh();toast('Invitation sent.')},function(e){b.disabled=false;var er=$('#merr');if(er)er.textContent=e.message});return false})},
+ tmRemove:function(el){var id=el.getAttribute('data-id');confirmM('Remove this person?','They lose access to '+esc(LV.store.name)+' straight away.','Remove',function(){lrpc('merchant_member_remove',{p_merchant:LV.store.id,p_user:id}).then(function(){LV.team=null;refresh();toast('Removed.')},liveErr)},true)},
+ stEdit:function(){var st=LV.settle||{};openM('<h3>Payout account</h3><p class="muted">Use the account name exactly as your bank shows it.</p>'+inp('sb','Account name',st.beneficiary||'','maxlength="80"')+inp('sk','Bank',st.bank||'','maxlength="60"')+inp('sa','10-digit account number','','inputmode="numeric" maxlength="12" autocomplete="off"')+'<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Save</button></div>',function(d){
+   var b=$('#mf button[type=submit]');b.disabled=true;
+   lrpc('merchant_settlement_save',{p_merchant:LV.store.id,p_beneficiary:d.sb,p_bank:d.sk,p_account:d.sa}).then(function(){LV.settle=undefined;LV.ck=null;closeM();refresh();toast('Saved. ChowBuy will verify the account.')},function(e){b.disabled=false;var er=$('#merr');if(er)er.textContent=e.message});return false})},
+ switchBiz:function(){lset('cb-merch-store','');location.hash='#/workspaces';location.reload()}
+});
+ROUTES.push({p:'settings/team',n:'Team',i:'users',g:'Business & Management',f:vTeamLive,roles:['owner','manager']},{p:'settings/settlement',n:'Payout account',i:'wallet',g:'Business & Management',f:vSettleLive,roles:['owner']});
+ROUTES.forEach(function(r){if(r.p==='onboarding'){r.n='Setup checklist';r.roles=['owner','manager']}if(r.p==='settings')r.roles=['owner','manager']});
+ROUTES.forEach(function(r){r.lf={'':vDashLive,orders:vOrders,menu:vCatalogLive,products:vCatalogLive,settings:vSettingsLive,onboarding:vChecklistLive,'settings/team':vTeamLive,'settings/settlement':vSettleLive}[r.p]});
 setInterval(function(){if(LV.on&&document.visibilityState==='visible'&&!$('#mwrap').classList.contains('show')&&!(document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)))liveLoad().then(function(){var r=cur();if(r&&(r.p===''||r.p==='orders'))refresh();else renderBar()},function(){})},20000);
 
 /* ---------- init ---------- */
@@ -1182,11 +1209,11 @@ $('#burger').addEventListener('click',openSide);$('#closeSide').addEventListener
 $('#nav').addEventListener('click',function(e){if(e.target.closest('a'))closeSide()});
 document.body.addEventListener('keydown',function(e){if(e.key==='Tab'&&$('#mwrap').classList.contains('show')){var f=[].filter.call($('#mbody').querySelectorAll('button,input,select,textarea,a[href],[tabindex="0"]'),function(x){return !x.disabled&&x.offsetParent!==null});if(!f.length)return;var a=f[0],z=f[f.length-1];if(e.shiftKey&&document.activeElement===a){e.preventDefault();z.focus()}else if(!e.shiftKey&&document.activeElement===z){e.preventDefault();a.focus()}}});
 var bootMsg=lget('cb-merch-msg');lset('cb-merch-msg','');
+/* The dashboard only ever shows a real, approved business. Anything else goes back to the sign-in and onboarding screens. */
 if(lget('cb-merch-tok')){
   $('#view').innerHTML='<div class="card pad"><p class="sub">Loading your store…</p></div>';
-  liveBoot().then(function(){buildNav();render(false)},function(e){LV.on=false;lset('cb-merch-tok','');lset('cb-merch-rt','');S=load();buildNav();render(false);toast(e.message,'err')});
-}else{render(false);if(bootMsg)toast(bootMsg,'warn')}
+  liveBoot().then(function(){buildNav();render(false);if(bootMsg)toast(bootMsg,'warn')},function(e){if(/not linked|no approved|session expired/i.test(e.message||'')){lset('cb-merch-store','');location.replace('./')}else{LV.on=false;$('#view').innerHTML='<div class="card pad"><h3>Could not load your store</h3><p class="sub">'+esc(e.message||'Try again.')+'</p><p style="margin-top:1rem"><button type="button" class="btn pri" onclick="location.reload()">Try again</button></p></div>'}});
+}else{location.replace('./')}
 setInterval(tick,1000);
-setInterval(function(){if(!LV.on&&S.store.status!=='paused'&&document.visibilityState==='visible'&&!$('#mwrap').classList.contains('show')&&S.vertical!=='pharmacy'||0)simOrder(false)},45000);
 window.addEventListener('storage',function(e){if(e.key===KEY)location.reload()});
 })();

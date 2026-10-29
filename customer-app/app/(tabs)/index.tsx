@@ -97,7 +97,9 @@ export default function Home() {
       </ScrollView>
 
       <SectionTitle title="Best in your city" />
-      {list.length ? list.map((m) => <MerchantCard key={m.id} m={m} />) : <Empty icon={Search} title="Nothing matched" body="Try another dish or clear your filters." />}
+      {list.length ? list.map((m) => <MerchantCard key={m.id} m={m} />) : MERCHANTS.length === 0
+        ? <Empty icon={Search} title="No merchants available in your area yet" body="New restaurants, groceries and pharmacies are joining ChowBuy. Check back soon." />
+        : <Empty icon={Search} title="Nothing matched" body="Try another dish or clear your filters." />}
       <AddressPicker visible={pick} onClose={() => setPick(false)} />
     </Screen>
   );
