@@ -212,16 +212,18 @@ function openOrder(id){
 }
 
 function vMerchants(){
-  var live=liveOn(),SRC=live?L.merchants.map(function(m){return{id:m.id,name:m.name,city:m.city,vertical:m.vertical,status:m.active?'active':'pending',branches:1,joined:null,orders30:m.orders30,gmv30:m.gmv30,rate:m.rating_pct,kyc:m.docs_ok>0?'verified':m.docs_pending>0?'in review':'pending',owner:m.owner||''}}):S.merchants;
+  var live=liveOn(),SRC=live?L.merchants.map(function(m){return{id:m.id,name:m.name,city:m.city,vertical:m.vertical,demo:!!m.is_demo,status:m.active?'active':(m.is_demo?'hidden':'pending'),branches:1,joined:null,orders30:m.orders30,gmv30:m.gmv30,rate:m.rating_pct,kyc:m.docs_ok>0?'verified':m.docs_pending>0?'in review':'pending',owner:m.owner||''}}):S.merchants;
   var q=(U.q.merch||'').trim().toLowerCase(),tv=T('merV','all');
+  var showDemo=live&&T('merS','real')==='demo',nDemo=SRC.filter(function(m){return m.demo}).length;
+  SRC=SRC.filter(function(m){return live?(!!m.demo===showDemo):true});
   var list=SRC.filter(function(m){return(tv==='all'||m.vertical===tv)&&(!q||(m.name+' '+m.city).toLowerCase().indexOf(q)>-1)});
   var pend=SRC.filter(function(m){return m.status==='pending'}).length;
   var rows=list.map(function(m){
     var act=live?btn(ic('users')+(m.owner?'Change owner':'Assign owner'),'merOwner',m.id):m.status==='pending'?btn(ic('check')+'Approve','approveM',m.id,'pri'):m.status==='active'?btn(ic('ban')+'Suspend','suspendM',m.id,'danger'):btn(ic('refresh')+'Reinstate','suspendM',m.id);
     return '<tr><td><div class="who">'+tile(m.name,m.vertical)+'<div><b>'+esc(m.name)+'</b><small>'+esc(m.city)+' · '+m.branches+' branch'+(m.branches>1?'es':'')+(m.joined?' · Joined '+fdate(m.joined):'')+(live?' · '+(m.owner?'Owner: '+esc(m.owner):'No owner yet'):'')+'</small></div></div></td><td>'+vbadge(m.vertical)+'</td><td class="r mono">'+num(m.orders30)+'</td><td class="r mono">'+ngn(m.gmv30)+'</td><td class="r mono">'+m.rate+'%</td><td>'+pill(m.kyc,null,m.kyc==='verified'?'shield':'')+'</td><td>'+pill(m.status)+'</td><td class="r">'+act+'</td></tr>'}).join('');
   return head('Merchants',live?'Real merchants from your backend. Approve them under KYC review.':'Approve onboarding, review KYC and control who can sell on ChowBuy.',pend?'<span class="badge-un">'+pend+' '+(live?'not live yet':'awaiting approval')+'</span>':'')+liveBar()+
-  '<div class="card"><div class="bar">'+search('merch','Search by business name or city')+tabs('merV',[['all','All'],['restaurant','Restaurant'],['grocery','Grocery'],['pharmacy','Pharmacy'],['package','Package']],1)+'</div>'+
-  (list.length?'<div class="tw"><table class="t" style="min-width:60rem"><thead><tr><th>Merchant</th><th>Vertical</th><th class="r">Orders (30d)</th><th class="r">GMV (30d)</th><th class="r">Commission</th><th>KYC</th><th>Status</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="foot"><span>'+list.length+' merchant'+(list.length>1?'s':'')+'</span></div>':empty('building','No merchants found','Adjust your filters to see more.',btn('Clear filters','clear','merch','pri')))+'</div>';
+  '<div class="card"><div class="bar">'+search('merch','Search by business name or city')+tabs('merV',[['all','All'],['restaurant','Restaurant'],['grocery','Grocery'],['pharmacy','Pharmacy'],['package','Package']],1)+(live&&nDemo?tabs('merS',[['real','Real businesses'],['demo','Sample stores ('+nDemo+')']],1):'')+'</div>'+
+  (list.length?'<div class="tw"><table class="t" style="min-width:60rem"><thead><tr><th>Merchant</th><th>Vertical</th><th class="r">Orders (30d)</th><th class="r">GMV (30d)</th><th class="r">Commission</th><th>KYC</th><th>Status</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="foot"><span>'+list.length+' merchant'+(list.length>1?'s':'')+'</span></div>':empty('building',live&&!showDemo?'No businesses yet':'No merchants found',live&&!showDemo?'Businesses appear here as soon as they register at chowbuy.ng/merchant. Sample stores are under the Sample stores tab.':'Adjust your filters to see more.',btn('Clear filters','clear','merch','pri')))+'</div>';
 }
 
 function catReload(){return beReq('/rest/v1/rpc/admin_catalog','POST',{}).then(function(c){L.cat=c;refresh()})}
