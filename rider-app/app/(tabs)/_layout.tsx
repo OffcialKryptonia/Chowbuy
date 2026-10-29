@@ -1,3 +1,4 @@
+import { LIVE } from '@/lib/config';
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Home, ListChecks, Wallet, UserRound } from 'lucide-react-native';
@@ -17,7 +18,7 @@ export default function TabsLayout() {
     }}>
       <Tabs.Screen name="home" options={{ title: 'Home', tabBarIcon: ({ color, size }) => <Home color={color} size={size} /> }} />
       <Tabs.Screen name="deliveries" options={{ title: 'Deliveries', tabBarIcon: ({ color, size }) => <ListChecks color={color} size={size} /> }} />
-      <Tabs.Screen name="wallet" options={{ title: type === 'fleet' ? 'My shifts' : 'Wallet', tabBarIcon: ({ color, size }) => <Wallet color={color} size={size} /> }} />
+      <Tabs.Screen name="wallet" options={{ title: type === 'fleet' ? 'My shifts' : type === 'flex' && LIVE ? 'Earnings' : 'Wallet', tabBarIcon: ({ color, size }) => <Wallet color={color} size={size} /> }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color, size }) => <UserRound color={color} size={size} /> }} />
     </Tabs>
   );

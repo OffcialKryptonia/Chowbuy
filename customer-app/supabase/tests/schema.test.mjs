@@ -30,6 +30,7 @@ await db.exec(fs.readFileSync(root + 'migrations/20261101000006_public_catalog.s
 await db.exec(fs.readFileSync(root + 'migrations/20261101000007_admin_customer_tools.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261101000008_merchant_live.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261101000009_merchant_onboarding.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261102000001_chowbuy_flex.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -270,6 +271,139 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
   });
   ok('public can read active emergency numbers only', (await as(null, () => q(`select label from emergency_services`))).every(x => x.label !== 'FCT Police Command') && (await as(null, () => q(`select 1 from emergency_services`))).length === 2);
   await as(A, async () => { await throws('customers cannot edit services', () => db.query(`select admin_emergency_delete(gen_random_uuid())`), 'Admins only'); });
+}
+
+// ---- ChowBuy Flex
+{
+  const su = async sql => { await db.exec('reset role'); return db.exec(sql); };
+  const F = await mk('flex1@x.ng', '08031120001'), PR = await mk('partner9@x.ng', '08031120002');
+  const place = async () => (await as(A, () => q(`select place_order('m1', '[{"product_id":"p3","qty":1}]'::jsonb, 'cod', $1, null) r`, [addr])))[0].r.order;
+  const deliver = id => su(`update orders set stage='delivered' where id='${id}'`);
+  // settings: nothing is invented, and unsafe switches are refused
+  await as(ADM, async () => {
+    const g = (await q(`select admin_flex_settings_get() s`))[0].s;
+    ok('flex ships closed with configuration warnings', g.config.registrationEnabled === false && g.config.dispatchEnabled === false && g.warnings.length >= 4 && g.config.platformFeePct === null, JSON.stringify(g));
+    await throws('registration cannot open without agreement and region', () => db.query(`select admin_flex_settings_save('{"registrationEnabled":true}')`), 'agreement version');
+    await throws('unknown setting rejected', () => db.query(`select admin_flex_settings_save('{"hack":1}')`), 'Unknown');
+    await throws('fee must be a percentage', () => db.query(`select admin_flex_settings_save('{"platformFeePct":140}')`), '0 to 100');
+    await throws('region must be a real city', () => db.query(`select admin_flex_settings_save('{"regions":["Atlantis"]}')`), 'service city');
+    await db.query(`select admin_flex_settings_save('{"regions":["Lagos"],"deliveryTypes":["restaurant"],"agreementVersion":"v1","registrationEnabled":true}')`);
+    await throws('dispatch cannot start while fee/payout policy is missing', () => db.query(`select admin_flex_settings_save('{"dispatchEnabled":true}')`), 'cannot be switched on');
+  });
+  await as(A, async () => { await throws('non-admin cannot save Flex settings', () => db.query(`select admin_flex_settings_save('{}')`), 'Admins only'); });
+  // onboarding
+  await as(F, async () => {
+    await db.query(`select rider_apply('Femi Flex', 'flx123ab', 'Bike', '08031120001', 'flex')`);
+    let me = (await q(`select rider_me() m`))[0].m;
+    ok('flex applicant is a draft flex rider, unverified and offline', me.model === 'flex' && me.flex.status === 'draft' && !me.verified && !me.online && me.appliedModel === 'flex', JSON.stringify(me));
+    await throws('cannot submit before choosing an area', () => db.query(`select rider_flex_submit('v1')`), 'service area');
+    await throws('bad account number rejected', () => db.query(`select rider_flex_save('Lagos', 'GTBank', 'Femi Flex', '123')`), '10-digit');
+    await db.query(`select rider_flex_save('Lagos', 'GTBank', 'Femi Flex', '0123456789')`);
+    me = (await q(`select rider_me() m`))[0].m;
+    ok('settlement is pending verification and only the last 4 digits come back', me.flex.settlement.status === 'pending_verification' && me.flex.settlement.last4 === '6789' && !JSON.stringify(me).includes('0123456789'), JSON.stringify(me.flex));
+    await throws('must accept the current agreement version', () => db.query(`select rider_flex_submit('old')`), 'agreement was updated');
+    await db.query(`select rider_flex_submit('v1')`);
+    me = (await q(`select rider_me() m`))[0].m;
+    ok('submission records agreement version and time', me.flex.status === 'submitted' && me.flex.agreementVersion === 'v1' && !!me.flex.agreementAt);
+    await throws('registration alone grants no jobs', () => db.query(`select rider_set_online(true)`), 'waiting for approval');
+    await throws('rider cannot approve themselves', () => db.query(`update riders set flex_status='approved' where user_id=$1`, [F]), 'permission denied');
+    await throws('rider cannot change own model', () => db.query(`update riders set pay_model='partner' where user_id=$1`, [F]), 'permission denied');
+    await throws('rider cannot call admin decisions', () => db.query(`select admin_flex_decide($1, 'approve', '')`, [F]), 'Admins only');
+    await throws('submitted application cannot be edited', () => db.query(`select rider_flex_save('Lagos', '', '', '')`), 'no longer be edited');
+  });
+  await as(A, async () => { await throws('customers have no flex earnings', () => db.query(`select rider_flex_earnings()`), 'Flex riders only'); });
+  // admin review
+  await as(ADM, async () => {
+    const l = (await q(`select admin_flex_applications('submitted', '', 25, 0) l`))[0].l;
+    ok('admin sees the submitted application with checks and masked settlement', l.total === 1 && l.items[0].checks.agreement === true && l.items[0].checks.identity === false && l.items[0].settlement.last4 === '6789' && !JSON.stringify(l).includes('0123456789'), JSON.stringify(l));
+    await throws('cannot approve before identity verification', () => db.query(`select admin_flex_decide($1, 'approve', '')`, [F]), 'Identity');
+    await throws('request info needs a note', () => db.query(`select admin_flex_decide($1, 'request_info', '')`, [F]), 'what to fix');
+    await db.query(`select admin_flex_decide($1, 'review', '')`, [F]);
+    await db.query(`select admin_kyc_decide('rider', $1, true)`, [F]);
+    await db.query(`select admin_flex_decide($1, 'approve', '')`, [F]);
+    const h = (await q(`select admin_flex_applications('approved', '', 25, 0) l`))[0].l.items[0].history;
+    ok('every decision is in the audit history', h.length >= 2 && h.some(x => x.action === 'flex_approve'), JSON.stringify(h));
+  });
+  await as(F, async () => {
+    ok('approved but dispatch off is unavailable with a reason', (await q(`select rider_me() m`))[0].m.flex.availability === 'unavailable');
+    await throws('cannot go online while Flex dispatch is closed', () => db.query(`select rider_set_online(true)`), 'not open yet');
+  });
+  await as(ADM, async () => { await db.query(`select admin_flex_settings_save('{"platformFeePct":10,"payoutSchedule":"weekly","dispatchEnabled":true}')`); });
+  // dispatch through the existing engine
+  const o1 = await place();
+  await as(F, async () => {
+    await db.query(`select rider_set_online(true)`);
+    const offer = (await q(`select rider_open_orders() o`))[0].o.find(x => x.id === o1.id);
+    ok('flex rider is offered an eligible delivery with the configured fee applied', !!offer && typeof offer.net === 'number', JSON.stringify(offer));
+    await db.query(`select rider_accept($1)`, [o1.id]);
+    await db.query(`select rider_accept($1)`, [o1.id]);
+    ok('accepting twice is idempotent', (await q(`select count(*)::int n from orders where rider_id=$1`, [F]))[0].n === 1);
+    await db.query(`select rider_set_online(false)`);
+    ok('going offline does not cancel the accepted delivery', (await q(`select rider_active_order() a`))[0].a?.id === o1.id);
+  });
+  await as(PR, async () => { await db.query(`select rider_apply('Pat Partner', 'ptn123ab', 'Bike', '08031120002')`); });
+  await su(`update riders set verified = true where user_id = '${PR}'`);
+  await as(PR, async () => { await db.query(`select rider_set_online(true)`); await throws('a second rider cannot take an accepted order', () => db.query(`select rider_accept($1)`, [o1.id]), 'no longer available'); });
+  await deliver(o1.id);
+  const e1 = (await q(`select * from rider_earnings where order_id=$1`, [o1.id]))[0];
+  ok('flex earning = fee - platform fee + eligible tip, confirmed', e1.model === 'flex' && e1.status === 'confirmed' && e1.commission === Math.round(e1.fare * 0.1) && e1.net === e1.fare - e1.commission + e1.tip, JSON.stringify(e1));
+  await as(F, async () => {
+    const fe = (await q(`select rider_flex_earnings() e`))[0].e;
+    ok('flex rider sees only their own earnings with the breakdown', fe.items.length === 1 && fe.items[0].platformFee === e1.commission && fe.summary.confirmed.count === 1, JSON.stringify(fe));
+  });
+  // Partner and Fleet are unchanged
+  const o2 = await place(); await su(`update orders set rider_id='${PR}' where id='${o2.id}'`); await deliver(o2.id);
+  const e2 = (await q(`select * from rider_earnings where order_id=$1`, [o2.id]))[0];
+  ok('partner earning is unchanged (15% on Standard)', e2.model === 'partner' && e2.commission === Math.round(e2.fare * 0.15) && e2.net === e2.fare - e2.commission && e2.status === 'confirmed', JSON.stringify(e2));
+  await as(PR, async () => { ok('partner cannot see flex earnings of others', (await q(`select order_id from rider_earnings`)).every(x => x.order_id === o2.id)); });
+  await as(F, async () => { ok('flex rider cannot read partner earnings', (await q(`select order_id from rider_earnings`)).every(x => x.order_id === o1.id)); });
+  const o3 = await place(); await su(`update riders set pay_model='fleet' where user_id='${R}'`); await su(`update orders set rider_id='${R}' where id='${o3.id}'`); await deliver(o3.id);
+  ok('fleet delivery still records a salaried row', (await q(`select model from rider_earnings where order_id=$1`, [o3.id]))[0]?.model === 'fleet');
+  // missing fee never invents a rate
+  await su(`update platform_settings set value = value || '{"platformFeePct":null}' where key='flex'`);
+  const o4 = await place(); await su(`update orders set rider_id='${F}' where id='${o4.id}'`); await deliver(o4.id);
+  const e4 = (await q(`select status, net, commission from rider_earnings where order_id=$1`, [o4.id]))[0];
+  ok('without a configured fee the earning stays pending with no invented net', e4.status === 'pending' && e4.net === 0 && e4.commission === 0, JSON.stringify(e4));
+  await as(ADM, async () => {
+    await throws('cannot reprice before a fee is set', () => db.query(`select admin_flex_reprice_pending()`), 'platform fee');
+    await db.query(`select admin_flex_settings_save('{"platformFeePct":10}')`);
+    ok('admin reprices pending rows once the fee exists', (await q(`select admin_flex_reprice_pending() n`))[0].n === 1);
+    await throws('adjustment needs a reason', () => db.query(`select admin_flex_adjust($1, 200, '')`, [o1.id]), 'reason');
+    await db.query(`select admin_flex_adjust($1, 200, 'Peak hour bonus approved')`, [o1.id]);
+    await throws('cannot jump to paid', () => db.query(`select admin_flex_earning_status($1, 'paid', 'REF12345', '')`, [o1.id]), 'Cannot move');
+    for (const s of ['available', 'requested', 'processing']) await db.query(`select admin_flex_earning_status($1, $2, null, '')`, [o1.id, s]);
+    await throws('paid needs a provider reference', () => db.query(`select admin_flex_earning_status($1, 'paid', '', '')`, [o1.id]), 'reference');
+    await throws('processing earnings cannot be adjusted', () => db.query(`select admin_flex_adjust($1, 5, 'late change here')`, [o1.id]), 'no longer be adjusted');
+    await db.query(`select admin_flex_earning_status($1, 'paid', 'KORA-8891', '')`, [o1.id]);
+    const an = (await q(`select admin_flex_analytics(30, null, null) a`))[0].a;
+    ok('analytics are computed from real rows', an.deliveries === 2 && an.money.incentives === 200 && an.active === 1, JSON.stringify(an));
+  });
+  // model changes: only by admin, audited, history untouched
+  const before = (await q(`select count(*)::int n from rider_earnings where rider_id=$1`, [PR]))[0].n;
+  await as(ADM, async () => {
+    await throws('model change needs a reason', () => db.query(`select admin_rider_set_type($1, 'flex', '')`, [PR]), 'reason');
+    await throws('fleet needs a salary', () => db.query(`select admin_rider_set_type($1, 'fleet', 'Moved to salaried team')`, [PR]), 'salary');
+    await throws('pay settings screen refuses flex riders', () => db.query(`select admin_rider_set_pay($1, 'partner', null, 'Gold')`, [F]), 'Flex rider');
+    await db.query(`select admin_rider_set_type($1, 'flex', 'Rider asked to join Flex, approved by ops')`, [PR]);
+  });
+  const pr = (await q(`select pay_model, flex_status, online from riders where user_id=$1`, [PR]))[0];
+  ok('changed rider becomes a draft flex rider, offline, never auto-approved', pr.pay_model === 'flex' && pr.flex_status === 'draft' && pr.online === false, JSON.stringify(pr));
+  ok('past partner earnings keep their model', (await q(`select count(*)::int n from rider_earnings where rider_id=$1 and model='partner'`, [PR]))[0].n === before);
+  ok('the type change is audited with the reason', (await q(`select count(*)::int n from audit_log where action='rider_type' and meta->>'to'='flex' and meta->>'reason' like 'Rider asked%'`))[0].n === 1);
+  await as(A, async () => { await throws('non-admin cannot change a model', () => db.query(`select admin_rider_set_type($1, 'fleet', 'sneaky change', 100)`, [PR]), 'Admins only'); });
+  // suspension keeps history and stops work
+  await as(ADM, async () => { await throws('suspend needs a reason', () => db.query(`select admin_flex_decide($1, 'suspend', '')`, [F]), 'reason'); await db.query(`select admin_flex_decide($1, 'suspend', 'Customer complaint under review')`, [F]); });
+  await as(F, async () => {
+    const m = (await q(`select rider_me() m`))[0].m;
+    ok('suspended rider is offline and marked suspended', m.online === false && m.flex.availability === 'suspended');
+    await throws('suspended rider cannot go online', () => db.query(`select rider_set_online(true)`), 'suspended');
+    ok('earnings history is preserved on suspension', (await q(`select rider_flex_earnings() e`))[0].e.items.length === 2);
+  });
+  await as(ADM, async () => { await db.query(`select admin_flex_decide($1, 'reinstate', '')`, [F]); });
+  // delivery type eligibility
+  await su(`update platform_settings set value = value || '{"deliveryTypes":["pharmacy"]}' where key='flex'`);
+  const o5 = await place();
+  await as(F, async () => { await db.query(`select rider_set_online(true)`); ok('restaurant delivery hidden when only pharmacy is enabled', !(await q(`select rider_open_orders() o`))[0].o.some(x => x.id === o5.id)); await throws('and cannot be accepted', () => db.query(`select rider_accept($1)`, [o5.id]), 'not available for Flex'); });
 }
 
 // ---- Rider app: apply, profile, open orders, active order

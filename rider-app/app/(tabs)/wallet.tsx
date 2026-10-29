@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScrollView, View, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Field, Txt } from '@/components/ui';
@@ -12,12 +12,47 @@ import { SHIFTS, fmtHours, minutesBetween, shiftLabel } from '@/lib/shift';
 import { useRider } from '@/stores/rider';
 import { useApply } from '@/stores/apply';
 import { LIVE } from '@/lib/config';
+import * as liveApi from '@/lib/live';
 
 const DAY = 86400000;
 
 export default function WalletTab() {
   const type = useApply((s) => s.type);
-  return type === 'fleet' ? <FleetShifts /> : <PartnerWallet />;
+  return type === 'fleet' ? <FleetShifts /> : type === 'flex' && LIVE ? <FlexEarnings /> : <PartnerWallet />;
+}
+
+const STATUS_LABEL: Record<string, string> = { pending: 'Pending review', confirmed: 'Confirmed', available: 'Available', requested: 'Requested', processing: 'Processing', paid: 'Paid', failed: 'Failed', reversed: 'Reversed' };
+
+/** Flex earnings: every figure is read from the server. Nothing is estimated here, and "paid" only appears once ChowBuy has a payout reference. */
+function FlexEarnings() {
+  const p = useTheme();
+  const [data, setData] = useState<Awaited<ReturnType<typeof liveApi.flexEarnings>> | null>(null);
+  const [err, setErr] = useState('');
+  useEffect(() => { liveApi.flexEarnings().then(setData).catch((e) => setErr(String(e?.message ?? e))); }, []);
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: p.bg }}>
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 110, gap: 14, maxWidth: 640, width: '100%', alignSelf: 'center' }}>
+        <Txt size={24} weight="display">Flex earnings</Txt>
+        {err ? <Card><Txt size={14} color={p.bad}>{err}</Txt></Card> : null}
+        {data ? (
+          <>
+            <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+              {Object.entries(data.summary).map(([k, v]) => <Stat key={k} label={STATUS_LABEL[k] ?? k} value={naira(v.net)} note={`${v.count} deliveries`} />)}
+            </View>
+            {data.items.length === 0 ? <Card><Txt size={14} color={p.mute}>No Flex earnings yet. Earnings appear here after each completed delivery.</Txt></Card> : null}
+            {data.items.map((e) => (
+              <Card key={e.order}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Txt size={15} weight="bold">{e.order}</Txt><Txt size={15} weight="bold">{naira(e.net)}</Txt></View>
+                <Txt size={12} color={p.mute}>{new Date(e.at).toLocaleDateString('en-NG')} · {STATUS_LABEL[e.status] ?? e.status}</Txt>
+                <Txt size={13} color={p.mute}>Fare {naira(e.fare)} − platform fee {naira(e.platformFee)} + tip {naira(e.tip)}{e.incentive ? ` + incentive ${naira(e.incentive)}` : ''}</Txt>
+                {e.status === 'pending' ? <Txt size={12} color={p.mute}>Waiting for ChowBuy to confirm the platform fee.</Txt> : null}
+              </Card>
+            ))}
+          </>
+        ) : !err ? <Txt size={14} color={p.mute}>Loading…</Txt> : null}
+      </ScrollView>
+    </SafeAreaView>
+  );
 }
 
 function PartnerWallet() {

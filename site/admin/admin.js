@@ -319,15 +319,21 @@ function ridersLoad(){
 function vRidersLive(){
   var R=L.riders||[],ok2=R.filter(function(r){return r.verified}),c=function(st){return R.filter(function(r){return r.status===st}).length};
   var mv=T('rdM','all'),located=R.filter(function(r){return r.lat!=null&&r.lng!=null}).length;
-  var rows=R.map(function(r){
-    return '<tr><td><div class="who"><span class="tile" style="background:'+(r.model==='fleet'?'#0F172A':'#FF8A00')+'">'+esc(initials(r.name))+'</span><div><b>'+esc(r.name)+'</b><small>'+esc(r.vehicle)+' · '+esc(r.plate)+'</small></div></div></td><td>'+tbadge(r.model==='fleet'?'FLEET':'PARTNER')+'</td>'+
-     '<td><span class="pill" style="background:'+RSC[r.status]+'22;color:'+RSC[r.status]+'">'+esc(RSN[r.status]||r.status)+'</span></td><td class="muted nw">'+(r.status==='offline'||r.status==='pending'?'—':esc(ago(r.seen_at)))+'</td><td>'+(r.active_order?'<span class="mono">'+esc(r.active_order)+'</span>':'—')+'</td><td class="r mono">'+num(r.trips30)+'</td><td class="r mono">'+(r.rating_count?esc(r.rating_pct)+'%':'—')+'</td><td class="muted">'+esc(r.phone||'')+'</td></tr>'}).join('');
-  return head('Riders & fleet','Real riders, where they are right now, and what they are doing.','<span class="pill info">'+ok2.filter(function(r){return r.model==='fleet'}).length+' fleet</span><span class="pill acc">'+ok2.filter(function(r){return r.model!=='fleet'}).length+' partner</span>'+btn(ic('refresh')+'Refresh','ridersReload'))+liveBar()+
+  var rq=(U.q.rdl||'').trim().toLowerCase(),rt=T('rdT','all'),rs=T('rdS','all');
+  var RF=R.filter(function(r){
+    var pendApp=r.model==='flex'&&['submitted','under_review','action_required'].indexOf(r.flexStatus)>-1;
+    var okS=rs==='all'||(rs==='pendApp'&&pendApp)||(rs==='pendVer'&&!r.verified)||(rs==='approved'&&r.verified&&(r.model!=='flex'||r.flexStatus==='approved'))||(rs==='active'&&(r.status==='idle'||r.status==='delivering'))||(rs==='offline'&&r.status==='offline')||(rs==='suspended'&&r.status==='suspended')||(rs==='rejected'&&r.flexStatus==='rejected');
+    return(rt==='all'||r.model===rt)&&okS&&(!rq||(r.name+' '+(r.phone||'')+' '+(r.plate||'')).toLowerCase().indexOf(rq)>-1)});
+  var pgR=paged(RF,'rdl',25);
+  var rows=pgR.rows.map(function(r){
+    return '<tr><td><div class="who"><span class="tile" style="background:'+(r.model==='fleet'?'#0F172A':r.model==='flex'?'#0E4F5C':'#FF8A00')+'">'+esc(initials(r.name))+'</span><div><b>'+esc(r.name)+'</b><small>'+esc(r.vehicle)+' · '+esc(r.plate)+'</small></div></div></td><td>'+tbadge(String(r.model).toUpperCase())+(r.model==='flex'&&r.flexStatus?'<small class="muted" style="display:block">'+esc(FX_LBL[r.flexStatus]||r.flexStatus)+'</small>':'')+'</td>'+
+     '<td><span class="pill" style="background:'+(RSC[r.status]||'#64748B')+'22;color:'+(RSC[r.status]||'#64748B')+'">'+esc(RSN[r.status]||FX_ST[r.status]||r.status)+'</span></td><td class="muted nw">'+(r.status==='offline'||r.status==='pending'?'—':esc(ago(r.seen_at)))+'</td><td>'+(r.active_order?'<span class="mono">'+esc(r.active_order)+'</span>':'—')+'</td><td class="r mono">'+num(r.trips30)+'</td><td class="r mono">'+(r.rating_count?esc(r.rating_pct)+'%':'—')+'</td><td class="muted">'+esc(r.phone||'')+'</td><td class="r nw">'+(r.model==='flex'?btn('Review','fxOpen',r.id)+' ':'')+btn('Change model','rdType',r.id)+'</td></tr>'}).join('');
+  return head('Riders & fleet','Real riders, where they are right now, and what they are doing.','<span class="pill info">'+ok2.filter(function(r){return r.model==='fleet'}).length+' fleet</span><span class="pill acc">'+ok2.filter(function(r){return r.model==='partner'}).length+' partner</span><span class="pill" style="background:#0E4F5C;color:#fff">'+ok2.filter(function(r){return r.model==='flex'}).length+' flex</span>'+btn(ic('refresh')+'Refresh','ridersReload'))+liveBar()+
    '<div class="grid g3">'+kpi('Online now',num(c('idle')+c('delivering')),'','bike','g',c('idle')+' free · '+c('delivering')+' delivering')+kpi('Offline',num(c('offline')),'','ban')+kpi('Awaiting approval',num(c('pending')),'','clock','n','Approve under KYC review')+'</div>'+
    '<div class="card"><div class="bar" style="gap:1rem"><div style="margin-right:auto"><h3>Live rider map</h3><p class="sub">'+located+' rider'+(located===1?'':'s')+' sharing their location. Updates every 20 seconds. Map data &copy; OpenStreetMap contributors.</p></div><span class="pill ok"><i class="pulse"></i>Live</span></div>'+
    '<div class="bar"><div class="tabs sm" role="group" aria-label="Map filter">'+[['all','All'],['idle','Free'],['delivering','On delivery']].map(function(o){return '<button type="button" data-act="tab" data-k="rdM" data-v="'+o[0]+'" aria-pressed="'+(mv===o[0])+'">'+o[1]+'</button>'}).join('')+'</div></div>'+
-   '<div class="pad"><div id="lmap" style="height:26rem;border-radius:1rem;overflow:hidden;background:var(--card)"></div>'+(located?'':'<p class="sub" style="margin-top:.8rem">No rider is sharing a location right now. A rider appears here when they are online in the ChowBuy Rider app with location allowed. Riders on the older app build will not appear until they update.</p>')+'<div class="acts" style="margin-top:.8rem;gap:1rem;font-size:.8rem"><span class="muted"><b style="color:#12A150">Green</b> free · <b style="color:#7C3AED">purple</b> on a delivery · <b style="color:#94A3B8">grey</b> not seen for 3+ minutes · square = fleet, round = partner</span></div></div></div>'+
-   '<div class="card"><div class="bar"><h3 style="margin-right:auto">All riders ('+R.length+')</h3></div>'+(R.length?'<div class="tw"><table class="t" style="min-width:56rem"><thead><tr><th>Rider</th><th>Model</th><th>Status</th><th>Last seen</th><th>Current order</th><th class="r">Trips (30d)</th><th class="r">Rating</th><th>Phone</th></tr></thead><tbody>'+rows+'</tbody></table></div>':empty('bike','No riders yet','Riders appear here after they apply in the ChowBuy Rider app.',''))+'</div>';
+   '<div class="pad"><div id="lmap" style="height:26rem;border-radius:1rem;overflow:hidden;background:var(--card)"></div>'+(located?'':'<p class="sub" style="margin-top:.8rem">No rider is sharing a location right now. A rider appears here when they are online in the ChowBuy Rider app with location allowed. Riders on the older app build will not appear until they update.</p>')+'<div class="acts" style="margin-top:.8rem;gap:1rem;font-size:.8rem"><span class="muted"><b style="color:#12A150">Green</b> free · <b style="color:#7C3AED">purple</b> on a delivery · <b style="color:#94A3B8">grey</b> not seen for 3+ minutes · square = fleet, round = partner or flex</span></div></div></div>'+
+   '<div class="card"><div class="bar"><h3 style="margin-right:auto">All riders ('+RF.length+')</h3>'+search('rdl','Search name, phone or plate')+'</div><div class="bar">'+tabs('rdT',[['all','All'],['fleet','Fleet'],['partner','Partner'],['flex','Flex']],1)+tabs('rdS',[['all','Any status'],['pendApp','Pending applications'],['pendVer','Pending verification'],['approved','Approved'],['active','Active'],['offline','Offline'],['suspended','Suspended'],['rejected','Rejected']],1)+'</div>'+(R.length?'<div class="tw"><table class="t" style="min-width:56rem"><thead><tr><th>Rider</th><th>Model</th><th>Status</th><th>Last seen</th><th>Current order</th><th class="r">Trips (30d)</th><th class="r">Rating</th><th>Phone</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+pager(pgR,'rdl'):empty('bike','No riders yet','Riders appear here after they apply in the ChowBuy Rider app.',''))+'</div>';
 }
 function vRiders(){
   if(liveOn()&&L.riders)return vRidersLive();
@@ -1141,7 +1147,7 @@ function genRadar(){
 }
 function radScope(){var q=U.rad;return RR.filter(function(r){return(q.city==='all'||r.city===q.city)&&(q.dist==='all'||r.district===q.dist)&&(q.ty==='all'||r.type===q.ty)})}
 function ltlg(r){var c=CITYC[r.city];return[(c[0]+(.5-r.y)*.24).toFixed(5),(c[1]+(r.x-.5)*.3).toFixed(5)]}
-function tbadge(t){return t==='FLEET'?'<span class="pill b-fleet">'+ic('shield')+'Fleet</span>':'<span class="pill b-part">'+ic('bike')+'Partner</span>'}
+function tbadge(t){return t==='FLEX'?'<span class="pill" style="background:#0E4F5C;color:#fff">'+ic('bolt')+'Flex</span>':t==='FLEET'?'<span class="pill b-fleet">'+ic('shield')+'Fleet</span>':'<span class="pill b-part">'+ic('bike')+'Partner</span>'}
 var MC={dark:{bg:'#0F172A',road:'#26334D',water:'#13324F',txt:'#94A3B8'},silver:{bg:'#E6E8EB',road:'#FFFFFF',water:'#C6D4E1',txt:'#6B7280'},standard:{bg:'#EAF0E1',road:'#FFFFFF',water:'#A8D3F0',txt:'#4B5563'}};
 var ROADS={};
 function roads(city){if(ROADS[city])return ROADS[city];var a=city.length*77+3,R=function(){a=(a*1664525+1013904223)&0x7fffffff;return a/0x7fffffff},d='';
@@ -2128,7 +2134,7 @@ ensureKyc();
 U.kyc={live:{rider:null,merchant:null},load:{},err:'',sel:null};U.sosl={live:null,load:false,err:''};U.emrl={live:null,load:false};
 function kApplicants(kind){
   if(beOn()&&U.kyc.live[kind])return U.kyc.live[kind].map(function(r){var docs={};(r.docs||[]).forEach(function(d){docs[d.doc]={status:d.status,note:d.note||'',file:d.file,byAdmin:!!d.by_admin}});
-    return{id:r.id,name:r.name,sub:kind==='rider'?(r.vehicle+' · '+(r.pay_model==='fleet'?'Fleet':'Partner')):(V[r.vertical]||r.vertical),vertical:r.vertical,type:r.pay_model==='fleet'?'FLEET':'PARTNER',accepted:kind==='rider'?r.verified:r.active,docs:docs,live:true}});
+    return{id:r.id,name:r.name,sub:kind==='rider'?(r.vehicle+' · '+(r.pay_model==='fleet'?'Fleet':r.pay_model==='flex'?'Flex':'Partner')):(V[r.vertical]||r.vertical),vertical:r.vertical,type:r.pay_model==='fleet'?'FLEET':r.pay_model==='flex'?'FLEX':'PARTNER',accepted:kind==='rider'?r.verified:r.active,docs:docs,live:true}});
   return (kind==='rider'?S.riders:S.merchants).map(function(x){return{id:x.id,name:x.name,sub:kind==='rider'?(x.type==='FLEET'?'Fleet':'Partner')+' · '+x.city:(V[x.vertical]||'')+' · '+x.city,vertical:x.vertical,type:x.type,accepted:x.status==='active',docs:S.kyc[kind+':'+x.id]||(S.kyc[kind+':'+x.id]={}),live:false}});
 }
 function kState(x,kind){var req=kdocList(kind,x),ap=0,pe=0,de=0;req.forEach(function(d){var s=(x.docs[d[0]]||{}).status;if(s==='approved')ap++;else if(s==='pending')pe++;else if(s==='declined')de++});return{req:req,ap:ap,pe:pe,de:de,miss:req.length-ap-pe-de}}
@@ -2325,6 +2331,124 @@ ROUTES.splice(ROUTES.map(function(r){return r.p}).indexOf('riders')+1,0,{p:'appl
 buildNav();
 
 registerMailHandlers();
+
+/* ChowBuy Flex: applications review, settings, model changes (backed by admin_flex_* and admin_rider_set_type) */
+Object.assign(IC,{bolt:IC.bolt||'<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>'});
+RSC.suspended='#DC2626';RSN.suspended='Suspended';
+var FX_LBL={draft:'Draft',submitted:'Submitted',under_review:'Under review',action_required:'Action required',approved:'Approved',rejected:'Rejected',suspended:'Suspended'};
+var FX_ST={pending:'Awaiting approval'};
+var FX_PILL={draft:'',submitted:'info',under_review:'info',action_required:'warn',approved:'ok',rejected:'bad',suspended:'bad'};
+var FX_CHK={identity:'Identity verified',vehicle:'Vehicle type enabled for Flex',area:'Service area enabled for Flex',settlement:'Settlement details provided',agreement:'Accepted the current agreement'};
+U.fx={list:null,total:0,load:false,err:'',key:'',det:null,an:null,anErr:'',cfg:null,cfgErr:'',cfgLoad:false};
+function fxPill(s){return pill(FX_LBL[s]||s||'—',FX_PILL[s]||'')}
+function fxLoad(force){
+  if(!beOn())return;
+  var pg=Math.max(1,U.page.fx||1),key=[T('fxS','all'),(U.q.fx||'').trim(),pg].join('|');
+  if(U.fx.load||(!force&&U.fx.key===key&&U.fx.list))return;
+  U.fx.load=true;U.fx.key=key;
+  beReq('/rest/v1/rpc/admin_flex_applications','POST',{p_status:T('fxS','all'),p_search:(U.q.fx||'').trim(),p_limit:25,p_offset:(pg-1)*25}).then(function(j){U.fx.list=j.items;U.fx.total=j.total;U.fx.err='';U.fx.load=false;refresh()},function(e){U.fx.err=e.message;U.fx.list=[];U.fx.load=false;refresh()});
+  beReq('/rest/v1/rpc/admin_flex_analytics','POST',{p_days:30,p_city:null,p_vehicle:null}).then(function(a){U.fx.an=a;U.fx.anErr='';refresh()},function(e){U.fx.anErr=e.message});
+}
+function vFlex(){
+  fxLoad(false);
+  var list=U.fx.list||[],an=U.fx.an,m=an&&an.money||{},ap=an&&an.applications||{},pg=Math.max(1,U.page.fx||1),pages=Math.max(1,Math.ceil(U.fx.total/25));
+  var rows=list.map(function(x){
+    var ok=Object.keys(x.checks||{}).filter(function(k){return x.checks[k]}).length;
+    return '<tr><td><div class="who"><span class="tile" style="background:#0E4F5C">'+esc(initials(x.name))+'</span><div><b>'+esc(x.name)+'</b><small>'+esc(x.vehicle)+' · '+esc(x.plate)+'</small></div></div></td><td>'+fxPill(x.status)+'</td><td>'+esc(x.city||'—')+'</td><td class="mono">'+ok+' / 5 checks</td><td>'+(x.submittedAt?esc(fdt(x.submittedAt)):'<span class="muted">Not submitted</span>')+'</td><td class="r">'+btn('Review','fxOpen',x.id)+'</td></tr>'}).join('');
+  var banner=!beOn()?'<span class="pill">'+ic('alert')+'Backend not connected</span>':U.fx.err?'<div class="card pad" style="border-color:var(--bad)"><b>Could not load Flex applications.</b> <span class="muted">'+esc(U.fx.err)+'. Apply the 20261102000001 migration to your Supabase project, then reload.</span></div>':'<span class="pill ok">'+ic('checkc')+'Live data</span>';
+  return head('ChowBuy Flex','Applications, approvals and performance for the Flex operating model. Real data only.',banner+btn(ic('refresh')+'Refresh','fxRefresh',null,'')+btn(ic('settings')+'Flex settings','goFxSet',null,'pri'))+
+  '<div class="grid g3">'+kpi('Waiting for you',num((ap.submitted||0)+(ap.under_review||0)),'submitted or in review','clock','n')+kpi('Active Flex riders',num(an?an.active:0),(an?an.online:0)+' online now','bolt','g')+kpi('Deliveries (30 days)',num(an?an.deliveries:0),'','bike')+'</div>'+
+  '<div class="grid g3">'+kpi('Gross fares',ngn(m.gross||0),'last 30 days','wallet')+kpi('Platform fee',ngn(m.platformFee||0),'','shield')+kpi('Paid to riders (net)',ngn(m.net||0),(m.tips?ngn(m.tips)+' tips · ':'')+(m.incentives?ngn(m.incentives)+' incentives':''),'wallet','g',(m.pending?m.pending+' earning(s) pending a platform fee':''))+'</div>'+
+  '<div class="card"><div class="bar">'+search('fx','Search name or phone')+tabs('fxS',[['all','All'],['submitted','Submitted'],['under_review','In review'],['action_required','Action required'],['approved','Approved'],['rejected','Rejected'],['suspended','Suspended'],['draft','Drafts']],1)+'</div>'+
+  (list.length?'<div class="tw"><table class="t" style="min-width:52rem"><thead><tr><th>Rider</th><th>Status</th><th>City</th><th>Checks</th><th>Submitted</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="foot"><span>'+U.fx.total+' Flex rider'+(U.fx.total===1?'':'s')+'</span><div class="acts">'+btn('Previous','fxPg',null,'',' data-d="-1"'+(pg<=1?' disabled':''))+'<span>Page '+pg+' / '+pages+'</span>'+btn('Next','fxPg',null,'',' data-d="1"'+(pg>=pages?' disabled':''))+'</div></div>':(U.fx.load?empty('bolt','Loading','Fetching from your project…'):empty('bolt','No Flex applications','When a rider applies for Flex they will show up here.')))+'</div>';
+}
+function fxOpen(id,name){
+  var hit=(U.fx.list||[]).filter(function(x){return x.id===id})[0];
+  if(hit){U.fx.det=hit;return fxRender()}
+  openM('<h3>Loading…</h3>',function(){closeM()});
+  beReq('/rest/v1/rpc/admin_flex_applications','POST',{p_status:'all',p_search:name||'',p_limit:100,p_offset:0}).then(function(j){var h=j.items.filter(function(x){return x.id===id})[0];if(!h){closeM();return toast('Flex application not found.','err')}U.fx.det=h;fxRender()},function(e){closeM();toast(e.message,'err')});
+}
+function fxRender(){
+  var x=U.fx.det;if(!x)return;var st=x.status;
+  var chk=Object.keys(FX_CHK).map(function(k){return '<div class="it" style="justify-content:space-between"><span>'+FX_CHK[k]+'</span>'+pill(x.checks[k]?'Yes':'No',x.checks[k]?'ok':'warn')+'</div>'}).join('');
+  var docs=(x.docs||[]).map(function(d){return '<div class="it" style="justify-content:space-between;gap:.6rem"><span><b>'+esc(String(d.doc).replace(/_/g,' '))+'</b> '+kBadge(d.status)+(d.note?' <small class="muted">'+esc(d.note)+'</small>':'')+'</span>'+(d.file?btn(ic('eye')+'View','appDocView',d.file):'')+'</div>'}).join('')||'<p class="muted">No documents uploaded yet. Review them under KYC review.</p>';
+  var hist=(x.history||[]).map(function(h){return '<div class="it" style="justify-content:space-between;gap:.6rem;font-size:.84rem"><span>'+esc(String(h.action).replace(/^flex_/,'').replace(/_/g,' '))+(h.meta&&h.meta.note?' · '+esc(h.meta.note):'')+(h.meta&&h.meta.reason?' · '+esc(h.meta.reason):'')+'</span><span class="muted">'+esc(fdt(h.at))+'</span></div>'}).join('');
+  var can=function(){return[].slice.call(arguments).indexOf(st)>-1};
+  var acts=(can('submitted')?'<button type="button" class="btn" data-act="fxDecide" data-id="review">Start review</button>':'')+
+   (can('submitted','under_review')?'<button type="button" class="btn" data-act="fxDecide" data-id="request_info">'+ic('alert')+'Ask for changes</button>':'')+
+   (can('submitted','under_review','action_required')?'<button type="button" class="btn danger" data-act="fxDecide" data-id="reject">'+ic('ban')+'Reject</button>':'')+
+   (can('submitted','under_review')?'<button type="button" class="btn pri" data-act="fxDecide" data-id="approve">'+ic('check')+'Approve</button>':'')+
+   (can('approved')?'<button type="button" class="btn danger" data-act="fxDecide" data-id="suspend">Suspend</button>':'')+
+   (can('suspended')?'<button type="button" class="btn pri" data-act="fxDecide" data-id="reinstate">Reinstate</button>':'');
+  openM('<h3>'+esc(x.name)+' '+fxPill(st)+'</h3><p class="muted">'+esc(x.phone||'')+' · '+esc(x.vehicle)+' · '+esc(x.plate)+(x.city?' · '+esc(x.city):'')+'</p>'+
+   (x.note?'<div class="card pad" style="margin:.5rem 0"><b>Last note:</b> '+esc(x.note)+'</div>':'')+
+   '<h4>Eligibility checks</h4>'+chk+'<h4>Agreement</h4><p class="muted">'+(x.agreementVersion?'Accepted version '+esc(x.agreementVersion)+' on '+esc(fdt(x.agreementAt)):'Not accepted yet.')+'</p>'+
+   '<h4>Settlement details</h4>'+(x.settlement?'<p>'+esc(x.settlement.bank)+' · '+esc(x.settlement.accountName)+' · ••••'+esc(x.settlement.last4)+' '+pill('Pending verification','warn')+'</p><p class="muted">Not verified. Confirm the account name with your payout provider before paying out.</p>':'<p class="muted">Not provided.</p>')+
+   '<h4>Documents</h4>'+docs+(hist?'<h4>Audit history</h4>'+hist:'')+
+   '<div class="ft" style="flex-wrap:wrap;gap:.5rem"><button type="button" class="btn" data-m="x">Close</button>'+acts+'</div>',function(){closeM()});
+}
+function fxAfter(){U.fx.list=null;U.fx.key='';fxLoad(true);if(typeof ridersLoad==='function')ridersLoad()}
+function fxDecideDo(action,note){
+  var x=U.fx.det;
+  beReq('/rest/v1/rpc/admin_flex_decide','POST',{p_rider:x.id,p_action:action,p_note:note||''}).then(function(){log(x.name+' · Flex '+action.replace(/_/g,' '),'kyc');audit('Flex '+action+' · '+x.name);closeM();fxAfter();toast('Done.')},function(e){toast(e.message,'err')});
+}
+function vFlexSettings(){
+  if(beOn()&&!U.fx.cfg&&!U.fx.cfgLoad){U.fx.cfgLoad=true;beReq('/rest/v1/rpc/admin_flex_settings_get','POST',{}).then(function(j){U.fx.cfg=j;U.fx.cfgErr='';U.fx.cfgLoad=false;refresh()},function(e){U.fx.cfgErr=e.message;U.fx.cfgLoad=false;refresh()})}
+  var j=U.fx.cfg,c=j&&j.config||{},w=j&&j.warnings||[];
+  var yn=function(v){return v?pill('On','ok'):pill('Off','')},val=function(v){return v==null||v===''?'<span class="muted">Not set</span>':esc(String(v))};
+  var row=function(l,v){return '<div class="it" style="justify-content:space-between;gap:1rem"><span>'+l+'</span><b>'+v+'</b></div>'};
+  var body=!beOn()?empty('settings','Backend not connected','Connect the backend in Messaging to manage Flex settings.'):U.fx.cfgErr?'<div class="card pad" style="border-color:var(--bad)"><b>Could not load Flex settings.</b> <span class="muted">'+esc(U.fx.cfgErr)+'</span></div>':!j?empty('settings','Loading','Fetching from your project…'):
+   (w.length?'<div class="card pad" style="border-color:var(--warn)"><b>Before Flex can go live</b><ul>'+w.map(function(t){return '<li>'+esc(t)+'</li>'}).join('')+'</ul></div>':'<div class="card pad"><b>Configuration complete.</b> <span class="muted">Flex dispatch can be switched on.</span></div>')+
+   '<div class="card pad"><h3>Registration</h3>'+row('Flex registration open',yn(c.registrationEnabled))+row('Require admin approval',yn(c.requireApproval))+row('Require phone',yn(c.requirePhone))+row('Require email',yn(c.requireEmail))+row('Require identity verification',yn(c.requireIdentity))+row('Require vehicle check',yn(c.requireVehicle))+row('Require settlement details',yn(c.requireSettlement))+row('Require rider agreement',yn(c.requireAgreement))+row('Agreement version',val(c.agreementVersion))+'</div>'+
+   '<div class="card pad"><h3>Operations</h3>'+row('Flex dispatch',yn(c.dispatchEnabled))+row('Service regions',val((c.regions||[]).join(', ')))+row('Vehicle types',val((c.vehicleTypes||[]).join(', ')))+row('Delivery types',val((c.deliveryTypes||[]).join(', ')))+row('Max concurrent deliveries',val(c.maxConcurrent))+row('Operating hours',val(c.hours))+'</div>'+
+   '<div class="card pad"><h3>Compensation and payouts</h3>'+row('Platform fee (% of delivery fare)',c.platformFeePct==null?val(null):esc(c.platformFeePct)+'%')+row('Tips count towards earnings',yn(c.tipsEligible))+row('Payout schedule',val(c.payoutSchedule))+row('Minimum payout',c.minPayout==null?val(null):ngn(c.minPayout))+'<p class="sub">Flex earnings = delivery fare − platform fee + eligible tips + approved incentives. No rate is assumed: until a platform fee is set, earnings stay pending.</p>'+(c.platformFeePct!=null?'<div class="acts">'+btn('Recalculate pending earnings','fxReprice',null,'')+'</div>':'')+'</div>';
+  return head('Flex settings','Everything that controls ChowBuy Flex. Changes are audited. Nothing here is a default rate.',btn('Back to Flex','goFx',null,'')+(j?btn(ic('edit')+'Edit settings','fxEdit',null,'pri'):''))+body;
+}
+function fxEdit(){
+  var c=U.fx.cfg.config,cities=(U.fx.cfg.cities||[]).map(function(x){return x.name}).join(', '),onoff=[['true','On'],['false','Off']],b=function(k){return String(!!c[k])};
+  openM('<h3>Flex settings</h3><p class="muted">Cities you can use: '+esc(cities)+'. Lists are comma separated.</p>'+
+   sel('f_reg','Flex registration open',onoff,b('registrationEnabled'))+sel('f_dis','Flex dispatch on',onoff,b('dispatchEnabled'))+
+   sel('f_app','Require admin approval',onoff,b('requireApproval'))+sel('f_ide','Require identity verification',onoff,b('requireIdentity'))+sel('f_veh','Require vehicle check',onoff,b('requireVehicle'))+sel('f_set','Require settlement details',onoff,b('requireSettlement'))+sel('f_agr','Require rider agreement',onoff,b('requireAgreement'))+sel('f_eml','Require email',onoff,b('requireEmail'))+sel('f_pho','Require phone',onoff,b('requirePhone'))+
+   inp('f_av','Agreement version (the legal text itself is published by your legal team)',c.agreementVersion||'','maxlength="120"')+
+   inp('f_rg','Service regions',(c.regions||[]).join(', '),'')+inp('f_vt','Vehicle types (Bike, Car)',(c.vehicleTypes||[]).join(', '),'')+inp('f_dt','Delivery types (restaurant, grocery, pharmacy, package)',(c.deliveryTypes||[]).join(', '),'')+
+   inp('f_mc','Max concurrent deliveries (1 to 5)',c.maxConcurrent,'inputmode="numeric"')+inp('f_hr','Operating hours (free text)',c.hours||'','maxlength="120"')+
+   inp('f_fee','Platform fee % of delivery fare (leave empty if not decided)',c.platformFeePct==null?'':c.platformFeePct,'inputmode="decimal"')+sel('f_tip','Tips count towards earnings',onoff,b('tipsEligible'))+
+   inp('f_ps','Payout schedule (e.g. weekly)',c.payoutSchedule||'','maxlength="120"')+inp('f_mp','Minimum payout in naira (leave empty if none)',c.minPayout==null?'':c.minPayout,'inputmode="numeric"')+
+   '<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Save</button></div>',function(v){
+    var list=function(t){return String(t||'').split(',').map(function(s){return s.trim()}).filter(Boolean)},tb=function(t){return t==='true'},num2=function(t){t=String(t||'').trim();return t===''?null:Number(t)};
+    var fee=num2(v.f_fee),mp=num2(v.f_mp),mc=Number(v.f_mc);
+    if(fee!=null&&(isNaN(fee)||fee<0||fee>100))return 'Platform fee must be between 0 and 100.';
+    if(mp!=null&&(isNaN(mp)||mp<0))return 'Minimum payout cannot be negative.';
+    if(!(mc>=1&&mc<=5))return 'Max concurrent deliveries is 1 to 5.';
+    var p={registrationEnabled:tb(v.f_reg),dispatchEnabled:tb(v.f_dis),requireApproval:tb(v.f_app),requireIdentity:tb(v.f_ide),requireVehicle:tb(v.f_veh),requireSettlement:tb(v.f_set),requireAgreement:tb(v.f_agr),requireEmail:tb(v.f_eml),requirePhone:tb(v.f_pho),
+      agreementVersion:String(v.f_av||'').trim()||null,regions:list(v.f_rg),vehicleTypes:list(v.f_vt),deliveryTypes:list(v.f_dt).map(function(s){return s.toLowerCase()}),maxConcurrent:mc,hours:String(v.f_hr||'').trim()||null,platformFeePct:fee,tipsEligible:tb(v.f_tip),payoutSchedule:String(v.f_ps||'').trim()||null,minPayout:mp};
+    beReq('/rest/v1/rpc/admin_flex_settings_save','POST',{p:p}).then(function(j){U.fx.cfg={config:j.config,warnings:j.warnings,cities:U.fx.cfg.cities};log('Flex settings updated','set');audit('Flex settings updated');refresh();toast('Saved.')},function(e){toast(e.message,'err')});
+  });
+}
+function rdTypeForm(id){
+  var r=(L.riders||[]).filter(function(x){return x.id===id})[0];if(!r)return;
+  openM('<h3>Change model · '+esc(r.name)+'</h3><p class="muted">Currently '+esc(String(r.model).toUpperCase())+'. The rider goes offline, past earnings keep the model they were earned under, and this is recorded in the audit log. A rider moved to Flex still has to be approved before taking deliveries.</p>'+
+   sel('tm','New model',[['fleet','Fleet'],['partner','Partner'],['flex','Flex']].filter(function(o){return o[0]!==r.model}),'')+inp('ts','Monthly salary in naira (Fleet only)','','inputmode="numeric"')+
+   '<div class="f"><label for="tr">Reason</label><textarea id="tr" name="tr" rows="3" maxlength="200"></textarea></div><div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Change model</button></div>',function(v){
+    var reason=String(v.tr||'').trim();if(reason.length<5)return 'Give a reason for the change.';
+    var sal=Number(String(v.ts||'').replace(/\D/g,''))||null;if(v.tm==='fleet'&&!sal)return 'Set a monthly salary for a fleet rider.';
+    beReq('/rest/v1/rpc/admin_rider_set_type','POST',{p_rider:id,p_model:v.tm,p_reason:reason,p_salary:sal}).then(function(){log(r.name+' · model changed to '+v.tm,'set');audit('Rider model '+r.model+' → '+v.tm+' · '+r.name);return ridersLoad()}).then(function(){toast('Model changed.')},function(e){toast(e.message,'err')});
+  });
+}
+Object.assign(A,{
+ fxOpen:function(el){fxOpen(el.getAttribute('data-id'),((L.riders||[]).filter(function(x){return x.id===el.getAttribute('data-id')})[0]||{}).name)},
+ fxRefresh:function(){U.fx.list=null;U.fx.key='';U.fx.cfg=null;fxLoad(true);refresh()},
+ fxPg:function(el){U.page.fx=Math.max(1,(U.page.fx||1)+Number(el.getAttribute('data-d')));refresh()},
+ fxDecide:function(el){var a=el.getAttribute('data-id'),x=U.fx.det,
+   T2={request_info:['Ask for changes','What does the rider need to fix? They will see this exactly as written.',true,'Send back'],reject:['Reject application','Give the reason. The rider will see it.',true,'Reject'],suspend:['Suspend Flex rider','Give the reason. The rider goes offline immediately and their earnings history is kept.',true,'Suspend'],approve:['Approve '+x.name,'The rider can go online only while Flex dispatch is on and their area is enabled. Identity, vehicle, area and agreement are checked again by the server.',false,'Approve'],review:['Start review','Move this application into review.',false,'Start'],reinstate:['Reinstate rider','The rider can work again.',false,'Reinstate']}[a];
+   openM('<h3>'+T2[0]+'</h3><p class="muted">'+T2[1]+'</p>'+(T2[2]?'<div class="f"><label for="an">Message</label><textarea id="an" name="an" rows="4" maxlength="300"></textarea></div>':'')+'<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn '+(a==='reject'||a==='suspend'?'danger':'pri')+'">'+T2[3]+'</button></div>',function(v){
+     var n=String(v.an||'').trim();if(T2[2]&&n.length<5)return 'Write at least a few words.';fxDecideDo(a,n)})},
+ fxReprice:function(){confirmM('Recalculate pending earnings','Pending Flex earnings are priced with the current platform fee.','Recalculate',function(){beReq('/rest/v1/rpc/admin_flex_reprice_pending','POST',{}).then(function(n){audit('Flex pending earnings recalculated');toast(n+' earning(s) updated.')},function(e){toast(e.message,'err')})})},
+ fxEdit:function(){fxEdit()},rdType:function(el){rdTypeForm(el.getAttribute('data-id'))},
+ goFxSet:function(){location.hash='#flex-settings'},goFx:function(){location.hash='#flex'}
+});
+ROUTES.splice(ROUTES.map(function(r){return r.p}).indexOf('riders')+1,0,{p:'flex',n:'Flex',i:'bolt',g:'Marketplace',v:vFlex},{p:'flex-settings',n:'Flex settings',i:'settings',g:'Marketplace',v:vFlexSettings});
+buildNav();
 
 /* drawer */
 function openSide(){$('#side').classList.add('open');$('#scrim').classList.add('show');$('#burger').setAttribute('aria-expanded','true')}

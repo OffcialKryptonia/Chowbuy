@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Bike, Building2, Car, Check, Truck, UserRound, type LucideIcon } from 'lucide-react-native';
+import { Bike, Building2, Car, Check, Truck, UserRound, Zap, type LucideIcon } from 'lucide-react-native';
 import { Alert } from 'react-native';
 import { Button, Field, Page, Txt, tap } from '@/components/ui';
 import { LIVE } from '@/lib/config';
@@ -10,12 +10,10 @@ import { msg } from '@/lib/supabase';
 import { toBackendVehicle } from '@/lib/live-map';
 import { useTheme } from '@/lib/theme';
 import { VEHICLES, type RiderType, type Vehicle } from '@/lib/validation';
+import { MODEL_CARDS } from '@/lib/models';
 import { useApply } from '@/stores/apply';
 
-const TYPES: { id: RiderType; title: string; body: string; icon: LucideIcon }[] = [
-  { id: 'fleet', title: 'ChowBuy Fleet', body: 'Salaried staff rider on a company bike, with set shifts at a ChowBuy hub.', icon: Building2 },
-  { id: 'partner', title: 'ChowBuy Partner', body: 'Ride on your own schedule with your own vehicle and keep your earnings.', icon: UserRound },
-];
+const TYPE_ICON: Record<RiderType, LucideIcon> = { fleet: Building2, partner: UserRound, flex: Zap };
 const VEHICLE_ICON: Record<Vehicle, LucideIcon> = { motorcycle: Bike, bicycle: Bike, car: Car, truck: Truck, van: Truck };
 
 function Choice({ selected, onPress, icon: Icon, title, note }: { selected: boolean; onPress: () => void; icon: LucideIcon; title: string; note?: string }) {
@@ -33,7 +31,7 @@ function Choice({ selected, onPress, icon: Icon, title, note }: { selected: bool
   );
 }
 
-/** Apply, step 3: Fleet or Partner, then the vehicle that rider type is allowed to use. */
+/** Apply, step 3: Fleet, Partner or Flex, then the vehicle that rider type is allowed to use. */
 export default function ApplyType() {
   const p = useTheme();
   const r = useRouter();
@@ -47,16 +45,28 @@ export default function ApplyType() {
     setBusy(true);
     try {
       const session = await live.signUp({ email: a.email, password: a.password, name: a.name, phone: a.phone });
-      if (session) await live.apply({ name: a.name, plate: a.vehicle === 'bicycle' ? 'BICYCLE' : a.plate, vehicle: toBackendVehicle(a.vehicle), phone: a.phone });
+      if (session) await live.apply({ name: a.name, plate: a.vehicle === 'bicycle' ? 'BICYCLE' : a.plate, vehicle: toBackendVehicle(a.vehicle), phone: a.phone, type: a.type ?? undefined });
       a.set({ submitted: true, password: '' });
       r.replace(session ? '/apply/done' : { pathname: '/apply/done', params: { confirm: '1' } });
     } catch (e) { Alert.alert('Could not create your account', msg(e)); } finally { setBusy(false); }
   };
   return (
     <Page footer={<Button label={busy ? 'Submitting…' : 'Submit application'} disabled={!ok} onPress={submit} />}>
-      <Txt size={26} weight="display">How will you ride with ChowBuy?</Txt>
+      <Txt size={26} weight="display">Choose how you want to deliver with ChowBuy</Txt>
       <View style={{ gap: 12 }}>
-        {TYPES.map((t) => <Choice key={t.id} selected={a.type === t.id} icon={t.icon} title={t.title} note={t.body} onPress={() => a.set({ type: t.id, vehicle: a.vehicle && VEHICLES[t.id].some((v) => v.id === a.vehicle) ? a.vehicle : null })} />)}
+        {MODEL_CARDS.map((t) => (
+          <View key={t.id} style={{ gap: 8 }}>
+            <Choice selected={a.type === t.id} icon={TYPE_ICON[t.id]} title={t.title} note={t.tagline} onPress={() => a.set({ type: t.id, vehicle: a.vehicle && VEHICLES[t.id].some((v) => v.id === a.vehicle) ? a.vehicle : null })} />
+            {a.type === t.id ? (
+              <View style={{ paddingHorizontal: 8, gap: 4 }}>
+                <Txt size={13} color={p.mute}><Txt size={13} weight="bold">How you are paid: </Txt>{t.compensation}</Txt>
+                <Txt size={13} color={p.mute}><Txt size={13} weight="bold">Who can join: </Txt>{t.eligibility}</Txt>
+                <Txt size={13} color={p.mute}><Txt size={13} weight="bold">When you work: </Txt>{t.availability}</Txt>
+                {t.note ? <Txt size={13} color={p.mute}>{t.note}</Txt> : null}
+              </View>
+            ) : null}
+          </View>
+        ))}
       </View>
       {a.type ? (
         <>
@@ -65,7 +75,7 @@ export default function ApplyType() {
             {vehicles.map((v) => <Choice key={v.id} selected={a.vehicle === v.id} icon={VEHICLE_ICON[v.id]} title={v.label} note={v.note} onPress={() => a.set({ vehicle: v.id })} />)}
           </View>
         </>
-      ) : <Txt size={14} color={p.mute}>Pick a rider type to see the vehicles you can use.</Txt>}
+      ) : <Txt size={14} color={p.mute}>Pick an option to see the vehicles you can use.</Txt>}
       {LIVE && a.type && a.vehicle && a.vehicle !== 'bicycle' ? <Field label="Plate number" value={a.plate} onChangeText={(v) => a.set({ plate: v })} autoCapitalize="characters" autoCorrect={false} /> : null}
     </Page>
   );

@@ -14,6 +14,8 @@ export const partnerPayout = (f: Offer['fare']): number => Math.round(f.base + f
  */
 export function offerView(type: RiderType | null, o: Offer): { showEarnings: boolean; total: number | null; lines: [string, number][] } {
   if (type === 'fleet') return { showEarnings: false, total: null, lines: [] };
+  // A Flex offer carries the net the server calculated from the configured platform fee; with no fee configured there is nothing to show.
+  if (type === 'flex' && partnerPayout(o.fare) <= 0) return { showEarnings: false, total: null, lines: [] };
   const lines: [string, number][] = [['Base fare', o.fare.base], ['Distance', o.fare.distance]];
   if (o.fare.surge > 0) lines.push(['Surge', o.fare.surge]);
   if (o.fare.waiting > 0) lines.push(['Waiting', o.fare.waiting]);

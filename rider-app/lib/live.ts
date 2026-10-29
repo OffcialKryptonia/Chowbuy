@@ -18,8 +18,14 @@ export const signOut = () => supabase.auth.signOut();
 export const session = async () => (await supabase.auth.getSession()).data.session;
 export const userId = async () => (await session())?.user.id ?? null;
 
-export const apply = (v: { name: string; plate: string; vehicle: 'Bike' | 'Car'; phone: string }) =>
-  rpc<void>('rider_apply', { p_name: v.name, p_plate: v.plate, p_vehicle: v.vehicle, p_phone: v.phone });
+export const apply = (v: { name: string; plate: string; vehicle: 'Bike' | 'Car'; phone: string; type?: 'fleet' | 'partner' | 'flex' }) =>
+  rpc<void>('rider_apply', { p_name: v.name, p_plate: v.plate, p_vehicle: v.vehicle, p_phone: v.phone, p_type: v.type ?? 'partner' });
+export const flexSave = (v: { city: string; bank: string; accountName: string; accountNo: string }) =>
+  rpc<void>('rider_flex_save', { p_city: v.city, p_bank: v.bank, p_account_name: v.accountName, p_account_no: v.accountNo });
+export const flexSubmit = (agreementVersion: string) => rpc<void>('rider_flex_submit', { p_agreement_version: agreementVersion });
+export const flexPause = (paused: boolean) => rpc<void>('rider_flex_pause', { p_paused: paused });
+export interface FlexEarningRow { order: string; at: string; fare: number; platformFee: number; tip: number; incentive: number; net: number; status: string }
+export const flexEarnings = () => rpc<{ summary: Record<string, { count: number; net: number }>; items: FlexEarningRow[] }>('rider_flex_earnings', { p_limit: 100 });
 export const me = () => rpc<LiveMe | null>('rider_me');
 export const setOnline = (v: boolean) => rpc<void>('rider_set_online', { p_online: v });
 export const ping = (lat: number, lng: number) => rpc<void>('rider_ping', { p_lat: lat, p_lng: lng });
