@@ -41,7 +41,9 @@
     "react-native-screens": "3.31.1",
     "react-native-svg": "15.2.0",
     "react-native-url-polyfill": "^2.0.0",
-    "zustand": "^4.5.4"
+    "zustand": "^4.5.4",
+    "onesignal-expo-plugin": "^2.0.3",
+    "react-native-onesignal": "^5.2.4"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",

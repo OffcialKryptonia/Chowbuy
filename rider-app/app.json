@@ -64,6 +64,12 @@
         {
           "photosPermission": "ChowBuy Rider needs your photos so you can send your documents for verification."
         }
+      ],
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "production"
+        }
       ]
     ],
     "experiments": {
