@@ -108,8 +108,60 @@ Deno.serve(handle(async (req) => {
       }
       return json({ provider, selectedProvider: selected, status: 'verified', message: 'Termii accepted the API key and returned an account response. This verifies API access, not that a masked voice number is provisioned.' });
     }
-    if (selected === 'at') throw new HttpError(400, 'Africa’s Talking requires its username and voice-enabled account configuration in addition to the API key. Add those fields before enabling a live provider test.');
-    if (selected === 'twilio') throw new HttpError(400, 'Twilio Proxy requires an Account SID, Auth Token and Proxy Service SID. The current single API-key field is insufficient to verify a working proxy service.');
+    if (selected === 'at') {
+      const username = String(b.username ?? '').trim();
+      if (!username) throw new HttpError(400, 'Enter the Africa’s Talking username.');
+      let res: Response;
+      try {
+        res = await fetch('https://api.africastalking.com/version1/user?username=' + encodeURIComponent(username), {
+          headers: { apiKey, Accept: 'application/json' },
+        });
+      } catch {
+        throw new HttpError(502, 'Could not reach Africa’s Talking. Try again later.');
+      }
+      if (!res.ok) {
+        console.error('Africa’s Talking credential test rejected', res.status);
+        throw new HttpError(res.status === 401 || res.status === 403 ? 400 : 502,
+          res.status === 401 || res.status === 403
+            ? 'Africa’s Talking rejected the API key. Confirm the username and account API key.'
+            : 'Africa’s Talking returned an unexpected response.');
+      }
+      const data = await res.json().catch(() => ({}));
+      if (data.errorMessage) throw new HttpError(400, 'Africa’s Talking returned an account error. Confirm the username and API key.');
+      return json({ provider, selectedProvider: selected, status: 'verified', message: 'Africa’s Talking accepted the API key and username. This verifies account API access, not that voice calling is enabled or a masked number is provisioned.' });
+    }
+    if (selected === 'twilio') {
+      const accountSid = String(b.accountSid ?? '').trim();
+      const serviceSid = String(b.serviceSid ?? '').trim();
+      const authToken = await secret('twilio_auth_token');
+      if (!/^AC[0-9a-f]{32}$/i.test(accountSid)) throw new HttpError(400, 'Enter a valid Twilio Account SID beginning with AC.');
+      if (!/^KS[0-9a-f]{32}$/i.test(serviceSid)) throw new HttpError(400, 'Enter a valid Twilio Proxy Service SID beginning with KS.');
+      if (!authToken) throw new HttpError(400, 'Save the Twilio Auth Token first.');
+      const authorization = 'Basic ' + btoa(accountSid + ':' + authToken);
+      let accountRes: Response;
+      try {
+        accountRes = await fetch('https://api.twilio.com/2010-04-01/Accounts/' + encodeURIComponent(accountSid) + '.json', { headers: { Authorization: authorization } });
+      } catch {
+        throw new HttpError(502, 'Could not reach Twilio. Try again later.');
+      }
+      if (!accountRes.ok) {
+        console.error('Twilio account credential test rejected', accountRes.status);
+        throw new HttpError(accountRes.status === 401 || accountRes.status === 403 ? 400 : 502,
+          accountRes.status === 401 || accountRes.status === 403 ? 'Twilio rejected the Account SID/Auth Token.' : 'Twilio account check returned an unexpected response.');
+      }
+      let serviceRes: Response;
+      try {
+        serviceRes = await fetch('https://proxy.twilio.com/v1/Services/' + encodeURIComponent(serviceSid), { headers: { Authorization: authorization } });
+      } catch {
+        throw new HttpError(502, 'Could not reach the Twilio Proxy API.');
+      }
+      if (!serviceRes.ok) {
+        console.error('Twilio Proxy service test rejected', serviceRes.status);
+        throw new HttpError(serviceRes.status === 401 || serviceRes.status === 403 ? 400 : 502,
+          serviceRes.status === 404 ? 'Twilio authenticated, but the Proxy Service SID was not found in this account.' : serviceRes.status === 401 || serviceRes.status === 403 ? 'Twilio credentials do not have access to this Proxy Service.' : 'Twilio Proxy returned an unexpected response.');
+      }
+      return json({ provider, selectedProvider: selected, status: 'verified', message: 'Twilio authenticated and the Proxy Service was found. This does not verify that a phone number is assigned or that a live call will complete.' });
+    }
     throw new HttpError(400, 'Select a supported masked-call provider.');
   }
   throw new HttpError(400, 'Unsupported provider test.');
