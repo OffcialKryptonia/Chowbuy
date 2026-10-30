@@ -1,4 +1,4 @@
-import { admin, handle, HttpError, json, requireAdmin, secret } from '../_shared/util.ts';
+import { admin, handle, HttpError, json, publicSettings, requireAdmin, secret } from '../_shared/util.ts';
 
 const enc = new TextEncoder();
 const b64url = (bytes: Uint8Array) =>
@@ -163,6 +163,53 @@ Deno.serve(handle(async (req) => {
       return json({ provider, selectedProvider: selected, status: 'verified', message: 'Twilio authenticated and the Proxy Service was found. This does not verify that a phone number is assigned or that a live call will complete.' });
     }
     throw new HttpError(400, 'Select a supported masked-call provider.');
+  }
+  if (provider === 'korapay') {
+    const key = await secret('korapay_secret_key');
+    if (!key) throw new HttpError(400, 'Save the Korapay secret key first.');
+    const live = b.live === true;
+    if (!key.startsWith(live ? 'sk_live_' : 'sk_test_')) throw new HttpError(400, `This secret key does not look like a ${live ? 'live (sk_live_…)' : 'sandbox (sk_test_…)'} key. Check the mode you selected.`);
+    let res: Response;
+    try { res = await fetch('https://api.korapay.com/merchant/api/v1/balances', { headers: { Authorization: 'Bearer ' + key, Accept: 'application/json' } }); }
+    catch { throw new HttpError(502, 'Could not reach Korapay. Try again later.'); }
+    if (!res.ok) {
+      console.error('Korapay credential test rejected', res.status);
+      throw new HttpError(res.status === 401 || res.status === 403 ? 400 : 502, res.status === 401 || res.status === 403 ? 'Korapay rejected the secret key.' : 'Korapay returned an unexpected response. Try again.');
+    }
+    return json({ provider, status: 'verified', message: `Korapay accepted the secret key (${live ? 'live' : 'sandbox'}). This does not prove the webhook URL is set in the Korapay dashboard.` });
+  }
+  if (provider === 'pocketfi') {
+    const key = await secret('pocketfi_secret_key');
+    const base = await secret('pocketfi_base_url');
+    if (!key) throw new HttpError(400, 'Save the Pocketfi merchant secret first.');
+    if (!base) throw new HttpError(400, 'Save the Pocketfi API base URL (from your Pocketfi merchant documentation) first.');
+    let u: URL;
+    try { u = new URL(base); if (u.protocol !== 'https:') throw new Error('p'); } catch { throw new HttpError(400, 'The Pocketfi base URL must be a valid https:// URL.'); }
+    let res: Response;
+    try { res = await fetch(u.toString(), { headers: { Authorization: 'Bearer ' + key, Accept: 'application/json' } }); }
+    catch { throw new HttpError(502, 'Could not reach the Pocketfi API at that base URL.'); }
+    if (res.status === 401 || res.status === 403) throw new HttpError(400, 'Pocketfi answered but rejected the secret key.');
+    return json({ provider, status: 'reachable', message: `Pocketfi API reachable (HTTP ${res.status}). Credentials are not proven: Pocketfi's API has no public check we can call, so the first real bank-transfer payment is the true test.` });
+  }
+  if (provider === 'google') {
+    const out: Record<string, string> = {};
+    const check = async (name: string, secretName: string, url: (k: string) => string) => {
+      const k = await secret(secretName);
+      if (!k) { out[name] = 'not saved'; return; }
+      try {
+        const r = await fetch(url(k)); const j = await r.json().catch(() => ({}));
+        out[name] = j.status === 'OK' || j.status === 'ZERO_RESULTS' ? 'verified' : 'rejected: ' + (j.error_message || j.status || r.status);
+      } catch { out[name] = 'could not reach Google'; }
+    };
+    await check('directions', 'google_directions_key', (k) => `https://maps.googleapis.com/maps/api/directions/json?origin=6.4281,3.4219&destination=6.4474,3.4723&key=${encodeURIComponent(k)}`);
+    await check('geocoding', 'google_geocoding_key', (k) => `https://maps.googleapis.com/maps/api/geocode/json?latlng=6.4281,3.4219&key=${encodeURIComponent(k)}`);
+    const ps = await publicSettings().catch(() => ({} as Record<string, any>));
+    const js = String(b.jsKey || ps?.maps?.jsKey || '');
+    out.javascript = /^AIza[0-9A-Za-z_-]{35}$/.test(js) ? 'format valid (browser keys cannot be tested from the server)' : 'not saved or invalid format';
+    const failed = Object.values(out).filter((v) => v.startsWith('rejected') || v === 'could not reach Google');
+    if (failed.length) throw new HttpError(400, 'Google: ' + Object.entries(out).map(([k, v]) => `${k} ${v}`).join('; '));
+    if (out.directions === 'not saved' && out.geocoding === 'not saved') throw new HttpError(400, 'Save the Directions or Geocoding key first.');
+    return json({ provider, status: 'verified', message: 'Google: ' + Object.entries(out).map(([k, v]) => `${k} ${v}`).join('; ') + '.' });
   }
   throw new HttpError(400, 'Unsupported provider test.');
 }));
