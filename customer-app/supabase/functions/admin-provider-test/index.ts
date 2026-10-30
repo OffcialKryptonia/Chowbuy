@@ -1,3 +1,4 @@
+import { pocketfiBase, pocketfiHeaders } from '../_shared/pocketfi.ts';
 import { admin, handle, HttpError, json, publicSettings, requireAdmin, secret } from '../_shared/util.ts';
 
 const enc = new TextEncoder();
@@ -180,16 +181,17 @@ Deno.serve(handle(async (req) => {
   }
   if (provider === 'pocketfi') {
     const key = await secret('pocketfi_secret_key');
-    const base = await secret('pocketfi_base_url');
-    if (!key) throw new HttpError(400, 'Save the Pocketfi merchant secret first.');
-    if (!base) throw new HttpError(400, 'Save the Pocketfi API base URL (from your Pocketfi merchant documentation) first.');
-    let u: URL;
-    try { u = new URL(base); if (u.protocol !== 'https:') throw new Error('p'); } catch { throw new HttpError(400, 'The Pocketfi base URL must be a valid https:// URL.'); }
+    const ps = await publicSettings().catch(() => ({} as Record<string, any>));
+    const businessId = String(b.businessId || ps?.gateways?.pocketfi?.businessId || '').trim();
+    const live = b.live !== undefined ? !!b.live : !!ps?.gateways?.pocketfi?.live;
+    if (!key) throw new HttpError(400, 'Save the Pocketfi secret key (API token) first.');
+    if (!businessId) throw new HttpError(400, 'Save your Pocketfi business ID first.');
     let res: Response;
-    try { res = await fetch(u.toString(), { headers: { Authorization: 'Bearer ' + key, Accept: 'application/json' } }); }
-    catch { throw new HttpError(502, 'Could not reach the Pocketfi API at that base URL.'); }
-    if (res.status === 401 || res.status === 403) throw new HttpError(400, 'Pocketfi answered but rejected the secret key.');
-    return json({ provider, status: 'reachable', message: `Pocketfi API reachable (HTTP ${res.status}). Credentials are not proven: Pocketfi's API has no public check we can call, so the first real bank-transfer payment is the true test.` });
+    try { res = await fetch(`${pocketfiBase(live)}/virtual-accounts/fetch?businessId=${encodeURIComponent(businessId)}`, { headers: pocketfiHeaders(key) }); }
+    catch { throw new HttpError(502, 'Could not reach the Pocketfi API.'); }
+    if (res.status === 401 || res.status === 403) throw new HttpError(400, `Pocketfi rejected the API token (${live ? 'live' : 'sandbox'}).`);
+    if (res.ok) return json({ provider, status: 'verified', message: `Pocketfi accepted the API token and business ID (${live ? 'live' : 'sandbox'}). This does not prove the webhook URL is set in the Pocketfi dashboard.` });
+    return json({ provider, status: 'reachable', message: `Pocketfi answered HTTP ${res.status}. Check the business ID and that the token matches the ${live ? 'live' : 'sandbox'} environment.` });
   }
   if (provider === 'google') {
     const out: Record<string, string> = {};

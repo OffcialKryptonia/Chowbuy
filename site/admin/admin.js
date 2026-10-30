@@ -1036,7 +1036,7 @@ function setPath(o,p,v){var ks=p.split('.'),c=o;for(var i=0;i<ks.length-1;i++){i
 function delPath(o,p){var ks=p.split('.'),c=o;for(var i=0;i<ks.length-1;i++){c=c[ks[i]];if(!c)return}delete c[ks[ks.length-1]];if(ks.length>2&&c&&!Object.keys(c).length){var par=getPath(o,ks.slice(0,-2).join('.'));if(par)delete par[ks[ks.length-2]]}}
 function PAYDEF(){return{
   korapay:{enabled:true,isLive:false,publicKey:'',hints:{},webhookUrl:''},
-  pocketfi:{enabled:true,isLive:false,apiKey:'',hints:{},webhookUrl:'',expiry:30,bank:'Wema Bank'},
+  pocketfi:{enabled:true,isLive:false,businessId:'',hints:{},webhookUrl:''},
   cod:{enabled:true,maxOrder:30000,otpFirst:true,riderLimit:50000},
   wallet:{enabled:true,allowTransfers:true}}}
 function MAPDEF(){return{enabled:true,theme:'dark',hints:{},status:'none'}}
@@ -1109,8 +1109,7 @@ function whUrl(fn){return (BE.url||'').replace(/\/+$/,'')+'/functions/v1/'+fn}
 function vPayments(){
   var D=pd(),K=D.korapay,Pf=D.pocketfi,C=D.cod,W=D.wallet,dirty=pDirty();
   var kInner=envSeg('korapay',K.isLive)+fld('pay','korapay.publicKey','Public key',K.publicKey,{copy:1,ph:K.isLive?'pk_live_…':'pk_test_…'})+sfld('pay','korapay','secretKey','Secret key',K)+sfld('pay','korapay','encryptionKey','Encryption key',K)+fld('pay','korapay.webhookUrl','Webhook URL',whUrl('webhook-korapay'),{copy:1,hint:'Paste this into the Korapay dashboard. Korapay signs webhooks with your secret key.'});
-  var pInner=envSeg('pocketfi',Pf.isLive)+fld('pay','pocketfi.apiKey','Pocketfi public API key',Pf.apiKey,{copy:1})+sfld('pay','pocketfi','secretKey','Pocketfi merchant secret',Pf)+sfld('pay','pocketfi','baseUrl','Pocketfi API base URL',Pf)+sfld('pay','pocketfi','webhookSecret','Webhook signature secret',Pf)+fld('pay','pocketfi.webhookUrl','Webhook URL',whUrl('webhook-pocketfi'),{copy:1,hint:'Paste this into the Pocketfi dashboard.'})+
-    '<div class="frow">'+sel('pf-exp','Account expiry duration',[['15','15 minutes'],['30','30 minutes (default)'],['60','60 minutes']],String(Pf.expiry)).replace('<select id="pf-exp" name="pf-exp">','<select id="pf-exp" data-ch="pay:pocketfi.expiry">')+sel('pf-bank','Auto-settlement account',[['Wema Bank','Wema Bank'],['Providus Bank','Providus Bank'],['GTBank','GTBank']],Pf.bank).replace('<select id="pf-bank" name="pf-bank">','<select id="pf-bank" data-ch="pay:pocketfi.bank">')+'</div>';
+  var pInner=envSeg('pocketfi',Pf.isLive)+fld('pay','pocketfi.businessId','Pocketfi business ID',Pf.businessId,{copy:1,hint:'From your Pocketfi dashboard. Not a secret.'})+sfld('pay','pocketfi','secretKey','Pocketfi API token (secret)',Pf)+fld('pay','pocketfi.webhookUrl','Webhook URL',whUrl('webhook-pocketfi'),{copy:1,hint:'Paste this under Settings, Webhooks in the Pocketfi dashboard. Webhooks are signed with your API token.'});
   var cInner=fld('pay','cod.maxOrder','Maximum order value for COD (₦)',C.maxOrder,{num:1,hint:'Orders above this amount cannot be paid in cash. Currently '+ngn(Number(C.maxOrder)||0)+'.'})+'<div class="trow"><div><b>Allow COD for first-time customers</b><small>Requires phone OTP confirmation at checkout.</small></div>'+sw(C.otpFirst,'paysw','cod.otpFirst','Allow COD for first-time customers')+'</div>'+fld('pay','cod.riderLimit','Rider cash reconciliation limit (₦)',C.riderLimit,{num:1,hint:'A rider must remit collected cash before accepting new orders once they hold this much. Currently '+ngn(Number(C.riderLimit)||0)+'.'});
   var wInner='<div class="trow"><div><b>Allow wallet transfers</b><small>Peer-to-peer transfers between ChowBuy wallets.</small></div>'+sw(W.allowTransfers,'paysw','wallet.allowTransfers','Allow wallet transfers')+'</div>';
   return head('Settings & pricing','Payment gateways, cash on delivery and the customer wallet.',(dirty?'<span class="badge-un">Unsaved changes</span>'+btn('Discard','payDiscard',null,''):'')+btn(ic('check')+'Save payment settings','paySave',null,'pri'))+setTabs()+
@@ -1252,18 +1251,18 @@ Object.assign(A,{
    if(!pDirty()){toast('No payment changes to save.','warn');return}
    var D=U.pdraft,bad='';
    var kv=D.korapay.publicKey;if(D.korapay.enabled&&kv&&!new RegExp('^pk_'+(D.korapay.isLive?'live':'test')+'_[A-Za-z0-9]{6,}$').test(kv))bad='Korapay public key must look like pk_'+(D.korapay.isLive?'live':'test')+'_… for '+(D.korapay.isLive?'Live':'Sandbox')+' mode.';
-   ['korapay','pocketfi'].forEach(function(p){var r=D[p].raw||{};Object.keys(r).forEach(function(k){if(!bad&&k!=='baseUrl'&&r[k].length<12)bad='That secret looks too short. Paste the full key.'})});
-   if(!bad&&D.pocketfi.raw&&D.pocketfi.raw.baseUrl&&!/^https:\/\/[^\s]+$/.test(D.pocketfi.raw.baseUrl))bad='The Pocketfi base URL must start with https://';
+   ['korapay','pocketfi'].forEach(function(p){var r=D[p].raw||{};Object.keys(r).forEach(function(k){if(!bad&&r[k].length<12)bad='That secret looks too short. Paste the full key.'})});
+   if(!bad&&D.pocketfi.enabled&&D.pocketfi.businessId&&!/^[0-9]{3,12}$/.test(String(D.pocketfi.businessId).trim()))bad='The Pocketfi business ID is a number, for example 29492.';
    if(!(Number(D.cod.maxOrder)>0))bad=bad||'COD maximum must be greater than zero.';if(!(Number(D.cod.riderLimit)>0))bad=bad||'Rider cash limit must be greater than zero.';
    if(bad){toast(bad,'err');return}
    var rk=D.korapay.raw||{},rp=D.pocketfi.raw||{},secrets={};
    if(rk.secretKey)secrets.korapay_secret_key=rk.secretKey;if(rk.encryptionKey)secrets.korapay_encryption_key=rk.encryptionKey;
-   if(rp.secretKey)secrets.pocketfi_secret_key=rp.secretKey;if(rp.webhookSecret)secrets.pocketfi_webhook_secret=rp.webhookSecret;if(rp.baseUrl)secrets.pocketfi_base_url=rp.baseUrl;
+   if(rp.secretKey)secrets.pocketfi_secret_key=rp.secretKey;
    ['korapay','pocketfi'].forEach(function(p){var r=D[p].raw||{};Object.keys(r).forEach(function(k){D[p].hints=D[p].hints||{};D[p].hints[k]=mask(r[k])});delete D[p].raw});
-   D.cod.maxOrder=Number(D.cod.maxOrder);D.cod.riderLimit=Number(D.cod.riderLimit);D.pocketfi.expiry=Number(D.pocketfi.expiry);
+   D.cod.maxOrder=Number(D.cod.maxOrder);D.cod.riderLimit=Number(D.cod.riderLimit);
    var done=function(){upd(function(){S.pay=D;U.pdraft=null;U.conn={};log('Payment gateway settings updated','settings');audit('Payment gateway settings updated')});toast(beOn()?'Saved to your ChowBuy backend. Now press Test to check the keys.':'Saved in this browser only. Connect the backend in Messaging to make it live.',beOn()?'':'warn')};
    if(beOn()){
-     var pub={gateways:{korapay:{enabled:!!D.korapay.enabled,live:!!D.korapay.isLive,publicKey:D.korapay.publicKey||''},pocketfi:{enabled:!!D.pocketfi.enabled,live:!!D.pocketfi.isLive,publicKey:D.pocketfi.apiKey||'',expiry:D.pocketfi.expiry,bank:D.pocketfi.bank},cod:{enabled:!!D.cod.enabled,maxAmount:D.cod.maxOrder},wallet:{enabled:!!D.wallet.enabled}}};
+     var pub={gateways:{korapay:{enabled:!!D.korapay.enabled,live:!!D.korapay.isLive,publicKey:D.korapay.publicKey||''},pocketfi:{enabled:!!D.pocketfi.enabled,live:!!D.pocketfi.isLive,businessId:String(D.pocketfi.businessId||'').trim()},cod:{enabled:!!D.cod.enabled,maxAmount:D.cod.maxOrder},wallet:{enabled:!!D.wallet.enabled}}};
      beFn('admin-settings',{public:pub,secrets:secrets}).then(done,function(e){toast('Could not save payment settings: '+e.message,'err')});
      return;
    }
@@ -1657,10 +1656,10 @@ var SECHINT={};
 function hydratePay(v){
   var g=v.gateways||{},h=SECHINT,P=S.pay=S.pay||PAYDEF(),K=P.korapay,Pf=P.pocketfi;
   if(g.korapay){K.enabled=g.korapay.enabled!==false;K.isLive=!!g.korapay.live;K.publicKey=g.korapay.publicKey||''}
-  if(g.pocketfi){Pf.enabled=g.pocketfi.enabled!==false;Pf.isLive=!!g.pocketfi.live;Pf.apiKey=g.pocketfi.publicKey||'';if(g.pocketfi.expiry)Pf.expiry=g.pocketfi.expiry;if(g.pocketfi.bank)Pf.bank=g.pocketfi.bank}
+  if(g.pocketfi){Pf.enabled=g.pocketfi.enabled!==false;Pf.isLive=!!g.pocketfi.live;Pf.businessId=g.pocketfi.businessId||''}
   if(g.cod){P.cod.enabled=g.cod.enabled!==false;if(g.cod.maxAmount)P.cod.maxOrder=g.cod.maxAmount}
   if(g.wallet)P.wallet.enabled=g.wallet.enabled!==false;
-  K.hints={secretKey:h.korapay_secret_key,encryptionKey:h.korapay_encryption_key};Pf.hints={secretKey:h.pocketfi_secret_key,webhookSecret:h.pocketfi_webhook_secret,baseUrl:h.pocketfi_base_url};
+  K.hints={secretKey:h.korapay_secret_key,encryptionKey:h.korapay_encryption_key};Pf.hints={secretKey:h.pocketfi_secret_key};
   [K.hints,Pf.hints].forEach(function(o){Object.keys(o).forEach(function(k){if(!o[k])delete o[k]})});
   var m=v.maps||{},M=S.maps=S.maps||MAPDEF();M.hints=M.hints||{};
   if(m.jsKey)M.hints.js=m.jsKey.slice(0,4)+'••••'+m.jsKey.slice(-4);if(h.google_geocoding_key)M.hints.geo=h.google_geocoding_key;if(h.google_directions_key)M.hints.dir=h.google_directions_key;
