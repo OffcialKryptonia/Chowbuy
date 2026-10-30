@@ -1035,8 +1035,8 @@ function getPath(o,p){return p.split('.').reduce(function(a,k){return a==null?a:
 function setPath(o,p,v){var ks=p.split('.'),c=o;for(var i=0;i<ks.length-1;i++){if(typeof c[ks[i]]!=='object'||c[ks[i]]===null)c[ks[i]]={};c=c[ks[i]]}c[ks[ks.length-1]]=v}
 function delPath(o,p){var ks=p.split('.'),c=o;for(var i=0;i<ks.length-1;i++){c=c[ks[i]];if(!c)return}delete c[ks[ks.length-1]];if(ks.length>2&&c&&!Object.keys(c).length){var par=getPath(o,ks.slice(0,-2).join('.'));if(par)delete par[ks[ks.length-2]]}}
 function PAYDEF(){return{
-  korapay:{enabled:true,isLive:false,publicKey:'pk_test_8Kx2mQvL4nT7wZ',hints:{},webhookUrl:'https://api.chowbuy.ng/webhooks/korapay'},
-  pocketfi:{enabled:true,isLive:false,apiKey:'pk_test_PF91xN3aVd02',hints:{},webhookUrl:'https://api.chowbuy.ng/webhooks/pocketfi',expiry:30,bank:'Wema Bank'},
+  korapay:{enabled:true,isLive:false,publicKey:'',hints:{},webhookUrl:''},
+  pocketfi:{enabled:true,isLive:false,apiKey:'',hints:{},webhookUrl:'',expiry:30,bank:'Wema Bank'},
   cod:{enabled:true,maxOrder:30000,otpFirst:true,riderLimit:50000},
   wallet:{enabled:true,allowTransfers:true}}}
 function MAPDEF(){return{enabled:true,theme:'dark',hints:{},status:'none'}}
@@ -1103,17 +1103,18 @@ function fld(root,path,label,val,o){o=o||{};var id=root+'-'+path.replace(/\./g,'
 function sfld(root,prov,key,label,D){var raw=(D.raw||{})[key],hint=(D.hints||{})[key],id=root+'-'+prov+'-'+key,shown=U.reveal[id];
   return '<div class="f"><label for="'+id+'">'+label+'</label><div class="acts" style="flex-wrap:nowrap"><input id="'+id+'" data-fid="'+id+'" data-in="'+root+':'+(prov?prov+'.':'')+'raw.'+key+'" type="'+(shown?'text':'password')+'" value="'+esc(raw||'')+'" placeholder="'+(hint?esc(hint)+' (saved)':'Not set')+'" autocomplete="off" spellcheck="false"><button type="button" class="ib" style="width:2.4rem;height:2.4rem;flex:none" data-act="reveal" data-id="'+id+'" aria-label="'+(shown?'Hide':'Reveal')+' '+esc(label)+'">'+ic(shown?'eyeoff':'eye')+'</button></div></div>'}
 function envSeg(prov,live){return '<div class="tabs sm" role="group" aria-label="Environment"><button type="button" data-act="payenv" data-id="'+prov+'" data-v="test" aria-pressed="'+!live+'">Sandbox / Test</button><button type="button" data-act="payenv" data-id="'+prov+'" data-v="live" aria-pressed="'+live+'">Live / Production</button></div>'}
-function connBadge(k){var c=U.conn[k];return c==='verified'?'<span class="pill ok">'+ic('checkc')+'Verified</span>':c==='local'?'<span class="pill warn">'+ic('alert')+'Format checked only</span>':c==='testing'?'<span class="pill info">Testing…</span>':c&&c.indexOf('fail')===0?'<span class="pill bad">'+ic('xc')+esc(c.slice(5))+'</span>':''}
+function connBadge(k){var c=U.conn[k];return c==='verified'?'<span class="pill ok">'+ic('checkc')+'Verified</span>':c==='reach'?'<span class="pill warn">'+ic('alert')+'Reachable, not fully proven</span>':c==='local'?'<span class="pill warn">'+ic('alert')+'Format checked only</span>':c==='testing'?'<span class="pill info">Testing…</span>':c&&c.indexOf('fail')===0?'<span class="pill bad">'+ic('xc')+esc(c.slice(5))+'</span>':''}
 function gwCard(title,sub,prov,D,inner,test){return '<div class="card pad"><div class="acts" style="justify-content:space-between;flex-wrap:nowrap"><div><h3>'+title+'</h3><p class="sub">'+sub+'</p></div>'+sw(D.enabled,'paysw',prov+'.enabled','Enable '+title)+'</div>'+(D.enabled?'<div style="display:grid;gap:.9rem;margin-top:1.1rem">'+inner+(test?'<div class="acts">'+btn(ic('zap')+test,'testPay',prov,'')+connBadge(prov)+'</div>':'')+'</div>':'<p class="sub" style="margin-top:1rem">Disabled. Customers will not see this option at checkout.</p>')+'</div>'}
+function whUrl(fn){return (BE.url||'').replace(/\/+$/,'')+'/functions/v1/'+fn}
 function vPayments(){
   var D=pd(),K=D.korapay,Pf=D.pocketfi,C=D.cod,W=D.wallet,dirty=pDirty();
-  var kInner=envSeg('korapay',K.isLive)+fld('pay','korapay.publicKey','Public key',K.publicKey,{copy:1,ph:K.isLive?'pk_live_…':'pk_test_…'})+sfld('pay','korapay','secretKey','Secret key',K)+sfld('pay','korapay','encryptionKey','Encryption key',K)+sfld('pay','korapay','webhookSecret','Webhook secret',K)+fld('pay','korapay.webhookUrl','Webhook URL',K.webhookUrl,{copy:1,hint:'Change this if your API domain changes, then update it in the Korapay dashboard.'});
-  var pInner=envSeg('pocketfi',Pf.isLive)+fld('pay','pocketfi.apiKey','Pocketfi public API key',Pf.apiKey,{copy:1})+sfld('pay','pocketfi','secretKey','Pocketfi merchant secret',Pf)+sfld('pay','pocketfi','webhookSecret','Webhook signature secret',Pf)+fld('pay','pocketfi.webhookUrl','Webhook URL',Pf.webhookUrl,{copy:1,hint:'Editable in case your domain changes.'})+
+  var kInner=envSeg('korapay',K.isLive)+fld('pay','korapay.publicKey','Public key',K.publicKey,{copy:1,ph:K.isLive?'pk_live_…':'pk_test_…'})+sfld('pay','korapay','secretKey','Secret key',K)+sfld('pay','korapay','encryptionKey','Encryption key',K)+fld('pay','korapay.webhookUrl','Webhook URL',whUrl('webhook-korapay'),{copy:1,hint:'Paste this into the Korapay dashboard. Korapay signs webhooks with your secret key.'});
+  var pInner=envSeg('pocketfi',Pf.isLive)+fld('pay','pocketfi.apiKey','Pocketfi public API key',Pf.apiKey,{copy:1})+sfld('pay','pocketfi','secretKey','Pocketfi merchant secret',Pf)+sfld('pay','pocketfi','baseUrl','Pocketfi API base URL',Pf)+sfld('pay','pocketfi','webhookSecret','Webhook signature secret',Pf)+fld('pay','pocketfi.webhookUrl','Webhook URL',whUrl('webhook-pocketfi'),{copy:1,hint:'Paste this into the Pocketfi dashboard.'})+
     '<div class="frow">'+sel('pf-exp','Account expiry duration',[['15','15 minutes'],['30','30 minutes (default)'],['60','60 minutes']],String(Pf.expiry)).replace('<select id="pf-exp" name="pf-exp">','<select id="pf-exp" data-ch="pay:pocketfi.expiry">')+sel('pf-bank','Auto-settlement account',[['Wema Bank','Wema Bank'],['Providus Bank','Providus Bank'],['GTBank','GTBank']],Pf.bank).replace('<select id="pf-bank" name="pf-bank">','<select id="pf-bank" data-ch="pay:pocketfi.bank">')+'</div>';
   var cInner=fld('pay','cod.maxOrder','Maximum order value for COD (₦)',C.maxOrder,{num:1,hint:'Orders above this amount cannot be paid in cash. Currently '+ngn(Number(C.maxOrder)||0)+'.'})+'<div class="trow"><div><b>Allow COD for first-time customers</b><small>Requires phone OTP confirmation at checkout.</small></div>'+sw(C.otpFirst,'paysw','cod.otpFirst','Allow COD for first-time customers')+'</div>'+fld('pay','cod.riderLimit','Rider cash reconciliation limit (₦)',C.riderLimit,{num:1,hint:'A rider must remit collected cash before accepting new orders once they hold this much. Currently '+ngn(Number(C.riderLimit)||0)+'.'});
   var wInner='<div class="trow"><div><b>Allow wallet transfers</b><small>Peer-to-peer transfers between ChowBuy wallets.</small></div>'+sw(W.allowTransfers,'paysw','wallet.allowTransfers','Allow wallet transfers')+'</div>';
   return head('Settings & pricing','Payment gateways, cash on delivery and the customer wallet.',(dirty?'<span class="badge-un">Unsaved changes</span>'+btn('Discard','payDiscard',null,''):'')+btn(ic('check')+'Save payment settings','paySave',null,'pri'))+setTabs()+
-   '<div class="card pad" style="display:flex;gap:.8rem;align-items:flex-start;background:var(--accent-soft);border-color:transparent">'+ic('shield')+'<div><b>Secrets are never kept in this browser.</b><div class="muted" style="font-size:.88rem">When you save, only a masked preview (for example sk_test_••••1a2b) is stored. In production, store real keys in a server-side vault and never ship them to the client.</div><div class="acts" style="margin-top:.6rem"><a class="btn sm" href="../app/checkout.html" target="_blank" rel="noopener">Preview customer checkout</a><a class="btn sm" href="../app/order.html" target="_blank" rel="noopener">Preview order tracking</a></div></div></div>'+
+   '<div class="card pad" style="display:flex;gap:.8rem;align-items:flex-start;background:var(--accent-soft);border-color:transparent">'+ic('shield')+'<div><b>Secrets are never kept in this browser.</b><div class="muted" style="font-size:.88rem">'+(beOn()?'Saved keys go straight to your ChowBuy backend vault. Only a masked preview comes back here.':'Connect the backend in Messaging to save keys for real. Until then nothing is sent anywhere.')+'</div><div class="acts" style="margin-top:.6rem"><a class="btn sm" href="../app/checkout.html" target="_blank" rel="noopener">Preview customer checkout</a><a class="btn sm" href="../app/order.html" target="_blank" rel="noopener">Preview order tracking</a></div></div></div>'+
    '<div class="grid g2" style="align-items:start">'+gwCard('Korapay','Cards, USSD and pay with bank','korapay',K,kInner,'Test connection')+gwCard('Pocketfi','One-time dynamic virtual bank accounts','pocketfi',Pf,pInner,'Test Pocketfi handshake')+gwCard('Cash on delivery','Pay the rider in cash with reconciliation','cod',C,cInner,'')+gwCard('ChowBuy wallet','Stored-value wallet checkout','wallet',W,wInner,'')+'</div>';
 }
 function setTabs(){return tabs('setTab',[['pricing','Pricing & coverage'],['payments','Payment gateways'],['maps','Integrations & maps'],['realtime','Realtime & push'],['email','Email'],['signin','Sign-in methods']])}
@@ -1126,7 +1127,7 @@ function vMaps(){
   var D=md(),dirty=mDirty();
   var keys=[['js','Maps JavaScript API key','Client-side map rendering'],['geo','Geocoding & Places API key','Address autocomplete and reverse geocoding'],['dir','Directions API key','Routing, distance and time']];
   return head('Settings & pricing','Google Maps keys, map theme and the offline fallback.',(dirty?'<span class="badge-un">Unsaved changes</span>'+btn('Discard','mapDiscard',null,''):'')+btn(ic('check')+'Save map settings','mapSave',null,'pri'))+setTabs()+
-  '<div class="grid g2" style="align-items:start"><div class="card pad"><h3>Google Maps credentials</h3><p class="sub">Restrict each key to your domain and the matching API in Google Cloud.</p><div style="display:grid;gap:.9rem;margin-top:1.1rem">'+keys.map(function(k){return sfld('maps','',k[0],k[1],D)}).join('')+'<div class="acts">'+btn(ic('zap')+'Test Google Maps key','testMap',null,'')+(S.maps.status==='ok'?'<span class="pill ok">'+ic('checkc')+'Live &amp; validated (simulated)</span>':'')+(U.conn.map&&U.conn.map.indexOf('fail')===0?'<span class="pill bad">'+ic('xc')+esc(U.conn.map.slice(5))+'</span>':'')+(U.conn.map==='testing'?'<span class="pill info">Checking…</span>':'')+'</div></div></div>'+
+  '<div class="grid g2" style="align-items:start"><div class="card pad"><h3>Google Maps credentials</h3><p class="sub">Restrict each key to your domain and the matching API in Google Cloud.</p><div style="display:grid;gap:.9rem;margin-top:1.1rem">'+keys.map(function(k){return sfld('maps','',k[0],k[1],D)}).join('')+'<div class="acts">'+btn(ic('zap')+'Test Google Maps key','testMap',null,'')+(S.maps.status==='ok'?'<span class="pill ok">'+ic('checkc')+'Verified by Google</span>':'')+(U.conn.map&&U.conn.map.indexOf('fail')===0?'<span class="pill bad">'+ic('xc')+esc(U.conn.map.slice(5))+'</span>':'')+(U.conn.map==='testing'?'<span class="pill info">Checking…</span>':'')+'</div></div></div>'+
   '<div style="display:grid;gap:1rem"><div class="card pad"><h3>Map theme</h3><div class="grid g3" style="margin-top:1rem;gap:.7rem">'+MTH.map(function(t){var on=D.theme===t[0];return '<button type="button" data-act="mapTheme" data-id="'+t[0]+'" aria-pressed="'+on+'" style="border:2px solid '+(on?'var(--accent)':'var(--line)')+';border-radius:1rem;padding:.6rem;text-align:left;background:var(--card)"><div style="height:3.4rem;border-radius:.6rem;background:'+t[3]+';position:relative;overflow:hidden"><i style="position:absolute;left:-10%;top:45%;width:120%;height:.4rem;background:'+t[4]+';transform:rotate(-12deg)"></i><i style="position:absolute;left:30%;top:-10%;width:.4rem;height:120%;background:'+t[4]+';transform:rotate(18deg)"></i></div><b style="display:block;margin-top:.5rem;font-size:.84rem">'+t[1]+'</b><small class="muted">'+t[2]+'</small></button>'}).join('')+'</div></div>'+
   '<div class="card pad"><div class="trow" style="padding-top:0"><div><b>Use Google Maps when available</b><small>When off, or when a key is empty or invalid, ChowBuy shows its built-in SVG map. Nothing breaks.</small></div>'+sw(D.enabled,'mapsw','x','Use Google Maps when available')+'</div><p class="sub" style="margin-top:.6rem">Current mode: <b>'+(D.enabled&&S.maps.status==='ok'?'Google Maps (when keys are live)':'ChowBuy fallback map')+'</b>. The live rider radar and the customer tracking page both use this theme.</p></div></div></div>';
 }
@@ -1241,35 +1242,49 @@ Object.assign(A,{
  reveal:function(el){var id=el.getAttribute('data-id');U.reveal[id]=!U.reveal[id];refresh()},
  copy:function(el){copyText(el.getAttribute('data-v'))},
  testPay:function(el){
-   var p=el.getAttribute('data-id'),D=pd()[p],key=p==='korapay'?D.publicKey:D.apiKey,env=D.isLive?'live':'test',has=function(k){return (D.raw&&D.raw[k])||(D.hints&&D.hints[k])};
-   var bad=!/^pk_(test|live)_[A-Za-z0-9]{6,}$/.test(key||'')?'Enter a valid public key (pk_'+env+'_…)':key.indexOf('pk_'+env+'_')!==0?'Key does not match '+(D.isLive?'Live':'Sandbox')+' mode':!has('secretKey')?'Add the secret key first':!/^https:\/\//.test(D.webhookUrl||'')?'Webhook URL must start with https://':'';
-   if(bad){U.conn[p]='fail:'+bad;refresh();toast(bad,'err');return}
-   U.conn[p]='testing';refresh();setTimeout(function(){U.conn[p]='ok';refresh();toast((p==='korapay'?'Korapay':'Pocketfi')+' responded. Connection looks good (simulated check).')},1100)},
+   var p=el.getAttribute('data-id'),D=pd()[p];
+   if(!beOn()){toast('Connect the backend in Messaging first. Nothing can be tested without it.','err');return}
+   if(pDirty()){toast('Save your changes first, then test.','warn');return}
+   U.conn[p]='testing';refresh();
+   beFn('admin-provider-test',{provider:p,live:!!D.isLive}).then(function(j){U.conn[p]=j.status==='verified'?'verified':'reach';refresh();toast(j.message)},function(e){U.conn[p]='fail:'+e.message;refresh();toast(e.message,'err')})},
  payDiscard:function(){U.pdraft=null;refresh();toast('Unsaved payment changes discarded.')},
  paySave:function(){
    if(!pDirty()){toast('No payment changes to save.','warn');return}
    var D=U.pdraft,bad='';
-   [['korapay','publicKey','Korapay public key'],['pocketfi','apiKey','Pocketfi API key']].forEach(function(x){var v=D[x[0]][x[1]];if(!bad&&D[x[0]].enabled){var env=D[x[0]].isLive?'live':'test';if(!new RegExp('^pk_'+env+'_[A-Za-z0-9]{6,}$').test(v||''))bad=x[2]+' must look like pk_'+env+'_… for '+(D[x[0]].isLive?'Live':'Sandbox')+' mode.'}});
-   ['korapay','pocketfi'].forEach(function(p){if(!bad&&D[p].enabled&&!/^https:\/\//.test(D[p].webhookUrl||''))bad='The '+p+' webhook URL must start with https://'});
-   ['korapay','pocketfi'].forEach(function(p){var r=D[p].raw||{};Object.keys(r).forEach(function(k){if(!bad&&r[k].length<12)bad='That secret looks too short. Paste the full key.'})});
+   var kv=D.korapay.publicKey;if(D.korapay.enabled&&kv&&!new RegExp('^pk_'+(D.korapay.isLive?'live':'test')+'_[A-Za-z0-9]{6,}$').test(kv))bad='Korapay public key must look like pk_'+(D.korapay.isLive?'live':'test')+'_… for '+(D.korapay.isLive?'Live':'Sandbox')+' mode.';
+   ['korapay','pocketfi'].forEach(function(p){var r=D[p].raw||{};Object.keys(r).forEach(function(k){if(!bad&&k!=='baseUrl'&&r[k].length<12)bad='That secret looks too short. Paste the full key.'})});
+   if(!bad&&D.pocketfi.raw&&D.pocketfi.raw.baseUrl&&!/^https:\/\/[^\s]+$/.test(D.pocketfi.raw.baseUrl))bad='The Pocketfi base URL must start with https://';
    if(!(Number(D.cod.maxOrder)>0))bad=bad||'COD maximum must be greater than zero.';if(!(Number(D.cod.riderLimit)>0))bad=bad||'Rider cash limit must be greater than zero.';
    if(bad){toast(bad,'err');return}
+   var rk=D.korapay.raw||{},rp=D.pocketfi.raw||{},secrets={};
+   if(rk.secretKey)secrets.korapay_secret_key=rk.secretKey;if(rk.encryptionKey)secrets.korapay_encryption_key=rk.encryptionKey;
+   if(rp.secretKey)secrets.pocketfi_secret_key=rp.secretKey;if(rp.webhookSecret)secrets.pocketfi_webhook_secret=rp.webhookSecret;if(rp.baseUrl)secrets.pocketfi_base_url=rp.baseUrl;
    ['korapay','pocketfi'].forEach(function(p){var r=D[p].raw||{};Object.keys(r).forEach(function(k){D[p].hints=D[p].hints||{};D[p].hints[k]=mask(r[k])});delete D[p].raw});
    D.cod.maxOrder=Number(D.cod.maxOrder);D.cod.riderLimit=Number(D.cod.riderLimit);D.pocketfi.expiry=Number(D.pocketfi.expiry);
-   upd(function(){S.pay=D;U.pdraft=null;log('Payment gateway settings updated','settings');audit('Payment gateway settings updated')});toast('Payment settings saved. Secrets are stored masked only.')},
+   var done=function(){upd(function(){S.pay=D;U.pdraft=null;U.conn={};log('Payment gateway settings updated','settings');audit('Payment gateway settings updated')});toast(beOn()?'Saved to your ChowBuy backend. Now press Test to check the keys.':'Saved in this browser only. Connect the backend in Messaging to make it live.',beOn()?'':'warn')};
+   if(beOn()){
+     var pub={gateways:{korapay:{enabled:!!D.korapay.enabled,live:!!D.korapay.isLive,publicKey:D.korapay.publicKey||''},pocketfi:{enabled:!!D.pocketfi.enabled,live:!!D.pocketfi.isLive,publicKey:D.pocketfi.apiKey||'',expiry:D.pocketfi.expiry,bank:D.pocketfi.bank},cod:{enabled:!!D.cod.enabled,maxAmount:D.cod.maxOrder},wallet:{enabled:!!D.wallet.enabled}}};
+     beFn('admin-settings',{public:pub,secrets:secrets}).then(done,function(e){toast('Could not save payment settings: '+e.message,'err')});
+     return;
+   }
+   done()},
  /* maps */
  mapsw:function(){var D=me();D.enabled=!D.enabled;refresh()},
  mapTheme:function(el){me().theme=el.getAttribute('data-id');refresh()},
- testMap:function(){var D=md(),js=(D.raw&&D.raw.js)||'';
-   var bad=!js&&!(D.hints&&D.hints.js)?'Add a Maps JavaScript API key first':(js&&!/^AIza[0-9A-Za-z_-]{35}$/.test(js))?'That does not look like a Google API key (AIza… 39 characters)':'';
-   if(bad){U.conn.map='fail:'+bad;S.maps.status='none';refresh();toast(bad,'err');return}
-   U.conn.map='testing';refresh();setTimeout(function(){U.conn.map='ok';S.maps.status='ok';save();refresh();toast('Key format valid and quota looks healthy (simulated check).')},1100)},
+ testMap:function(){var D=md();
+   if(!beOn()){var m='Connect the backend in Messaging first. Nothing can be tested without it.';U.conn.map='fail:'+m;refresh();toast(m,'err');return}
+   if(mDirty()){toast('Save your changes first, then test.','warn');return}
+   U.conn.map='testing';refresh();
+   beFn('admin-provider-test',{provider:'google'}).then(function(j){U.conn.map='ok';S.maps.status='ok';save();refresh();toast(j.message)},function(e){U.conn.map='fail:'+e.message;S.maps.status='none';refresh();toast(e.message,'err')})},
  mapDiscard:function(){U.mdraft=null;refresh();toast('Unsaved map changes discarded.')},
  mapSave:function(){if(!mDirty()){toast('No map changes to save.','warn');return}var D=U.mdraft,r=D.raw||{},bad='';
    if(r.js&&!/^AIza[0-9A-Za-z_-]{35}$/.test(r.js))bad='The Maps JavaScript key does not look valid.';if(!bad&&r.geo&&r.geo.length<20)bad='The Geocoding key looks too short.';if(!bad&&r.dir&&r.dir.length<20)bad='The Directions key looks too short.';
    if(bad){toast(bad,'err');return}
+   var secrets={};if(r.geo)secrets.google_geocoding_key=r.geo;if(r.dir)secrets.google_directions_key=r.dir;
    Object.keys(r).forEach(function(k){D.hints=D.hints||{};D.hints[k]=r[k].slice(0,4)+'••••'+r[k].slice(-4)});delete D.raw;D.status=S.maps.status;
-   upd(function(){S.maps=D;U.mdraft=null;log('Map settings updated','settings')});toast('Map settings saved.')}
+   var done=function(){upd(function(){S.maps=D;U.mdraft=null;U.conn.map='';log('Map settings updated','settings')});toast(beOn()?'Saved to your ChowBuy backend. Press Test to check the keys.':'Saved in this browser only. Connect the backend in Messaging to make it live.',beOn()?'':'warn')};
+   if(beOn()){var pub={maps:{enabled:!!D.enabled,theme:D.theme}};if(r.js)pub.maps.jsKey=r.js;beFn('admin-settings',{public:pub,secrets:secrets}).then(function(){if(r.dir||r.geo)D.status='none';done()},function(e){toast('Could not save map settings: '+e.message,'err')});return}
+   done()}
 });
 Object.assign(FORMS,{
  profile:function(f){var pf=U.pf||S.profile,n=(pf.name||'').trim(),e=(pf.email||'').trim(),ph=String(pf.phone||'').replace(/[\s-]/g,'');
@@ -1628,14 +1643,29 @@ function beFn(name,body){return beReq('/functions/v1/'+name,'POST',body||{})}
 /* Pull the saved email settings, templates and broadcast history once the console is in live mode. */
 function beHydrate(){
   return beReq('/functions/v1/admin-settings','GET').then(function(j){
-    var h={};Object.keys(j.hints||{}).forEach(function(k){h[k]=j.hints[k].hint});if(j.templates&&Array.isArray(j.templates.items))U.mailTemplates=j.templates.items;S.msg.email.hints=h;if(U.edraft)U.edraft.hints=h;
+    var h={};Object.keys(j.hints||{}).forEach(function(k){h[k]=j.hints[k].hint});if(j.templates&&Array.isArray(j.templates.items))U.mailTemplates=j.templates.items;S.msg.email.hints=h;SECHINT=h;if(U.edraft)U.edraft.hints=h;
     return Promise.all([beReq('/rest/v1/platform_settings?key=in.(email,public)&select=key,value','GET'),beReq('/rest/v1/broadcasts?select=*&order=created_at.desc&limit=15','GET')]);
   }).then(function(r){
     r[0].forEach(function(row){
       if(row.key==='email'){var m=S.msg.email;Object.keys(row.value).forEach(function(k){if(k!=='hints'&&k!=='raw')m[k]=row.value[k]})}
       if(row.key==='public'&&row.value.auth){S.msg.auth.google=!!(row.value.auth.google&&row.value.auth.google.enabled);S.msg.auth.apple=!!(row.value.auth.apple&&row.value.auth.apple.enabled)}});
-    U.hist=r[1];save();
+    U.hist=r[1];
+    r[0].forEach(function(row){if(row.key==='public')hydratePay(row.value)});save();
   });
+}
+var SECHINT={};
+function hydratePay(v){
+  var g=v.gateways||{},h=SECHINT,P=S.pay=S.pay||PAYDEF(),K=P.korapay,Pf=P.pocketfi;
+  if(g.korapay){K.enabled=g.korapay.enabled!==false;K.isLive=!!g.korapay.live;K.publicKey=g.korapay.publicKey||''}
+  if(g.pocketfi){Pf.enabled=g.pocketfi.enabled!==false;Pf.isLive=!!g.pocketfi.live;Pf.apiKey=g.pocketfi.publicKey||'';if(g.pocketfi.expiry)Pf.expiry=g.pocketfi.expiry;if(g.pocketfi.bank)Pf.bank=g.pocketfi.bank}
+  if(g.cod){P.cod.enabled=g.cod.enabled!==false;if(g.cod.maxAmount)P.cod.maxOrder=g.cod.maxAmount}
+  if(g.wallet)P.wallet.enabled=g.wallet.enabled!==false;
+  K.hints={secretKey:h.korapay_secret_key,encryptionKey:h.korapay_encryption_key};Pf.hints={secretKey:h.pocketfi_secret_key,webhookSecret:h.pocketfi_webhook_secret,baseUrl:h.pocketfi_base_url};
+  [K.hints,Pf.hints].forEach(function(o){Object.keys(o).forEach(function(k){if(!o[k])delete o[k]})});
+  var m=v.maps||{},M=S.maps=S.maps||MAPDEF();M.hints=M.hints||{};
+  if(m.jsKey)M.hints.js=m.jsKey.slice(0,4)+'••••'+m.jsKey.slice(-4);if(h.google_geocoding_key)M.hints.geo=h.google_geocoding_key;if(h.google_directions_key)M.hints.dir=h.google_directions_key;
+  if(m.theme)M.theme=m.theme;if(m.enabled!=null)M.enabled=!!m.enabled;
+  U.pdraft=null;U.mdraft=null;
 }
 function beDisconnect(){U.hist=null;L.dash=L.orders=L.merchants=L.me=L.team=L.sessions=L.riders=L.fin=L.wt=L.cat=L.chat=L.chf=L.loc=L.groups=L.sc=null}
 
