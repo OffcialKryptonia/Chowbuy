@@ -1,3 +1,4 @@
+import { pocketfiBase, pocketfiHeaders } from '../_shared/pocketfi.ts';
 import { admin, handle, HttpError, json, newRef, publicSettings, requireUser, secret } from '../_shared/util.ts';
 
 /**
@@ -40,16 +41,19 @@ Deno.serve(handle(async (req) => {
     return json({ method, status: 'pending', reference, checkoutUrl: j.data.checkout_url });
   }
 
-  // Pocketfi one-time virtual account. The request shape below must be confirmed against your Pocketfi merchant docs; set pocketfi_base_url and
-  // pocketfi_secret_key in Admin > Settings > Payment gateways. Until then the endpoint answers 503 and the app shows a clear message.
-  const base = await secret('pocketfi_base_url'), pkey = await secret('pocketfi_secret_key');
-  if (!base || !pkey) throw new HttpError(503, 'Bank transfer is not configured yet.');
-  const r = await fetch(`${base.replace(/\/$/, '')}/virtual-accounts`, {
-    method: 'POST', headers: { Authorization: `Bearer ${pkey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ reference, amount, currency: 'NGN', expires_in_minutes: 30, customer_name: prof?.full_name, customer_email: prof?.email ?? user.email }),
+  // Pocketfi hosted checkout (https://developer.pocketfi.ng/docs/api/initialize-payment). The customer pays by bank transfer on Pocketfi's page.
+  const pkey = await secret('pocketfi_secret_key'), businessId = String(cfg.businessId ?? '').trim();
+  if (!pkey || !businessId) throw new HttpError(503, 'Bank transfer is not configured yet.');
+  const { data: ph } = await db.from('profiles').select('phone').eq('id', user.id).maybeSingle();
+  if (!ph?.phone) throw new HttpError(400, 'Add a phone number to your profile to pay by bank transfer.');
+  const parts = String(prof?.full_name || 'ChowBuy Customer').trim().split(/\s+/);
+  const r = await fetch(`${pocketfiBase(!!cfg.live)}/checkout/request`, {
+    method: 'POST', headers: pocketfiHeaders(pkey),
+    body: JSON.stringify({ first_name: parts[0], last_name: parts.slice(1).join(' ') || parts[0], phone: String(ph.phone).replace(/^\+234/, '0'), business_id: businessId,
+      email: prof?.email ?? user.email, redirect_link: Deno.env.get('PAYMENT_REDIRECT_URL') ?? 'https://chowbuy.ng/pay/done', amount: String(amount) }),
   });
   const j = await r.json().catch(() => ({}));
-  const acct = j?.data ?? j;
-  if (!r.ok || !acct?.account_number) { console.error('pocketfi init failed', r.status); throw new HttpError(502, 'The payment provider did not respond. Please try again.'); }
-  return json({ method, status: 'pending', reference, virtualAccount: { bank: acct.bank_name ?? 'Bank', number: String(acct.account_number), name: acct.account_name ?? 'CHOWBUY', expiresAt: Date.now() + 30 * 60000 } });
+  if (!r.ok || !j?.payment_link || !j?.payment_id) { console.error('pocketfi init failed', r.status, j?.message); throw new HttpError(502, 'The payment provider did not respond. Please try again.'); }
+  await admin().from('payments').update({ provider_ref: String(j.payment_id) }).eq('reference', reference);
+  return json({ method, status: 'pending', reference, checkoutUrl: String(j.payment_link) });
 }));
