@@ -31,6 +31,7 @@ await db.exec(fs.readFileSync(root + 'migrations/20261101000007_admin_customer_t
 await db.exec(fs.readFileSync(root + 'migrations/20261101000008_merchant_live.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261101000009_merchant_onboarding.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261102000001_chowbuy_flex.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261103000001_merchant_kyc_sync.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -1120,5 +1121,27 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
   ok('orders, wallets and the ledger are intact after cleanup', (await q(`select count(*)::int n from orders`))[0].n === ordersBefore && (await q(`select coalesce(sum(balance),0)::int s from wallets`))[0].s === walletBefore && (await q(`select count(*)::int n from wallet_txs`))[0].n === txBefore);
   ok('the cleanup is idempotent', (await su(fs.readFileSync(root + 'migrations/20261101000010_demo_cleanup.sql', 'utf8')), (await q(`select count(*)::int n from merchants where is_demo and active`))[0].n === 0));
   ok('re-running the onboarding migration does not re-approve drafts', (await su(fs.readFileSync(root + 'migrations/20261101000009_merchant_onboarding.sql', 'utf8')), (await q(`select application_status s from merchants where id = '${lm}'`))[0].s === 'DRAFT'));
+
+  // KYC accept/decline and the merchant-visible application status are one lifecycle.
+  {
+    const su2 = async sql => { await db.exec('reset role'); return db.exec(sql); };
+    await su2(`update merchant_applications set status = 'SUBMITTED' where id = '${aid}'; update merchants set application_status = 'SUBMITTED', active = true, verified = false, open = false where id = '${mid}'`);
+    await as(ADM, async () => {
+      const l = (await q(`select admin_kyc_list('merchant') r`))[0].r.find(x => x.id === mid);
+      ok('the KYC list reports the real application status', l.app_status === 'SUBMITTED' && l.verified === false);
+      await q(`select admin_kyc_decide('merchant', '${mid}', true)`);
+      const m = (await q(`select m.active, m.verified, m.application_status s, a.status a from merchants m join merchant_applications a on a.merchant_id = m.id where m.id = '${mid}'`))[0];
+      ok('KYC accept approves the application the merchant sees', m.active && m.verified && m.s === 'APPROVED' && m.a === 'APPROVED');
+      await throws('declining a merchant needs a reason', () => q(`select admin_kyc_decide('merchant', '${mid}', false)`), 'reason');
+      await q(`select admin_kyc_decide('merchant', '${mid}', false, 'Documents do not match the business name.')`);
+      const d = (await q(`select m.active, m.open, m.application_status s, a.review_note n from merchants m join merchant_applications a on a.merchant_id = m.id where m.id = '${mid}'`))[0];
+      ok('declining an approved merchant suspends it and closes the store', d.s === 'SUSPENDED' && !d.active && !d.open && /do not match/.test(d.n));
+      await q(`select admin_kyc_decide('merchant', '${mid}', true)`);
+      ok('accepting a suspended merchant reinstates it', (await q(`select application_status s, active from merchants where id = '${mid}'`))[0].s === 'APPROVED');
+    });
+    await su2(`update merchant_applications set status = 'REJECTED' where id = '${aid}'; update merchants set application_status = 'REJECTED', active = false where id = '${mid}'`);
+    await as(ADM, async () => { await throws('a rejected application must be reopened before KYC can accept it', () => q(`select admin_kyc_decide('merchant', '${mid}', true)`), 'reopened'); });
+    await su2(`update merchant_applications set status = 'APPROVED' where id = '${aid}'; update merchants set application_status = 'APPROVED', active = true, verified = true where id = '${mid}'`);
+  }
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

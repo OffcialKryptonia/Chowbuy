@@ -276,7 +276,9 @@ function vReview(){
    '<form class="au-form" data-form="submit" novalidate><label class="au-check"><input type="checkbox" name="decl"><span>I declare that the information and documents I have provided are true, and that I am authorised to submit this application. I understand ChowBuy may verify them and that submitting is not approval.</span></label>'+
    '<p class="au-err" role="alert" id="err"></p><div class="au-act"><a class="btn" href="#/onboarding/settlement">Back</a><button type="submit" class="btn pri"'+(miss.length?' disabled':'')+'>Submit for Review</button></div></form>';
 }
+var STT=null;
 function vStatus(){
+  clearTimeout(STT);
   var st=APP.status,t=typeOf(APP.type),big='',h='',p='',extra='';
   var order=['SUBMITTED','UNDER_REVIEW','APPROVED'];
   if(st==='SUBMITTED'||st==='UNDER_REVIEW'){big='<div class="big">'+ic('clock')+'</div>';h='Application submitted';p='Your business information has been submitted. We’ll notify you when there is an update.';}
@@ -287,6 +289,7 @@ function vStatus(){
   else{go('/onboarding');return}
   var tl=(st==='SUBMITTED'||st==='UNDER_REVIEW'||st==='APPROVED')?'<ul class="tl">'+[['SUBMITTED','Submitted'],['UNDER_REVIEW','Under review'],['APPROVED','Approved']].map(function(x,i){var ci=order.indexOf(st),on=order.indexOf(x[0])===ci,dn=order.indexOf(x[0])<ci;return '<li class="'+(on?'on':dn?'done':'')+'"><i></i>'+x[1]+'</li>'}).join('')+'</ul>':'';
   set(card('<div class="stat">'+big+'<h1>'+h+'</h1><p>'+p+'</p><small class="muted">'+esc(APP.name||'')+' · '+esc(t.n)+'</small>'+tl+extra+'</div><div class="au-links"><a href="#/workspaces">My businesses</a><button type="button" class="au-link" data-act="reload">Refresh status</button></div>'));
+  if(st==='SUBMITTED'||st==='UNDER_REVIEW')STT=setTimeout(function(){if(path()==='/application-status'){APP=null;ME=null;route()}},30000);
 }
 
 /* ---------- dashboard hand-off ---------- */
