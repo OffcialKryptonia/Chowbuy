@@ -2178,7 +2178,11 @@ var KDOCS={
 var EKINDS=[['police','Police'],['ambulance','Ambulance'],['fire','Fire service'],['road_safety','Road safety'],['hotline','Emergency hotline'],['other','Other']];
 function kdocList(kind,x){
   if(kind==='rider'){var fleet=x.type==='FLEET';return KDOCS.rider.filter(function(d){return fleet?['photo_id','next_of_kin','guarantor','police','rider_card'].indexOf(d[0])>-1:true})}
-  return KDOCS.merchant[x.vertical]||KDOCS.merchant.restaurant;
+  var base=KDOCS.merchant[x.vertical]||KDOCS.merchant.restaurant,have=base.map(function(d){return d[0]});
+  /* Documents the merchant actually sent that are not in the fixed list (food permit, logo, pharmacist licence, ...) must be reviewable too. */
+  var NAMES={logo:'Business logo',pcn_premises:'PCN premises licence',pharmacist_licence:'Pharmacist licence',food_permit:'Food business permit'};
+  var extra=Object.keys(x.docs||{}).filter(function(k){return have.indexOf(k)<0}).map(function(k){return[k,NAMES[k]||APP_DOC[k]||k.replace(/_/g,' ').replace(/^./,function(c){return c.toUpperCase()})]});
+  return base.concat(extra);
 }
 function ensureKyc(){
   if(!S.kyc||typeof S.kyc!=='object'||Array.isArray(S.kyc)){
@@ -2222,7 +2226,7 @@ function kFind(kind,id){return kApplicants(kind).filter(function(x){return x.id=
 function kOpen(kind,id){
   var x=kFind(kind,id);if(!x)return;var s=kState(x,kind);
   var rows=s.req.map(function(d){var c=x.docs[d[0]]||{};
-    return '<div class="it" style="align-items:flex-start;justify-content:space-between;gap:.6rem;border-bottom:1px solid var(--line);padding:.6rem 0"><div><b>'+esc(d[1])+'</b><div>'+kBadge(c.status)+(c.byAdmin?' <small class="muted">added by ChowBuy</small>':'')+'</div>'+(c.file?'<small class="muted">File: '+esc(c.file)+'</small>':'')+(c.note?'<div class="muted" style="font-size:.82rem">Note: '+esc(c.note)+'</div>':'')+'</div><div class="acts">'+btn('Update','kycDoc',kind+'|'+id+'|'+d[0],'')+'</div></div>'}).join('');
+    return '<div class="it" style="align-items:flex-start;justify-content:space-between;gap:.6rem;border-bottom:1px solid var(--line);padding:.6rem 0"><div><b>'+esc(d[1])+'</b><div>'+kBadge(c.status)+(c.byAdmin?' <small class="muted">added by ChowBuy</small>':'')+'</div>'+(c.file?'<small class="muted">File: '+esc(c.file)+'</small>':'')+(c.note?'<div class="muted" style="font-size:.82rem">Note: '+esc(c.note)+'</div>':'')+'</div><div class="acts">'+(c.file&&kind==='merchant'?btn('View file','kycView',c.file,''):'')+btn('Update','kycDoc',kind+'|'+id+'|'+d[0],'')+'</div></div>'}).join('');
   openM('<h3>'+esc(x.name)+'</h3><p class="muted">'+esc(x.sub)+' · '+s.ap+' of '+s.req.length+' documents approved</p>'+rows+'<div class="ft" style="flex-wrap:wrap;gap:.5rem"><button type="button" class="btn" data-m="x">Close</button><button type="button" class="btn danger" data-act="kycDecide" data-id="'+kind+'|'+id+'|0">'+ic('ban')+(kind==='rider'?'Decline rider':'Decline merchant')+'</button><button type="button" class="btn pri" data-act="kycDecide" data-id="'+kind+'|'+id+'|1">'+ic('check')+(kind==='rider'?'Accept rider':'Accept merchant')+'</button></div><small class="muted">Accepting or declining the account does not depend on document status, so you can act while documents are still outstanding.</small>',function(){closeM()});
 }
 function kDocForm(kind,id,doc){
@@ -2284,6 +2288,7 @@ function sosOpen(id){
 }
 Object.assign(A,{
  kycOpen:function(el){kOpen(T('kycK','rider'),el.getAttribute('data-id'))},
+ kycView:function(el){aDocView(el.getAttribute('data-id'))},
  kycDoc:function(el){var p=el.getAttribute('data-id').split('|');closeM();kDocForm(p[0],p[1],p[2])},
  kycDecide:function(el){var p=el.getAttribute('data-id').split('|'),kind=p[0],id=p[1],yes=p[2]==='1',x=kFind(kind,id);if(!x)return;
    var done=function(){if(!x.live){var t=(kind==='rider'?S.riders:S.merchants).filter(function(z){return z.id===id})[0];t.status=yes?'active':(kind==='rider'?'suspended':'rejected');if(kind==='merchant')t.kyc=yes?'verified':'rejected'}else{U.kyc.live[kind]=null;U.kyc.load[kind]=false;U.app.list=null;kLoad(kind)}
