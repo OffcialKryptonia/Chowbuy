@@ -166,10 +166,18 @@ function dim(ts){return Math.round((ts-Date.now())/60000)}
 
 /* ---------- chime ---------- */
 var AC=null;
-function chime(force){
-  if(!S.sound&&!force)return;
+var BELL=null;
+function synthChime(){
   try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();var t=AC.currentTime;
     [[880,0],[1175,.16],[1568,.32]].forEach(function(n){var o=AC.createOscillator(),g=AC.createGain();o.type='sine';o.frequency.value=n[0];g.gain.setValueAtTime(0,t+n[1]);g.gain.linearRampToValueAtTime(.18,t+n[1]+.02);g.gain.exponentialRampToValueAtTime(.001,t+n[1]+.3);o.connect(g);g.connect(AC.destination);o.start(t+n[1]);o.stop(t+n[1]+.32)})}catch(e){}
+}
+/* The default new-order tone is sounds/new-order.mp3 (bell). If the browser blocks or cannot play it, the synthesized chime is the fallback. */
+function chime(force){
+  if(!S.sound&&!force)return;
+  try{
+    BELL=BELL||new Audio('sounds/new-order.mp3');BELL.currentTime=0;
+    var p=BELL.play();if(p&&p.catch)p.catch(synthChime);
+  }catch(e){synthChime()}
 }
 
 /* ---------- modal with optional re-render draft ---------- */

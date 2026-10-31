@@ -22,7 +22,7 @@ export const useSettings = create<SettingsState>()(
       sounds: true,
       haptics: true,
       pushOneSignal: false,
-      notifSound: 'chime',
+      notifSound: 'dingtone',
       onboarded: false,
       set: (p) => set(p),
     }),

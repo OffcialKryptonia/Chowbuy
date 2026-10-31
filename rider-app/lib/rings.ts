@@ -3,6 +3,7 @@ import { createRingController, type RingHandle, type RingPlayer } from './ring-c
 
 /** Ring tones a rider can choose for new-order offers. Made by tools/make-sounds.py; each is a 3 second loop. */
 export const RINGS = [
+  { id: 'church', label: 'Church bells', note: 'Ringing church bells (default for new orders)', source: require('../assets/sounds/ring_church.wav') },
   { id: 'classic', label: 'Classic ring', note: 'Like a phone call', source: require('../assets/sounds/ring_classic.wav') },
   { id: 'horn', label: 'Bike horn', note: 'Beep, beep, beeeep', source: require('../assets/sounds/ring_horn.wav') },
   { id: 'siren', label: 'Dispatch siren', note: 'Rising and falling', source: require('../assets/sounds/ring_siren.wav') },
@@ -13,9 +14,12 @@ export const RINGS = [
 ] as const;
 
 export type RingId = (typeof RINGS)[number]['id'];
-export const DEFAULT_RING: RingId = 'classic';
+/** New-order offers ring with the church bells by default. */
+export const DEFAULT_RING: RingId = 'church';
+/** The normal phone-style ringtone, reserved for in-app calls. It is never replaced by the order sound. */
+export const CALL_RING: RingId = 'classic';
 export const isRingId = (v: unknown): v is RingId => RINGS.some((r) => r.id === v);
-export const ringLabel = (id: string) => RINGS.find((r) => r.id === id)?.label ?? 'Classic ring';
+export const ringLabel = (id: string) => RINGS.find((r) => r.id === id)?.label ?? 'Church bells';
 
 const VIBRATION_PATTERN = [0, 700, 500];   // wait, buzz, pause; repeated until cancelled
 

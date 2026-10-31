@@ -71,7 +71,7 @@ Deno.serve(handle(async (req) => {
   } else {
     const { data: set } = await db.from('platform_settings').select('value').eq('key', 'public').maybeSingle();
     const provider = set?.value?.push?.provider === 'onesignal' ? 'onesignal' : 'expo';
-    const tokens = rows.map((r) => ({ id: r.id, token: r.push_token?.token as string | undefined, sound: (r.push_token?.sound as string | undefined) ?? 'chime' })).filter((t) => t.token);
+    const tokens = rows.map((r) => ({ id: r.id, token: r.push_token?.token as string | undefined, sound: (r.push_token?.sound as string | undefined) ?? 'dingtone' })).filter((t) => t.token);
     if (provider === 'onesignal') {
       const key = await secret('onesignal_rest_key'), appId = set?.value?.push?.onesignalAppId;
       if (!key || !appId) throw new HttpError(400, 'OneSignal is selected but the App ID or REST key is missing in Admin, Settings, Realtime & push.');
