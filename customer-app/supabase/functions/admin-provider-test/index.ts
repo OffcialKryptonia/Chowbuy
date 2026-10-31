@@ -203,8 +203,21 @@ Deno.serve(handle(async (req) => {
         out[name] = j.status === 'OK' || j.status === 'ZERO_RESULTS' ? 'verified' : 'rejected: ' + (j.error_message || j.status || r.status);
       } catch { out[name] = 'could not reach Google'; }
     };
-    await check('directions', 'google_directions_key', (k) => `https://maps.googleapis.com/maps/api/directions/json?origin=6.4281,3.4219&destination=6.4474,3.4723&key=${encodeURIComponent(k)}`);
+    // Directions: Routes API (the successor to the legacy Directions API, which new Google projects cannot enable).
+    const dk = await secret('google_directions_key');
+    if (!dk) out.directions = 'not saved';
+    else {
+      try {
+        const r = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', { method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': dk, 'X-Goog-FieldMask': 'routes.distanceMeters' },
+          body: JSON.stringify({ origin: { location: { latLng: { latitude: 6.4281, longitude: 3.4219 } } }, destination: { location: { latLng: { latitude: 6.4474, longitude: 3.4723 } } }, travelMode: 'DRIVE' }) });
+        const j = await r.json().catch(() => ({}));
+        out.directions = r.ok && j?.routes?.length ? 'verified (Routes API)' : 'rejected: ' + (j?.error?.message || r.status);
+      } catch { out.directions = 'could not reach Google'; }
+    }
+    // Geocoding: nothing on the server uses this key yet. A key locked to websites is correct for browser use, so that is reported, not failed.
     await check('geocoding', 'google_geocoding_key', (k) => `https://maps.googleapis.com/maps/api/geocode/json?latlng=6.4281,3.4219&key=${encodeURIComponent(k)}`);
+    if (/referer restrictions/i.test(out.geocoding ?? '')) out.geocoding = 'saved, restricted to websites (fine for browser use; cannot be tested from the server)';
     const ps = await publicSettings().catch(() => ({} as Record<string, any>));
     const js = String(b.jsKey || ps?.maps?.jsKey || '');
     out.javascript = /^AIza[0-9A-Za-z_-]{35}$/.test(js) ? 'format valid (browser keys cannot be tested from the server)' : 'not saved or invalid format';
