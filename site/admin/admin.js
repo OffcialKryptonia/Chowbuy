@@ -555,8 +555,85 @@ function sChanges(){
   if(P.cities.join('|')!==D.cities.join('|'))c.push(['cities','']);
   return c;
 }
+/* ---- Merchant app (PWA) control ----
+   Name, colours, icon and the install guide of the installable /merchant app. Published as a public file in brand storage (pwa/merchant.json)
+   that the merchant site reads, so changes reach merchants without a new build. */
+var PWADEF={name:'ChowBuy Merchant',short:'Merchant',description:'Receive and manage ChowBuy orders for your restaurant, grocery, pharmacy or package business.',theme:'#FF5A1F',background:'#FFFFFF',enabled:true,hours:24,icons:null,v:0};
+U.pwa={saved:null,draft:null,loaded:false,loading:false,busy:false,iconData:null,iconName:''};
+function pwaCur(){return U.pwa.draft||U.pwa.saved||PWADEF}
+function pwaEdit(){if(!U.pwa.draft)U.pwa.draft=clone(U.pwa.saved||PWADEF);return U.pwa.draft}
+function pwaDirty(){return !!U.pwa.iconData||(!!U.pwa.draft&&JSON.stringify(U.pwa.draft)!==JSON.stringify(U.pwa.saved||PWADEF))}
+function pwaLoad(){
+  if(!beOn()||U.pwa.loaded||U.pwa.loading)return;U.pwa.loading=true;
+  beReq('/rest/v1/platform_settings?key=eq.pwa&select=value','GET').then(function(r){U.pwa.saved=Object.assign({},PWADEF,(r&&r[0]&&r[0].value)||{});U.pwa.loaded=true;U.pwa.loading=false;refresh()},function(){U.pwa.loaded=true;U.pwa.loading=false;refresh()});
+}
+function vPwa(){
+  pwaLoad();var D=pwaCur(),dirty=pwaDirty(),icon=U.pwa.iconData||(D.icons&&D.icons.i192)||'../merchant/icons/icon-192.png';
+  var hrs=[[12,'Twice a day'],[24,'Once a day'],[72,'Every 3 days'],[168,'Weekly']];
+  return head('Settings & pricing','The installable Merchant app. Merchants add it to their phone from their browser, so there is no APK or IPA to build.',(dirty?'<span class="badge-un">Unsaved changes</span>'+btn('Discard','pwaDiscard',null,''):'')+btn(ic('check')+(U.pwa.busy?'Publishing…':'Publish merchant app'),'pwaSave',null,'pri',U.pwa.busy?' disabled':''))+setTabs()+
+  (beOn()?'':'<div class="card pad"><span class="muted">Sign in to the live project to publish. Until then the Merchant app uses its built-in name, colours and icon.</span></div>')+
+  '<div class="grid g2" style="align-items:start"><div style="display:grid;gap:1rem"><div class="card pad"><h3>Name and colours</h3><div style="display:grid;gap:.9rem;margin-top:1rem">'+
+  '<div class="f"><label for="pw-n">App name</label><input id="pw-n" data-fid="pw-n" data-in="pwa:name" value="'+esc(D.name)+'" maxlength="40"><small class="muted">Shown on the install prompt and in app lists.</small></div>'+
+  '<div class="f"><label for="pw-s">Home-screen name</label><input id="pw-s" data-fid="pw-s" data-in="pwa:short" value="'+esc(D.short)+'" maxlength="12"><small class="muted">Under the icon. Keep it to 12 characters or fewer.</small></div>'+
+  '<div class="f"><label for="pw-d">Description</label><input id="pw-d" data-fid="pw-d" data-in="pwa:description" value="'+esc(D.description)+'" maxlength="160"></div>'+
+  '<div class="frow"><div class="f"><label for="pw-t">Theme colour</label><input id="pw-t" type="color" data-ch="pwa:theme" value="'+esc(D.theme)+'" style="height:2.8rem;padding:.2rem"><small class="muted">Status bar and browser bar.</small></div><div class="f"><label for="pw-b">Splash background</label><input id="pw-b" type="color" data-ch="pwa:background" value="'+esc(D.background)+'" style="height:2.8rem;padding:.2rem"></div></div></div></div>'+
+  '<div class="card pad"><h3>App icon</h3><p class="sub">A square PNG, JPG or WebP, at least 512 × 512 px, under 2 MB. Keep the logo inside the middle 80% so Android can round it.</p><div class="slot" style="margin-top:1rem"><div class="thumb"><img src="'+esc(icon)+'" alt="Current app icon"></div><div style="min-width:0"><b>'+(U.pwa.iconData?esc(U.pwa.iconName):(D.icons?'Custom icon':'ChowBuy default icon'))+'</b><div class="muted" style="font-size:.8rem">'+(U.pwa.iconData?'Will be published with the next save':'192, 512 and maskable sizes are made for you')+'</div><div class="acts" style="margin-top:.5rem"><button type="button" class="btn sm" data-act="pickFile" data-id="pwaicon">'+ic('upload')+'Upload icon</button>'+((U.pwa.iconData||D.icons)?btn(ic('trash')+'Use default','pwaIconReset',null,'danger'):'')+'<input type="file" hidden id="file-pwaicon" data-file="pwaicon" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"></div></div></div></div></div>'+
+  '<div style="display:grid;gap:1rem"><div class="card pad"><h3>Install guide</h3><div class="trow" style="padding-top:.6rem"><div><b>Show the “Add to your phone” guide</b><small>Pops up for merchants who have not installed the app yet, with Android and iPhone steps.</small></div>'+sw(D.enabled,'pwasw','x','Show the install guide')+'</div>'+
+  '<div class="f" style="margin-top:.6rem"><label>How often</label><div class="chips" style="margin-top:.4rem">'+hrs.map(function(h){return '<button type="button" class="cp '+(+D.hours===h[0]?'on':'')+'" data-act="pwahrs" data-id="'+h[0]+'" aria-pressed="'+(+D.hours===h[0])+'">'+h[1]+'</button>'}).join('')+'</div><small class="muted">Merchants can also tap “Install app” in the page footer at any time.</small></div></div>'+
+  '<div class="card pad"><h3>Preview</h3><div style="display:flex;gap:1rem;align-items:center;margin-top:1rem"><div style="text-align:center;width:84px"><img src="'+esc(icon)+'" alt="" style="width:64px;height:64px;border-radius:15px;box-shadow:0 4px 14px rgba(0,0,0,.25)"><div style="font-size:.72rem;margin-top:.3rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(D.short)+'</div></div><div style="flex:1;border-radius:.8rem;overflow:hidden;border:1px solid var(--line)"><div style="height:.9rem;background:'+esc(D.theme)+'"></div><div style="height:3.4rem;background:'+esc(D.background)+';display:grid;place-items:center"><img src="'+esc(icon)+'" alt="" style="width:30px;height:30px;border-radius:8px"></div></div></div><p class="sub" style="margin-top:.8rem">Left: the home-screen icon. Right: the status bar colour and splash background.</p></div>'+
+  '<div class="card pad"><h3>How merchants install</h3><p class="sub">Send merchants to <b>chowbuy.ng/merchant</b>. On Android they tap Install app. On iPhone they open it in Safari, tap Share, then Add to Home Screen. Merchants sign in with the same Merchant account on every device.</p></div></div></div>';
+}
+function pwaFile(file,input){
+  if(!file)return;
+  if(!/^image\/(png|jpeg|webp)$/.test(file.type)){toast('Use a PNG, JPG or WebP image.','err');input.value='';return}
+  if(file.size>2*1024*1024){toast('That file is over 2 MB.','err');input.value='';return}
+  var fr=new FileReader();fr.onload=function(){var im=new Image();im.onload=function(){
+    if(im.naturalWidth<512||im.naturalHeight<512){toast('The icon must be at least 512 × 512 px. This one is '+im.naturalWidth+' × '+im.naturalHeight+'.','err');return}
+    if(Math.abs(im.naturalWidth/im.naturalHeight-1)>.03){toast('The icon must be square. This one is '+im.naturalWidth+' × '+im.naturalHeight+'.','err');return}
+    U.pwa.iconData=fr.result;U.pwa.iconName=file.name;refresh();toast('Icon ready. Press Publish merchant app to apply it.')};
+    im.onerror=function(){toast('That image could not be read.','err')};im.src=fr.result};
+  fr.onerror=function(){toast('Could not read that file.','err')};fr.readAsDataURL(file);input.value='';
+}
+function pwaPng(img,size,pad,bg){
+  return new Promise(function(res,rej){var c=document.createElement('canvas');c.width=c.height=size;var x=c.getContext('2d');
+    if(bg){x.fillStyle=bg;x.fillRect(0,0,size,size)}var inner=size*(1-2*pad);x.drawImage(img,size*pad,size*pad,inner,inner);
+    c.toBlob(function(b){b?res(b):rej(new Error('Could not make the icon.'))},'image/png')});
+}
+function pwaPut(path,body,type){
+  return fetch(BE.url.replace(/\/+$/,'')+'/storage/v1/object/brand/'+path,{method:'POST',headers:{apikey:BE.anon,Authorization:'Bearer '+BE.tok,'Content-Type':type,'x-upsert':'true','cache-control':'max-age=60'},body:body})
+    .then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error('Upload failed ('+r.status+'). '+t.slice(0,100))})});
+}
+function pwaReg(){
+INP.pwa=function(k,v){pwaEdit()[k]=v;refresh()};
+CHG.pwa=function(k,v){v=String(v).trim();if(!/^#[0-9a-fA-F]{6}$/.test(v)){toast('Use a 6-digit hex colour such as #FF5A1F.','err');refresh();return}pwaEdit()[k]=v.toUpperCase();refresh()};
+Object.assign(A,{
+ pwasw:function(){var D=pwaEdit();D.enabled=!D.enabled;refresh();toast('Install guide '+(D.enabled?'on':'off')+'. Press Publish to apply.')},
+ pwahrs:function(el){pwaEdit().hours=+el.getAttribute('data-id');refresh()},
+ pwaDiscard:function(){U.pwa.draft=null;U.pwa.iconData=null;U.pwa.iconName='';refresh();toast('Unsaved changes discarded.')},
+ pwaIconReset:function(){var D=pwaEdit();U.pwa.iconData=null;U.pwa.iconName='';D.icons=null;refresh();toast('Using the ChowBuy default icon. Press Publish to apply.')},
+ pwaSave:function(){
+   if(!pwaDirty()){toast('No changes to publish.','warn');return}
+   if(!beOn()){toast('Sign in to the live project to publish.','err');return}
+   var D=clone(pwaEdit());D.name=String(D.name||'').trim();D.short=String(D.short||'').trim();D.description=String(D.description||'').trim();
+   if(D.name.length<2)return toast('Enter an app name.','err');if(D.short.length<2||D.short.length>12)return toast('The home-screen name must be 2 to 12 characters.','err');
+   D.v=Date.now();D.hours=Math.min(168,Math.max(1,+D.hours||24));var base=BE.url.replace(/\/+$/,'')+'/storage/v1/object/public/brand/pwa/';
+   U.pwa.busy=true;refresh();toast('Publishing…');
+   var step=Promise.resolve();
+   if(U.pwa.iconData){
+     step=new Promise(function(res,rej){var im=new Image();im.onload=function(){res(im)};im.onerror=function(){rej(new Error('That icon could not be read.'))};im.src=U.pwa.iconData}).then(function(im){
+       var n=D.v,jobs=[['icon-192-'+n,pwaPng(im,192,0,'#FFFFFF')],['icon-512-'+n,pwaPng(im,512,0,'#FFFFFF')],['maskable-512-'+n,pwaPng(im,512,.1,D.theme)],['apple-180-'+n,pwaPng(im,180,0,'#FFFFFF')]];
+       return Promise.all(jobs.map(function(j){return j[1].then(function(b){return pwaPut('pwa/merchant/'+j[0]+'.png',b,'image/png')})})).then(function(){D.icons={i192:base+'merchant/icon-192-'+n+'.png',i512:base+'merchant/icon-512-'+n+'.png',maskable:base+'merchant/maskable-512-'+n+'.png',apple:base+'merchant/apple-180-'+n+'.png'}})});
+   }
+   step.then(function(){
+     var pub={v:D.v,name:D.name,short:D.short,description:D.description,theme:D.theme,background:D.background,prompt:{enabled:D.enabled!==false,hours:D.hours},icons:D.icons||null};
+     return pwaPut('pwa/merchant.json',new Blob([JSON.stringify(pub)],{type:'application/json'}),'application/json').then(function(){return beUpsert('pwa',D)});
+   }).then(function(){U.pwa.saved=D;U.pwa.draft=null;U.pwa.iconData=null;U.pwa.iconName='';U.pwa.busy=false;log('Merchant app (PWA) published','settings');audit('Merchant app published · '+D.name);refresh();toast('Published. Merchants get the new name, colours and icon the next time they open the app.')},
+   function(e){U.pwa.busy=false;refresh();toast(e.message,'err')});
+ }
+});
+}
 var GW=[['paystack','Paystack','Cards, bank and USSD'],['flutterwave','Flutterwave','Cards, bank and mobile money'],['transfer','Direct bank transfer','Pay by transfer to a virtual account'],['cod','Cash on delivery','Collected by the rider']];
-function vSettings(){var t=T('setTab','pricing');return t==='email'?vEmail():t==='signin'?vSignin():t==='payments'?vPayments():t==='maps'?vMaps():t==='realtime'?vRealtime():vPricing()}
+function vSettings(){var t=T('setTab','pricing');return t==='email'?vEmail():t==='signin'?vSignin():t==='payments'?vPayments():t==='maps'?vMaps():t==='realtime'?vRealtime():t==='pwa'?vPwa():vPricing()}
 function vPricing(){
   var D=sGet(),ch=sChanges();
   var fare=[['base','Base delivery fare','₦'],['perKm','Distance charge per km','₦'],['service','Platform service fee','₦'],['minBasket','Minimum basket order value','₦']];
@@ -815,7 +892,9 @@ var INP={
 var CHG={
  brand:function(k,v){if(k==='color'){v=String(v).trim();if(v[0]!=='#')v='#'+v;if(!/^#[0-9a-fA-F]{6}$/.test(v)){toast('Use a 6-digit hex colour such as #FF5A1F.','err');refresh();return}bdraft()[U.brand].color=v.toUpperCase();save();refresh();toast('Brand colour set to '+v.toUpperCase()+' in draft.')}}
 };
+pwaReg();
 function onFile(slot,file,input){
+  if(slot==='pwaicon')return pwaFile(file,input);
   if(!file)return;
   var okType=/^image\/(svg\+xml|png|webp|jpeg)$/.test(file.type);
   if(!okType){toast('Unsupported file. Use SVG, PNG, WebP or JPG.','err');input.value='';return}
@@ -1149,7 +1228,7 @@ function vPayments(){
    '<div class="card pad" style="display:flex;gap:.8rem;align-items:flex-start;background:var(--accent-soft);border-color:transparent">'+ic('shield')+'<div><b>Secrets are never kept in this browser.</b><div class="muted" style="font-size:.88rem">'+(beOn()?'Saved keys go straight to your ChowBuy backend vault. Only a masked preview comes back here.':'Connect the backend in Messaging to save keys for real. Until then nothing is sent anywhere.')+'</div><div class="acts" style="margin-top:.6rem"><a class="btn sm" href="../app/checkout.html" target="_blank" rel="noopener">Preview customer checkout</a><a class="btn sm" href="../app/order.html" target="_blank" rel="noopener">Preview order tracking</a></div></div></div>'+
    '<div class="grid g2" style="align-items:start">'+gwCard('Korapay','Cards, USSD and pay with bank','korapay',K,kInner,'Test connection')+gwCard('Pocketfi','One-time dynamic virtual bank accounts','pocketfi',Pf,pInner,'Test Pocketfi handshake')+gwCard('Cash on delivery','Pay the rider in cash with reconciliation','cod',C,cInner,'')+gwCard('ChowBuy wallet','Stored-value wallet checkout','wallet',W,wInner,'')+'</div>';
 }
-function setTabs(){return tabs('setTab',[['pricing','Pricing & coverage'],['payments','Payment gateways'],['maps','Integrations & maps'],['realtime','Realtime & push'],['email','Email'],['signin','Sign-in methods']])}
+function setTabs(){return tabs('setTab',[['pricing','Pricing & coverage'],['payments','Payment gateways'],['maps','Integrations & maps'],['realtime','Realtime & push'],['email','Email'],['signin','Sign-in methods'],['pwa','Merchant app']])}
 /* ---- maps ---- */
 function md(){return U.mdraft||S.maps}
 function me(){if(!U.mdraft)U.mdraft=clone(S.maps);return U.mdraft}
