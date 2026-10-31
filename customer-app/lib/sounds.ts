@@ -8,6 +8,7 @@ import { supabase } from './supabase';
  * Android fixes a channel's sound when the channel is created, so each sound has its own channel (orders_<id>) and only the chosen one exists.
  */
 export const NOTIF_SOUNDS = [
+  { id: 'dingtone', label: 'Ding tone', note: 'Bright ding (default)', source: require('../assets/sounds/notif_dingtone.wav') },
   { id: 'chime', label: 'Chime', note: 'Two soft bell notes', source: require('../assets/sounds/notif_chime.wav') },
   { id: 'bell', label: 'Bell', note: 'A single clear bell', source: require('../assets/sounds/notif_bell.wav') },
   { id: 'ding', label: 'Ding', note: 'Short and bright', source: require('../assets/sounds/notif_ding.wav') },
@@ -20,9 +21,9 @@ export const NOTIF_SOUNDS = [
 ] as const;
 
 export type NotifSoundId = (typeof NOTIF_SOUNDS)[number]['id'];
-export const DEFAULT_SOUND: NotifSoundId = 'chime';
+export const DEFAULT_SOUND: NotifSoundId = 'dingtone';
 export const isSoundId = (v: unknown): v is NotifSoundId => NOTIF_SOUNDS.some((s) => s.id === v);
-export const soundLabel = (id: string) => NOTIF_SOUNDS.find((s) => s.id === id)?.label ?? 'Chime';
+export const soundLabel = (id: string) => NOTIF_SOUNDS.find((s) => s.id === id)?.label ?? 'Ding tone';
 export const channelFor = (id: NotifSoundId) => `orders_${id}`;
 /** File name a push payload uses on iOS (and the raw resource on Android). */
 export const soundFile = (id: NotifSoundId) => (id === 'default' ? 'default' : `notif_${id}.wav`);
