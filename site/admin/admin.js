@@ -2196,7 +2196,7 @@ ensureKyc();
 U.kyc={live:{rider:null,merchant:null},load:{},err:'',sel:null};U.sosl={live:null,load:false,err:''};U.emrl={live:null,load:false};
 function kApplicants(kind){
   if(beOn()&&U.kyc.live[kind])return U.kyc.live[kind].map(function(r){var docs={};(r.docs||[]).forEach(function(d){docs[d.doc]={status:d.status,note:d.note||'',file:d.file,byAdmin:!!d.by_admin}});
-    return{id:r.id,name:r.name,sub:kind==='rider'?(r.vehicle+' · '+(r.pay_model==='fleet'?'Fleet':r.pay_model==='flex'?'Flex':'Partner')):(V[r.vertical]||r.vertical),vertical:r.vertical,type:r.pay_model==='fleet'?'FLEET':r.pay_model==='flex'?'FLEX':'PARTNER',accepted:kind==='rider'?r.verified:r.active,docs:docs,live:true}});
+    return{id:r.id,name:r.name,sub:kind==='rider'?(r.vehicle+' · '+(r.pay_model==='fleet'?'Fleet':r.pay_model==='flex'?'Flex':'Partner')):(V[r.vertical]||r.vertical),vertical:r.vertical,type:r.pay_model==='fleet'?'FLEET':r.pay_model==='flex'?'FLEX':'PARTNER',accepted:kind==='rider'?r.verified:(r.app_status?r.app_status==='APPROVED':r.active),appStatus:r.app_status||'',docs:docs,live:true}});
   return (kind==='rider'?S.riders:S.merchants).map(function(x){return{id:x.id,name:x.name,sub:kind==='rider'?(x.type==='FLEET'?'Fleet':'Partner')+' · '+x.city:(V[x.vertical]||'')+' · '+x.city,vertical:x.vertical,type:x.type,accepted:x.status==='active',docs:S.kyc[kind+':'+x.id]||(S.kyc[kind+':'+x.id]={}),live:false}});
 }
 function kState(x,kind){var req=kdocList(kind,x),ap=0,pe=0,de=0;req.forEach(function(d){var s=(x.docs[d[0]]||{}).status;if(s==='approved')ap++;else if(s==='pending')pe++;else if(s==='declined')de++});return{req:req,ap:ap,pe:pe,de:de,miss:req.length-ap-pe-de}}
@@ -2286,9 +2286,13 @@ Object.assign(A,{
  kycOpen:function(el){kOpen(T('kycK','rider'),el.getAttribute('data-id'))},
  kycDoc:function(el){var p=el.getAttribute('data-id').split('|');closeM();kDocForm(p[0],p[1],p[2])},
  kycDecide:function(el){var p=el.getAttribute('data-id').split('|'),kind=p[0],id=p[1],yes=p[2]==='1',x=kFind(kind,id);if(!x)return;
-   var done=function(){if(!x.live){var t=(kind==='rider'?S.riders:S.merchants).filter(function(z){return z.id===id})[0];t.status=yes?'active':(kind==='rider'?'suspended':'rejected');if(kind==='merchant')t.kyc=yes?'verified':'rejected'}else if(U.kyc.live[kind]){U.kyc.live[kind].forEach(function(z){if(z.id===id){z.verified=yes;z.active=yes}})}
+   var done=function(){if(!x.live){var t=(kind==='rider'?S.riders:S.merchants).filter(function(z){return z.id===id})[0];t.status=yes?'active':(kind==='rider'?'suspended':'rejected');if(kind==='merchant')t.kyc=yes?'verified':'rejected'}else{U.kyc.live[kind]=null;U.kyc.load[kind]=false;U.app.list=null;kLoad(kind)}
      log(x.name+(yes?' accepted':' declined')+' after KYC review','kyc');audit('KYC '+(yes?'accept':'decline')+' · '+x.name);save();closeM();refresh();toast(x.name+(yes?' accepted.':' declined.'),yes?'':'warn')};
-   if(beOn()&&x.live){beReq('/rest/v1/rpc/admin_kyc_decide','POST',{p_kind:kind,p_subject:id,p_approve:yes}).then(done,function(e){toast(e.message,'err')});return}done()},
+   var send=function(note){return beReq('/rest/v1/rpc/admin_kyc_decide','POST',{p_kind:kind,p_subject:id,p_approve:yes,p_note:note||''}).then(done,function(e){toast(e.message,'err')})};
+   if(beOn()&&x.live){
+     if(kind==='merchant'&&!yes){openM('<h3>Decline '+esc(x.name)+'</h3><p class="muted">Give the reason. The merchant will see it, and the store closes.</p><div class="f"><label for="dn">Reason</label><textarea id="dn" name="dn" rows="4" maxlength="500"></textarea></div><div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn danger">Decline</button></div>',function(v){var n=String(v.dn||'').trim();if(n.length<5)return 'Write at least a few words.';send(n)});return}
+     send('');return}
+   done()},
  emAdd:function(){emForm(null)},emEdit:function(el){emForm(el.getAttribute('data-id'))},
  emTog:function(el){var id=el.getAttribute('data-id'),list=beOn()&&U.emrl.live?U.emrl.live:S.emerg,e=list.filter(function(x){return x.id===id})[0];if(!e)return;
    var on=!e.active,done=function(){e.active=on;log(e.label+(on?' shown to riders':' hidden from riders'),'settings');save();refresh()};
