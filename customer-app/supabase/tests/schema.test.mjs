@@ -32,6 +32,7 @@ await db.exec(fs.readFileSync(root + 'migrations/20261101000008_merchant_live.sq
 await db.exec(fs.readFileSync(root + 'migrations/20261101000009_merchant_onboarding.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261102000001_chowbuy_flex.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261103000001_merchant_kyc_sync.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261104000001_brand_storage_select.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);

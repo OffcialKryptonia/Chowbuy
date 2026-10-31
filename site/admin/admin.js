@@ -599,9 +599,9 @@ function pwaPng(img,size,pad,bg){
     if(bg){x.fillStyle=bg;x.fillRect(0,0,size,size)}var inner=size*(1-2*pad);x.drawImage(img,size*pad,size*pad,inner,inner);
     c.toBlob(function(b){b?res(b):rej(new Error('Could not make the icon.'))},'image/png')});
 }
-function pwaPut(path,body,type){
-  return fetch(BE.url.replace(/\/+$/,'')+'/storage/v1/object/brand/'+path,{method:'POST',headers:{apikey:BE.anon,Authorization:'Bearer '+BE.tok,'Content-Type':type,'x-upsert':'true','cache-control':'max-age=60'},body:body})
-    .then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error('Upload failed ('+r.status+'). '+t.slice(0,100))})});
+function pwaPut(path,body,type,replace){
+  return fetch(BE.url.replace(/\/+$/,'')+'/storage/v1/object/brand/'+path,{method:'POST',headers:{apikey:BE.anon,Authorization:'Bearer '+BE.tok,'Content-Type':type,'x-upsert':replace?'true':'false','cache-control':'max-age=60'},body:body})
+    .then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(/row-level security|Unauthorized/i.test(t)?'Storage is not ready for uploads yet. Run the brand storage migration, then publish again.':'Upload failed ('+r.status+'). '+t.slice(0,100))})});
 }
 function pwaReg(){
 INP.pwa=function(k,v){pwaEdit()[k]=v;refresh()};
@@ -626,7 +626,7 @@ Object.assign(A,{
    }
    step.then(function(){
      var pub={v:D.v,name:D.name,short:D.short,description:D.description,theme:D.theme,background:D.background,prompt:{enabled:D.enabled!==false,hours:D.hours},icons:D.icons||null};
-     return pwaPut('pwa/merchant.json',new Blob([JSON.stringify(pub)],{type:'application/json'}),'application/json').then(function(){return beUpsert('pwa',D)});
+     return pwaPut('pwa/merchant.json',new Blob([JSON.stringify(pub)],{type:'application/json'}),'application/json',true).then(function(){return beUpsert('pwa',D)});
    }).then(function(){U.pwa.saved=D;U.pwa.draft=null;U.pwa.iconData=null;U.pwa.iconName='';U.pwa.busy=false;log('Merchant app (PWA) published','settings');audit('Merchant app published · '+D.name);refresh();toast('Published. Merchants get the new name, colours and icon the next time they open the app.')},
    function(e){U.pwa.busy=false;refresh();toast(e.message,'err')});
  }
