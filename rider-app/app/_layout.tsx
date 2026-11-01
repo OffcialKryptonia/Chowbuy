@@ -9,7 +9,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '@/lib/theme';
 import '@/lib/location-task';
-import { useEffect } from 'react';
 import { registerRiderPush } from '@/lib/push';
 import * as live from '@/lib/live';
 import { LIVE } from '@/lib/config';
