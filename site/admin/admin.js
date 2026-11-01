@@ -2614,8 +2614,7 @@ buildNav();
 $('#burger').innerHTML=ic('menu');$('#closeSide').innerHTML=ic('x');$('#bell').innerHTML=ic('bell')+'<span class="dot" id="nbadge"></span>';
 $('#burger').onclick=openSide;$('#closeSide').onclick=closeSide;$('#scrim').onclick=closeSide;
 $('#ctxIcon').innerHTML=ic('shield');$('#extIcon').innerHTML=ic('ext');
-setTheme(savedTheme||(mq.matches?'dark':'light'));
-if(mq.addEventListener)mq.addEventListener('change',function(e){if(!savedTheme)setTheme(e.matches?'dark':'light')});
+setTheme(savedTheme||'light');
 render(false);
 if(beOn()){beHydrate().then(function(){refresh()},function(){});liveLoad()}
 setInterval(function(){var r=cur();if(beOn()&&document.visibilityState==='visible'&&r&&(r.p===''||r.p==='orders'||r.p==='merchants'))liveLoad()},60000);

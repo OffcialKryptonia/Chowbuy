@@ -14,11 +14,10 @@ document.addEventListener('click',function(e){var b=e.target.closest('[data-toas
 /* theme (shares the key used on the home page) */
 var root=document.documentElement,th=$('#theme'),mq=window.matchMedia('(prefers-color-scheme: dark)'),saved=null;
 try{saved=localStorage.getItem('cb-theme')}catch(e){}
-function eff(){return root.getAttribute('data-theme')||(mq.matches?'dark':'light')}
+function eff(){return root.getAttribute('data-theme')||'light'}
 function applyTheme(t,keep){root.setAttribute('data-theme',t);if(th){th.setAttribute('aria-pressed',t==='dark');th.setAttribute('aria-label',t==='dark'?'Switch to light theme':'Switch to dark theme')}if(keep){saved=t;try{localStorage.setItem('cb-theme',t)}catch(e){}}}
 applyTheme(saved||eff());
 if(th)th.addEventListener('click',function(){applyTheme(eff()==='dark'?'light':'dark',true)});
-if(mq.addEventListener)mq.addEventListener('change',function(e){if(!saved)applyTheme(e.matches?'dark':'light')});
 
 /* mobile menu */
 var dr=$('#drawer'),bg=$('#burger');
