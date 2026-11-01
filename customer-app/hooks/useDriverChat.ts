@@ -17,11 +17,19 @@ export const screenText = (t: string): string | null => {
 };
 
 const EMPTY: never[] = [];
-export function useDriverChat(orderId: string) {
+/** Messages from the rider/support you have not opened yet. Counting only: it never marks anything read. */
+export const useChatUnread = (orderId: string): number =>
+  useOrders((s) => (s.chats[orderId] ?? EMPTY).filter((m) => !m.read && m.from !== 'customer').length);
+/** Unread across every order still in progress (drives the Orders tab badge). */
+export const useTotalUnread = (): number =>
+  useOrders((s) => s.orders.reduce((n, o) => (o.stage === 'delivered' || o.stage === 'cancelled' ? n : n + (s.chats[o.id] ?? EMPTY).filter((m) => !m.read && m.from !== 'customer').length), 0));
+
+export function useDriverChat(orderId: string, opts: { markRead?: boolean } = {}) {
   const messages = useOrders((s) => s.chats[orderId]) ?? EMPTY;
   const say = useOrders((s) => s.say);
   const readAll = useOrders((s) => s.readAll);
-  useEffect(() => { readAll(orderId); }, [orderId, messages.length, readAll]);
+  const markRead = opts.markRead ?? false;
+  useEffect(() => { if (markRead) readAll(orderId); }, [markRead, orderId, messages.length, readAll]);
   const send = useCallback(async (text: string): Promise<string | null> => {
     const err = screenText(text);
     if (err) return err;

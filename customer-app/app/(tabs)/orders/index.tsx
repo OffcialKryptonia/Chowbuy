@@ -9,6 +9,9 @@ import { useTheme } from '@/lib/theme';
 import { stageLabel } from '@/lib/mock';
 import { dateTime, ngn } from '@/lib/format';
 import { addLine } from '@/lib/smart-cart';
+import { useChatUnread } from '@/hooks/useDriverChat';
+import { UnreadBadge } from '@/components/chat/UnreadBadge';
+import { MessageCircle } from 'lucide-react-native';
 import type { Order } from '@/lib/types';
 
 function OrderCard({ o }: { o: Order }) {
@@ -16,6 +19,7 @@ function OrderCard({ o }: { o: Order }) {
   const toast = useToast();
   const active = isActive(o);
   const label = stageLabel(o.stage);
+  const unread = useChatUnread(o.id);
   const reorder = () => {
     const cart = useCart.getState();
     useCart.setState({ merchant: o.merchant, promo: null, lines: o.lines.reduce((acc, l) => addLine(acc, { id: l.productId, merchantId: l.merchantId, name: l.name, desc: '', price: l.unitPrice - l.mods.reduce((a, m) => a + m.price, 0), image: '', category: '', modifiers: [], inStock: true }, l.mods, l.qty, l.note), [] as typeof cart.lines) });
@@ -34,6 +38,7 @@ function OrderCard({ o }: { o: Order }) {
         <View style={{ alignItems: 'flex-end', gap: 6 }}>
           <Txt size={15} weight="bold">{ngn(o.total)}</Txt>
           <Pill label={label} tone={active ? 'brand' : o.stage === 'cancelled' ? 'bad' : 'ok'} />
+          {active && unread > 0 ? <Row gap={4}><MessageCircle size={14} color="#E5362B" /><UnreadBadge count={unread} size={18} /></Row> : null}
         </View>
       </Row>
       {active ? (

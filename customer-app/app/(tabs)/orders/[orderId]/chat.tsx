@@ -16,7 +16,7 @@ export default function Chat() {
   const p = useTheme();
   const toast = useToast();
   const order = useOrder(orderId);
-  const { messages, send } = useDriverChat(orderId ?? '');
+  const { messages, send } = useDriverChat(orderId ?? '', { markRead: true });
   const [text, setText] = useState('');
   const list = useRef<FlatList>(null);
   useEffect(() => { const t = setTimeout(() => list.current?.scrollToEnd({ animated: true }), 80); return () => clearTimeout(t); }, [messages.length]);
