@@ -2,7 +2,9 @@ name: Rider Android APK
 
 # Builds an installable test APK of rider-app/ on GitHub's runners (no Expo account needed), then launches it on an emulator.
 # Run it by hand: Actions, Rider Android APK, Run workflow. It also runs when rider-app/ changes on main.
-# Result: the run page, Artifacts section, chowbuy-rider-apk. Signed with the Android debug key (testing only).
+# Result: the run page, Artifacts section, chowbuy-rider-<mode>-apk and chowbuy-rider-live-aab. Signed with the Android debug key (testing only).
+#   demo = built-in sample data, works offline from any backend.
+#   live = talks to the ChowBuy Supabase project (real riders and orders). The live build also produces the Play Store bundle (.aab).
 
 on:
   workflow_dispatch:
@@ -21,14 +23,19 @@ jobs:
   apk:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [demo, live]
     defaults:
       run:
         working-directory: rider-app
     env:
       CI: '1'
-      # Live build: signs riders in against the ChowBuy backend. Publishable values only (safe in an app).
-      EXPO_PUBLIC_SUPABASE_URL: https://nhaxcyfkbrbwlqbpizjo.supabase.co
-      EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_fEoqE8u49jwFe1v36CacDg_seaMgyUS
+      # Publishable values only (safe in an app). Empty in the demo build.
+      EXPO_PUBLIC_DEMO: ${{ matrix.mode == 'demo' && '1' || '0' }}
+      EXPO_PUBLIC_SUPABASE_URL: ${{ matrix.mode == 'live' && 'https://nhaxcyfkbrbwlqbpizjo.supabase.co' || '' }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ matrix.mode == 'live' && 'sb_publishable_fEoqE8u49jwFe1v36CacDg_seaMgyUS' || '' }}
       GOOGLE_MAPS_ANDROID_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_KEY }}
     steps:
       - name: Free disk space
@@ -70,14 +77,37 @@ jobs:
             echo "::error::gradle tail: $(tail -n 25 ../gradle.log | tr '\n' '|' | cut -c1-3500)"
           fi
           exit $code
+      # Play Store bundle (live build only). Signed with the debug key, so it is for internal testing; Google Play needs your own upload key.
+      - name: Build release AAB (live)
+        if: matrix.mode == 'live'
+        working-directory: rider-app/android
+        run: |
+          set +e
+          ./gradlew bundleRelease --no-daemon --stacktrace -PreactNativeArchitectures=arm64-v8a,x86_64 2>&1 | tee ../gradle-aab.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            grep -n -A14 "What went wrong" ../gradle-aab.log | head -40 | while IFS= read -r line; do echo "::error::${line:0:600}"; done
+            echo "::error::gradle tail: $(tail -n 25 ../gradle-aab.log | tr '\n' '|' | cut -c1-3500)"
+          fi
+          exit $code
       - name: Name the APK
         run: |
           mkdir -p ../dist
-          cp android/app/build/outputs/apk/release/app-release.apk ../dist/chowbuy-rider.apk
+          cp android/app/build/outputs/apk/release/app-release.apk "../dist/chowbuy-rider-${{ matrix.mode }}.apk"
       - uses: actions/upload-artifact@v4
         with:
-          name: chowbuy-rider-apk
-          path: dist/chowbuy-rider.apk
+          name: chowbuy-rider-${{ matrix.mode }}-apk
+          path: dist/chowbuy-rider-${{ matrix.mode }}.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Name the AAB
+        if: matrix.mode == 'live'
+        run: cp android/app/build/outputs/bundle/release/app-release.aab ../dist/chowbuy-rider-live.aab && ls -la ../dist
+      - uses: actions/upload-artifact@v4
+        if: matrix.mode == 'live'
+        with:
+          name: chowbuy-rider-live-aab
+          path: dist/chowbuy-rider-live.aab
           if-no-files-found: error
           retention-days: 30
 
@@ -86,11 +116,15 @@ jobs:
     needs: apk
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [demo, live]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: chowbuy-rider-apk
+          name: chowbuy-rider-${{ matrix.mode }}-apk
           path: apk
       - name: Enable KVM
         run: |
@@ -103,11 +137,11 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          script: PKG=ng.chowbuy.rider EXPECT_FIRST='Apply now' TAPS='Apply now' EXPECT_AFTER=Next bash .github/scripts/android-smoke.sh apk/chowbuy-rider.apk
+          script: PKG=ng.chowbuy.rider EXPECT_FIRST='Apply now' TAPS='Apply now' EXPECT_AFTER=Next bash .github/scripts/android-smoke.sh apk/chowbuy-rider-${{ matrix.mode }}.apk
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: smoke-rider
+          name: smoke-rider-${{ matrix.mode }}
           path: smoke-out
           if-no-files-found: ignore
           retention-days: 7
@@ -122,13 +156,16 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: chowbuy-rider-apk
+          pattern: chowbuy-rider-*
           path: apk
+          merge-multiple: true
       - name: Attach to release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           gh release view rider-builds >/dev/null 2>&1 || gh release create rider-builds --prerelease --title "Rider app test builds" --notes "Latest tested Rider APK. Signed with the Android debug key (testing only)."
-          gh release upload rider-builds apk/chowbuy-rider.apk --clobber
-          gh release edit rider-builds --notes "Latest tested Rider APK, built from ${GITHUB_SHA::7}. Signed with the Android debug key (testing only)."
+          ls -la apk
+          gh release delete-asset rider-builds chowbuy-rider.apk -y 2>/dev/null || true
+          gh release upload rider-builds apk/chowbuy-rider-live.apk apk/chowbuy-rider-demo.apk apk/chowbuy-rider-live.aab --clobber
+          gh release edit rider-builds --notes "Latest tested Rider builds, built from ${GITHUB_SHA::7}. live = real ChowBuy backend, demo = sample data, .aab = Play Store bundle (live). Signed with the Android debug key (testing only)."
