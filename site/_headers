@@ -12,3 +12,7 @@
   Content-Type: application/manifest+json
 /merchant/pwa.js
   Cache-Control: no-cache
+
+/OneSignalSDKWorker.js
+  Cache-Control: no-cache
+  Content-Type: application/javascript; charset=utf-8

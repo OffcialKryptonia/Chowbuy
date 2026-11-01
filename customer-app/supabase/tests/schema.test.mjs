@@ -33,6 +33,9 @@ await db.exec(fs.readFileSync(root + 'migrations/20261101000009_merchant_onboard
 await db.exec(fs.readFileSync(root + 'migrations/20261102000001_chowbuy_flex.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261103000001_merchant_kyc_sync.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'migrations/20261104000001_brand_storage_select.sql', 'utf8'));
+await db.exec(`create schema if not exists extensions; create schema if not exists net; create table net.calls (url text, headers jsonb, body jsonb);
+  create function net.http_post(url text, headers jsonb default '{}', body jsonb default '{}', timeout_milliseconds int default 1000) returns bigint language sql as $$ insert into net.calls values (url, headers, body) returning 1::bigint $$;`);
+await db.exec(fs.readFileSync(root + 'migrations/20261104000002_push_events.sql', 'utf8').replace('create extension if not exists pg_net with schema extensions;', ''));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -1144,5 +1147,21 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
     await as(ADM, async () => { await throws('a rejected application must be reopened before KYC can accept it', () => q(`select admin_kyc_decide('merchant', '${mid}', true)`), 'reopened'); });
     await su2(`update merchant_applications set status = 'APPROVED' where id = '${aid}'; update merchants set application_status = 'APPROVED', active = true, verified = true where id = '${mid}'`);
   }
+}
+{
+  const calls = async () => (await q(`select body from net.calls order by 1 limit 100`)).map((r) => r.body);
+  await db.exec(`delete from net.calls`);
+  const sec = (await q(`select value from platform_secrets where key = 'push_hook_secret'`))[0]?.value;
+  ok('push hook secret is generated and long', !!sec && sec.length >= 40);
+  const ord = (await q(`select id, stage, paid, pay from orders limit 1`))[0];
+  if (ord) {
+    await db.exec(`update orders set stage = 'preparing' where id = '${ord.id}' and stage = 'received'`);
+    const got = await calls();
+    ok('an order moving to preparing posts an order_preparing push event', ord.stage !== 'received' || got.some((b) => b.event === 'order_preparing' && b.ref === ord.id));
+  }
+  await db.exec(`insert into sos_events (rider_id, order_id, lat, lng) values ('${R}', null, 6.5, 3.4)`);
+  ok('an SOS posts a push event for admins', (await calls()).some((b) => b.event === 'sos'));
+  const h = (await q(`select headers from net.calls limit 1`))[0]?.headers;
+  ok('push events carry the hook secret header', h && h['x-hook-secret'] === sec);
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
