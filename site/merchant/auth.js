@@ -300,7 +300,7 @@ function dashboard(w){
   return fetch('dashboard.html?v=20261043',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('The dashboard could not be loaded.');return r.text()}).then(function(html){
     $('#gate').hidden=true;var root=$('#root');root.innerHTML=html;root.hidden=false;ss('cb-merch-store',w.id);if(location.hash.indexOf('/dashboard')>=0||/^#\/(login|workspaces|application-status|onboarding.*)?$/.test(location.hash))location.hash='#/';
     window.removeEventListener('hashchange',route);
-    return loadScript('data.js?v=20261043').then(function(){return loadScript('merchant.js?v=20261049')});
+    return loadScript('data.js?v=20261043').then(function(){return loadScript('merchant.js?v=20261062')});
   }).catch(function(e){off=false;window.addEventListener('hashchange',route);$('#gate').hidden=false;$('#root').hidden=true;$('#root').innerHTML='';set(card('<h1>Couldn’t open the dashboard</h1><p class="lead">'+esc(e.message)+'</p><button type="button" class="btn pri" data-act="reload">Try again</button>'))});
 }
 

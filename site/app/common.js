@@ -22,7 +22,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'&&$('#mwrap')
 function copy(t){var ok=function(){toast('Copied to clipboard')};try{if(navigator.clipboard){navigator.clipboard.writeText(t).then(ok,function(){toast('Copy failed','err')});return}}catch(e){}var a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();try{document.execCommand('copy');ok()}catch(e){toast('Copy failed','err')}a.remove()}
 var saved=null;try{saved=localStorage.getItem('cb-theme')}catch(e){}
 function setTheme(t,keep){document.documentElement.setAttribute('data-theme',t);var b=$('#theme');if(b)b.innerHTML=ic(t==='dark'?'sun':'moon');if(keep){try{localStorage.setItem('cb-theme',t)}catch(e){}}}
-setTheme(saved||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'));
+setTheme(saved||'light');
 document.addEventListener('click',function(e){if(e.target.closest&&e.target.closest('#theme'))setTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark',true)});
 return{$:$,esc:esc,ngn:ngn,cfg:cfg,ic:ic,toast:toast,openM:openM,closeM:closeM,copy:copy,IC:IC}
 })();

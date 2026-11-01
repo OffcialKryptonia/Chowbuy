@@ -1210,7 +1210,7 @@ setInterval(function(){if(LV.on&&document.visibilityState==='visible'&&!$('#mwra
 
 /* ---------- init ---------- */
 buildNav();
-setTheme(savedTheme||(mq.matches?'dark':'light'));
+setTheme(savedTheme||'light');
 $('#burger').innerHTML=ic('menu');$('#closeSide').innerHTML=ic('x');
 $('#bell').innerHTML=ic('bell')+'<span class="dot" id="nbadge"></span>';
 $('#burger').addEventListener('click',openSide);$('#closeSide').addEventListener('click',closeSide);$('#scrim').addEventListener('click',closeSide);

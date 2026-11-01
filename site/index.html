@@ -25,12 +25,6 @@
   --shot-bg:transparent; --shot-sh:transparent; --shot-r:0; --shot-bd:transparent;
   --r-xl:2rem; --r-lg:1.25rem; --r-md:.875rem;
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0B1020; --bg-soft:#0F172A; --fg:#F3F5F9; --muted:#A3ADBF; --line:#222B3D; --card:#141B2B;
-  --accent-ink:#FF9B6E; --accent-soft:#2A1A14; --green-soft:#10281F;
-  --fill:#1A2236; --glass:rgba(24,32,50,.5); --glass-line:rgba(255,255,255,.11); --glass-hi:rgba(255,255,255,.1); --glass-dark:rgba(20,28,45,.62); --blob:.32;
-  --shot-bg:#FFFFFF; --shot-sh:rgba(255,90,31,.35); --shot-r:2rem; --shot-bd:rgba(255,255,255,.14);
-  --shadow:0 1px 2px rgba(0,0,0,.3),0 14px 34px -14px rgba(0,0,0,.6); color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0B1020; --bg-soft:#0F172A; --fg:#F3F5F9; --muted:#A3ADBF; --line:#222B3D; --card:#141B2B;
   --accent-ink:#FF9B6E; --accent-soft:#2A1A14; --green-soft:#10281F;
@@ -341,7 +335,6 @@ footer{margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding-
 .theme .t-sun{display:none}
 :root[data-theme="dark"] .theme .t-sun{display:block}
 :root[data-theme="dark"] .theme .t-moon{display:none}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .theme .t-sun{display:block}:root:not([data-theme="light"]) .theme .t-moon{display:none}}
 .burger{margin-left:0}
 @media (min-width:1080px){.theme{margin-left:0}}
 
@@ -698,11 +691,10 @@ document.addEventListener('click',function(e){var b=e.target.closest('[data-toas
 /* theme */
 var root=document.documentElement,th=$('#theme'),mq=window.matchMedia('(prefers-color-scheme: dark)'),saved=null;
 try{saved=localStorage.getItem('cb-theme')}catch(e){}
-function eff(){return root.getAttribute('data-theme')||(mq.matches?'dark':'light')}
+function eff(){return root.getAttribute('data-theme')||'light'}
 function applyTheme(t,keep){root.setAttribute('data-theme',t);th.setAttribute('aria-pressed',t==='dark');th.setAttribute('aria-label',t==='dark'?'Switch to light theme':'Switch to dark theme');if(keep){saved=t;try{localStorage.setItem('cb-theme',t)}catch(e){}}}
 applyTheme(saved||eff());
 th.addEventListener('click',function(){applyTheme(eff()==='dark'?'light':'dark',true)});
-if(mq.addEventListener)mq.addEventListener('change',function(e){if(!saved)applyTheme(e.matches?'dark':'light')});
 
 /* menu */
 var dr=$('#drawer'),bg=$('#burger');
