@@ -8,7 +8,8 @@ import { DeliveryMapView } from '@/components/map/DeliveryMapView';
 import { MilestoneTimeline } from '@/components/tracking/MilestoneTimeline';
 import { OtpDisplayBox } from '@/components/tracking/OtpDisplayBox';
 import { useOrder } from '@/hooks/useOrderTracking';
-import { useDriverChat } from '@/hooks/useDriverChat';
+import { useChatUnread } from '@/hooks/useDriverChat';
+import { UnreadBadge } from '@/components/chat/UnreadBadge';
 import { stageIndex, useOrders } from '@/stores/orders';
 import { useSession } from '@/stores/session';
 import { useAuth } from '@/stores/auth';
@@ -27,7 +28,7 @@ export default function Track() {
   const p = useTheme();
   const toast = useToast();
   const order = useOrder(orderId);
-  const chat = useDriverChat(orderId ?? '');
+  const unread = useChatUnread(orderId ?? '');
   const [tipOpen, setTipOpen] = useState(false);
   const [custom, setCustom] = useState('');
 
@@ -122,7 +123,8 @@ export default function Track() {
                   <View style={{ flex: 1 }}><Button small variant="ghost" icon={PhoneCall} label="In-app call" onPress={() => router.push(`/orders/${order.id}/call`)} /></View>
                 </Row>
                 <View style={{ marginTop: 8 }}>
-                  <Button small icon={MessageCircle} label={chat.unread ? `Chat with rider (${chat.unread} new)` : 'Chat with rider'} onPress={() => router.push(`/orders/${order.id}/chat`)} />
+                  <Button small icon={MessageCircle} label={unread ? `Chat with rider · ${unread} new` : 'Chat with rider'} onPress={() => router.push(`/orders/${order.id}/chat`)} />
+                  {unread > 0 ? <View pointerEvents="none" style={{ position: 'absolute', top: -8, right: -4 }}><UnreadBadge count={unread} /></View> : null}
                 </View>
                 <Txt size={12} color={p.mute} style={{ marginTop: 8 }}>Calls use a private ChowBuy number. Your phone number stays hidden.</Txt>
                 {!beforePickup ? <View style={{ marginTop: 10 }}><Button small variant="soft" icon={Wallet} label={order.tip ? `Tip sent ${ngn(order.tip)} · Add more` : 'Tip your rider'} onPress={() => setTipOpen(true)} /></View> : null}

@@ -54,6 +54,17 @@ export function useLiveSync() {
     return () => { clearInterval(t); sub.remove(); };
   }, []);
 
+  // chat: while a delivery is active keep the customer's messages coming in, even when the chat screen is closed, so the unread count is live
+  const activeId = useRider((st) => st.active?.order.id);
+  useEffect(() => {
+    if (!LIVE || !activeId) return;
+    let stop = false;
+    const tick = async () => { try { const rows = await live.chatMessages(activeId); if (!stop) useRider.getState().liveMessages(rows); } catch { /* try again next tick */ } };
+    void tick();
+    const t = setInterval(tick, 4000);
+    return () => { stop = true; clearInterval(t); };
+  }, [activeId]);
+
   // open orders
   useEffect(() => {
     if (!LIVE || !online || onBreak || active || hasOffer || !verified) return;

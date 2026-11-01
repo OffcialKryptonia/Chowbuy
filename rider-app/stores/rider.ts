@@ -44,6 +44,9 @@ interface RiderState {
   liveStep: (pin: string | undefined, type: RiderType | null) => Promise<{ ok: boolean; reason?: string }>;
   liveSend: (text: string) => Promise<{ ok: boolean; reason?: string }>;
   liveMessages: (rows: live.ChatRow[]) => void;
+  /** Per order: time of the newest customer message the rider has seen. Messages after it count as unread. */
+  chatSeen: Record<string, number>;
+  markChatSeen: (orderId: string) => void;
   setOnline: (v: boolean) => void;
   startShift: (s: 'morning' | 'evening' | 'night') => void;
   endShift: () => void;
@@ -189,6 +192,8 @@ export const useRider = create<RiderState>()(
         if (!a) return { ok: false, reason: 'No active delivery.' };
         try { await live.sendChat(a.order.id, text); return { ok: true }; } catch (e) { return { ok: false, reason: msg(e) }; }
       },
+      chatSeen: {},
+      markChatSeen: (orderId) => set((s) => { const last = Math.max(0, ...(s.active?.order.id === orderId ? s.active.messages : []).filter((m) => m.from === 'customer').map((m) => m.at)); return (s.chatSeen[orderId] ?? 0) >= last ? s : { chatSeen: { ...s.chatSeen, [orderId]: last } }; }),
       liveMessages: (rows) => set((s) => (s.active ? { active: { ...s.active, messages: rows.map((m) => ({ id: m.id, from: m.sender_role === 'rider' ? 'rider' as const : 'customer' as const, text: m.body, at: Date.parse(m.created_at), receipt: 'read' as const })) } } : s)),
       reset: () => set({ ...initial }),
     }),

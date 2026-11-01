@@ -26,6 +26,7 @@ export default function Chat() {
     const t = setInterval(refresh, 4000);
     return () => clearInterval(t);
   }, [refresh]);
+  useEffect(() => { if (orderId) useRider.getState().markChatSeen(orderId); }, [orderId, a?.messages.length]);   // opening the chat, or a message arriving while it is open, clears the count
   const post = (t: string, voice?: number) => {
     if (!LIVE) { send(t, 'rider', voice); return; }
     void useRider.getState().liveSend(t).then((res) => { if (!res.ok) Alert.alert('Message not sent', res.reason); else void refresh(); });

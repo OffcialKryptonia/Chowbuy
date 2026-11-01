@@ -14,6 +14,8 @@ import { useTracking } from '@/lib/tracking';
 import { useRider } from '@/stores/rider';
 import { useApply } from '@/stores/apply';
 import { LIVE } from '@/lib/config';
+import { UnreadBadge } from '@/components/UnreadBadge';
+import { useChatUnread } from '@/lib/chat-unread';
 
 const navUrl = (app: 'google' | 'apple' | 'waze', lat: number, lng: number) =>
   app === 'waze' ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`
@@ -26,6 +28,7 @@ export default function Delivery() {
   const r = useRouter();
   const type = useApply((s) => s.type);
   const a = useRider((s) => s.active);
+  const unread = useChatUnread();
   const { toggleItem, step, startUnreachable, setPhoto, supervisorApprove } = useRider.getState();
   const lastPos = useRider((s) => s.lastPos);
   const navApp = useRider((s) => s.settings.navApp);
@@ -81,7 +84,10 @@ export default function Delivery() {
           <Txt size={13} color={p.mute}>{st.hint}</Txt>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <View style={{ flex: 1 }}><Button label="Navigate" variant="soft" onPress={openNav} /></View>
-            <View style={{ flex: 1 }}><Button label="Chat" variant="soft" onPress={() => r.push(`/chat/${o.id}`)} /></View>
+            <View style={{ flex: 1 }}>
+              <Button label={unread ? `Chat · ${unread}` : 'Chat'} variant="soft" onPress={() => r.push(`/chat/${o.id}`)} />
+              {unread > 0 ? <View pointerEvents="none" style={{ position: 'absolute', top: -8, right: -4 }}><UnreadBadge count={unread} /></View> : null}
+            </View>
             <View style={{ flex: 1 }}><Button label="Call" variant="soft" onPress={() => r.push(`/call/${o.id}`)} /></View>
           </View>
         </Card>
