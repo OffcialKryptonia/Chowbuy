@@ -70,15 +70,25 @@ Deno.serve(handle(async (req) => {
     await sender.close();
   } else {
     const { data: set } = await db.from('platform_settings').select('value').eq('key', 'public').maybeSingle();
-    const provider = set?.value?.push?.provider === 'onesignal' ? 'onesignal' : 'expo';
-    const tokens = rows.map((r) => ({ id: r.id, token: r.push_token?.token as string | undefined, sound: (r.push_token?.sound as string | undefined) ?? 'dingtone' })).filter((t) => t.token);
-    if (provider === 'onesignal') {
+    const osOn = set?.value?.push?.provider === 'onesignal';
+    const all = rows.map((r) => ({ id: r.id, prov: r.push_token?.provider as string | undefined, token: r.push_token?.token as string | undefined, sound: (r.push_token?.sound as string | undefined) ?? 'dingtone' })).filter((t) => t.token);
+    // Devices register with the provider they were built for (the Rider app is always OneSignal; Customer follows Admin). Route each device to its own provider.
+    const osTargets = all.filter((t) => t.prov === 'onesignal');
+    const tokens = all.filter((t) => t.prov !== 'onesignal');
+    if (osTargets.length) {
       const key = await secret('onesignal_rest_key'), appId = set?.value?.push?.onesignalAppId;
-      if (!key || !appId) throw new HttpError(400, 'OneSignal is selected but the App ID or REST key is missing in Admin, Settings, Realtime & push.');
-      const r = await fetch('https://api.onesignal.com/notifications', { method: 'POST', headers: { Authorization: `Key ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ app_id: appId, target_channel: 'push', include_aliases: { external_id: rows.map((x) => x.id) }, headings: { en: subject }, contents: { en: body }, data: { type: 'promo' } }) });
-      if (r.ok) sent = rows.length; else { failed = rows.length; errors.push('OneSignal ' + r.status); }
-    } else {
+      if (!osOn || !key || !appId) { failed += osTargets.length; errors.push('OneSignal devices skipped: choose OneSignal and save the App ID and REST key in Admin, Settings, Realtime & push.'); }
+      else for (let i = 0; i < osTargets.length; i += 2000) {
+        const chunk = osTargets.slice(i, i + 2000);
+        const r = await fetch('https://api.onesignal.com/notifications', { method: 'POST', headers: { Authorization: `Key ${key}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ app_id: appId, target_channel: 'push', include_aliases: { external_id: chunk.map((x) => x.id) }, headings: { en: subject }, contents: { en: body }, data: { type: 'promo' } }) });
+        const j = await r.json().catch(() => ({}));
+        const bad = !r.ok || (!j.id && (j.errors?.length ?? 0) > 0);   // OneSignal answers 200 with errors when nobody is subscribed
+        if (bad) { failed += chunk.length; if (errors.length < 3) errors.push('OneSignal ' + r.status + ': ' + JSON.stringify(j.errors ?? j).slice(0, 160)); }
+        else sent += chunk.length;
+      }
+    }
+    if (tokens.length) {
       const access = await secret('expo_access_token');   // optional: only needed if you turned on "enhanced security" for push in your Expo account
       for (let i = 0; i < tokens.length; i += 100) {
         const chunk = tokens.slice(i, i + 100);
