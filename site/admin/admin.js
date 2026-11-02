@@ -189,10 +189,40 @@ function vOrders(){
   var q=(U.q.orders||'').trim().toLowerCase(),tv=T('ordV','all'),ts=T('ordS','all'),live=liveOn();
   var list=(live?L.orders.rows:S.orders).filter(function(o){return(tv==='all'||o.vertical===tv)&&(ts==='all'||o.status===ts)&&(!q||(o.id+' '+o.customer+' '+o.merchant+' '+o.rider).toLowerCase().indexOf(q)>-1)});
   var pg=paged(list,'orders',12);
-  var rows=pg.rows.map(function(o){return '<tr><td class="mono nw"><b>'+esc(o.id)+'</b></td><td class="nw muted">'+fdt(o.placed)+'</td><td>'+vbadge(o.vertical)+'</td><td>'+esc(o.merchant)+'</td><td>'+esc(o.customer)+'</td><td>'+esc(o.city)+'</td><td class="r mono">'+ngn(o.total)+'</td><td class="r mono">'+ngn(o.commission)+'</td><td>'+pill(o.status)+(live&&o.cancel_reason?'<div class="muted" style="font-size:.78rem;max-width:16rem;white-space:normal">'+(o.cancelled_by==='admin'?'Admin':'Merchant')+': '+esc(o.cancel_reason)+(o.refunded?' · refunded '+ngn(o.refunded):'')+'</div>':'')+'</td><td>'+(o.rider?esc(o.rider):'<span class="muted">'+(live&&o.status==='completed'?'—':'Unassigned')+'</span>')+'</td><td class="r">'+(live?'':btn(ic('edit')+'Manage','order',o.id))+'</td></tr>'}).join('');
+  var rows=pg.rows.map(function(o){return '<tr><td class="mono nw"><b>'+esc(o.id)+'</b></td><td class="nw muted">'+fdt(o.placed)+'</td><td>'+vbadge(o.vertical)+'</td><td>'+esc(o.merchant)+'</td><td>'+esc(o.customer)+'</td><td>'+esc(o.city)+'</td><td class="r mono">'+ngn(o.total)+'</td><td class="r mono">'+ngn(o.commission)+'</td><td>'+pill(o.status)+(live&&o.cancel_reason?'<div class="muted" style="font-size:.78rem;max-width:16rem;white-space:normal">'+(o.cancelled_by==='admin'?'Admin':'Merchant')+': '+esc(o.cancel_reason)+(o.refunded?' · refunded '+ngn(o.refunded):'')+'</div>':'')+'</td><td>'+(o.rider?esc(o.rider):'<span class="muted">'+(live&&o.status==='completed'?'—':'Unassigned')+'</span>')+'</td><td class="r">'+(live?(o.stage!=='delivered'&&o.stage!=='cancelled'?btn(ic('ban')+'Cancel order','liveCancel',o.id,'danger'):'—'):btn(ic('edit')+'Manage','order',o.id))+'</td></tr>'}).join('');
   return head('Orders',live?'Real orders from your backend (latest 200).':'Every order across restaurants, super marts, pharmacies and packages.',btn(ic('down')+'Export CSV','csvOrders',null,'')) +liveBar()+
   '<div class="card"><div class="bar">'+search('orders','Search ref, customer, merchant or rider')+'</div><div class="bar" style="gap:1rem">'+tabs('ordV',[['all','All'],['restaurant','Restaurants'],['grocery','Super Marts'],['pharmacy','Pharmacies'],['package','Packages']],1)+tabs('ordS',[['all','All'],['processing','Processing'],['completed','Completed'],['pending','Pending'],['cancelled','Cancelled']],1)+'</div>'+
   (list.length?'<div class="tw"><table class="t" style="min-width:68rem"><thead><tr><th>Reference</th><th>Placed</th><th>Vertical</th><th>Merchant</th><th>Customer</th><th>City</th><th class="r">Total</th><th class="r">Commission</th><th>Status</th><th>Rider</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+pager(pg,'orders'):empty('search','No orders match','Try a different search or clear the filters.',btn('Clear filters','clear','orders','pri')))+'</div>';
+}
+function openLiveCancelOrder(id){
+  var o=L.orders&&L.orders.rows&&L.orders.rows.find(function(x){return x.id===id});
+  if(!o){toast('Order details are no longer available. Refresh and try again.','err');return}
+  if(o.stage==='delivered'||o.stage==='cancelled'){toast('This order can no longer be cancelled.','warn');return}
+  var moving=['rider_accepted','rider_at_store','in_transit','arrived'].indexOf(o.stage)>=0;
+  openM('<h3>Cancel order '+esc(o.id)+'</h3><p class="muted">'+esc(o.merchant)+' → '+esc(o.customer)+' · '+ngn(o.total)+'</p>'+
+    '<div class="card pad" style="margin:.75rem 0;border-color:var(--red)"><b>Current status: '+esc(String(o.stage||o.status).replace(/_/g,' '))+'</b>'+
+    (moving?'<p class="sub">A rider has already been assigned or may have collected the order. Cancelling stops further delivery progression and notifies the rider.</p>':'<p class="sub">The customer and merchant will be notified.</p>')+'</div>'+
+    '<div class="f"><label for="cancelReason">Cancellation reason (required)</label><textarea id="cancelReason" name="reason" rows="3" maxlength="500" required placeholder="Explain why this order is being cancelled"></textarea></div>'+
+    '<div class="f"><label for="cancelNote">Internal note (optional)</label><textarea id="cancelNote" name="note" rows="2" maxlength="1000" placeholder="Internal note for the admin audit trail"></textarea></div>'+
+    (o.paid?'<p class="muted">Payment recorded: this action flags a refund for manual review. It does not claim a refund has been processed.</p>':'')+
+    '<div class="ft"><button type="button" class="btn" data-m="x">Keep order</button><button type="submit" class="btn danger">Confirm cancellation</button></div>',
+    function(v){
+      var reason=String(v.reason||'').trim(),note=String(v.note||'').trim();
+      if(reason.length<5)return 'Please provide a reason of at least 5 characters.';
+      if(reason.length>500||note.length>1000)return 'The reason or note is too long.';
+      var submit=$('#mf button[type=submit]');if(submit)submit.disabled=true;
+      beReq('/rest/v1/rpc/admin_cancel_order','POST',{p_order:id,p_reason:reason,p_internal_note:note})
+        .then(function(result){
+          closeM();
+          toast(id+' cancelled'+(result&&result.refund_status==='manual_review_required'?' · refund review required':''));
+          return liveLoad();
+        })
+        .catch(function(err){
+          var er=$('#merr');if(er)er.textContent=err.message||'Could not cancel this order.';
+          var b=$('#mf button[type=submit]');if(b)b.disabled=false;
+        });
+      return false;
+    });
 }
 function openOrder(id){
   var o=find(S.orders,id);if(!o)return;
@@ -802,6 +832,7 @@ var A={
  liveReload:function(){liveLoad()},
  ridersReload:function(){ridersLoad()},
  order:function(el){openOrder(el.getAttribute('data-id'))},
+ liveCancel:function(el){openLiveCancelOrder(el.getAttribute('data-id'))},
  csvOrders:function(){csv('chowbuy-orders.csv',[['Reference','Placed','Vertical','Merchant','Customer','City','Total NGN','Commission NGN','Status','Rider']].concat((liveOn()?L.orders.rows:S.orders).map(function(o){return[o.id,fdt(o.placed),V[o.vertical],o.merchant,o.customer,o.city,o.total,o.commission,o.status,o.rider]})));toast('Exported '+S.orders.length+' orders to CSV')},
 
  csvWt:function(){if(liveOn()&&L.wt){csv('chowbuy-wallet-transfers.csv',[['Reference','Time','Sender','Recipient','Amount NGN','Fee NGN','Status']].concat(L.wt.rows.map(function(t){return[t.id,fdt(t.created_at),t.from,t.to,t.amount,t.fee,t.status]})));toast('Exported '+L.wt.rows.length+' ledger entries to CSV');return}
