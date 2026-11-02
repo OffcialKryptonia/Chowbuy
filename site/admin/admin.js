@@ -640,9 +640,23 @@ function vPricing(){
   return head('Settings & pricing','Commission, delivery pricing, coverage and payment rails.',
     (ch.length?'<span class="badge-un">'+ch.length+' unsaved</span>'+btn('Discard','sDiscard',null,''):'')+btn(ic('check')+'Save settings','sSave',null,'pri'))+
   setTabs()+'<div class="grid g2"><div class="card pad"><h3>Commission by vertical</h3><p class="sub">Percentage ChowBuy keeps from each order.</p><div class="frow" style="margin-top:1rem">'+Object.keys(V).map(function(k){return '<div class="f"><label for="r-'+k+'">'+V[k]+' (%)</label><input id="r-'+k+'" data-fid="r-'+k+'" data-in="rate:'+k+'" inputmode="decimal" value="'+esc(D.rates[k])+'"></div>'}).join('')+'</div></div>'+
-  '<div class="card pad"><h3>Delivery pricing engine</h3><p class="sub">Used to price every delivery.</p><div class="frow" style="margin-top:1rem">'+fare.map(function(f){return '<div class="f"><label for="f-'+f[0]+'">'+f[1]+' ('+f[2]+')</label><input id="f-'+f[0]+'" data-fid="f-'+f[0]+'" data-in="fare:'+f[0]+'" inputmode="numeric" value="'+esc(D.fare[f[0]])+'"></div>'}).join('')+'</div></div></div>'+
+  dlvCard()+'</div>'+
   '<div class="grid g2"><div class="card pad"><div class="acts" style="justify-content:space-between"><div><h3>Operating cities</h3><p class="sub">Where customers can order today.</p></div>'+btn(ic('plus')+'Add city','addCity',null,'')+'</div><div class="chips" style="margin-top:1rem">'+D.cities.map(function(c){return '<span class="cp on">'+ic('pin')+esc(c)+'<button type="button" data-act="rmCity" data-id="'+esc(c)+'" aria-label="Remove '+esc(c)+'">'+ic('x')+'</button></span>'}).join('')+'</div></div>'+
   '<div class="card pad"><h3>Payment rails</h3><p class="sub">Korapay, Pocketfi, cash on delivery and the ChowBuy wallet are managed in the Payment gateways tab.</p><div style="margin-top:1rem"><button type="button" class="btn" data-act="tab" data-k="setTab" data-v="payments">Open payment gateways</button></div></div></div>';
+}
+
+/* Delivery pricing engine: the live fare Admin sets here is the delivery fee every store charges. Merchants cannot change it. */
+var DLVF=[['base','Base delivery fare (₦)','Applied to every order now.',1],['perKm','Distance charge per km (₦)','Saved, not applied to orders yet.',0],['service','Platform service fee (₦)','Saved, not applied to orders yet.',0],['minBasket','Minimum basket order value (₦)','Saved, not applied to orders yet.',0]];
+function dlvDirty(){return !!(U.dlv&&U.dlvD&&DLVF.some(function(f){return String(U.dlv[f[0]])!==String(U.dlvD[f[0]])}))}
+function dlvCard(){
+  if(!beOn()){var fare=[['base','Base delivery fare','₦'],['perKm','Distance charge per km','₦'],['service','Platform service fee','₦'],['minBasket','Minimum basket order value','₦']],D=sGet();
+    return '<div class="card pad"><h3>Delivery pricing engine</h3><p class="sub">Demo values. Connect the live backend to set the real delivery fee.</p><div class="frow" style="margin-top:1rem">'+fare.map(function(f){return '<div class="f"><label for="f-'+f[0]+'">'+f[1]+' ('+f[2]+')</label><input id="f-'+f[0]+'" data-fid="f-'+f[0]+'" data-in="fare:'+f[0]+'" inputmode="numeric" value="'+esc(D.fare[f[0]])+'"></div>'}).join('')+'</div></div>'}
+  if(!U.dlv&&!U.dlvBusy&&!U.dlvErr){U.dlvBusy=true;setTimeout(function(){beReq('/rest/v1/rpc/admin_delivery_get','POST',{}).then(function(r){U.dlv=r;U.dlvD=clone(r);U.dlvBusy=false;refresh()},function(e){U.dlvBusy=false;U.dlvErr=e.message;refresh()})},0)}
+  if(!U.dlv)return '<div class="card pad"><h3>Delivery pricing engine</h3><p class="sub">'+(U.dlvErr?esc(U.dlvErr):'Loading…')+'</p>'+(U.dlvErr?btn('Try again','dlvRetry',null,''):'')+'</div>';
+  var dirty=dlvDirty();
+  return '<div class="card pad"><div class="acts" style="justify-content:space-between"><div><h3>Delivery pricing engine</h3><p class="sub">Only Admin sets delivery fees. The base fare applies to every store, and merchants cannot change it.</p></div>'+(dirty?'<span class="badge-un">Unsaved</span>':'')+'</div>'+
+   '<div class="frow" style="margin-top:1rem">'+DLVF.map(function(f){return '<div class="f"><label for="d-'+f[0]+'">'+f[1]+'</label><input id="d-'+f[0]+'" data-fid="d-'+f[0]+'" data-in="dlv:'+f[0]+'" inputmode="numeric" value="'+esc(U.dlvD[f[0]])+'"><small>'+f[2]+'</small></div>'}).join('')+'</div>'+
+   '<div class="acts" style="margin-top:1rem">'+btn(ic('check')+'Save delivery pricing','dlvSave',null,'pri',dirty&&!U.dlvSaving?'':' disabled')+(dirty?btn('Discard','dlvDiscard',null,''):'')+'</div></div>';
 }
 function openAddCity(){
   openM('<h3>Add operating city</h3>'+inp('name','City','','placeholder="e.g. Enugu" maxlength="40" required')+inp('state','State / region','','placeholder="e.g. Enugu" maxlength="40" required')+'<div class="ft"><button type="button" class="btn" data-m="x">Cancel</button><button type="submit" class="btn pri">Add city</button></div>',
@@ -893,7 +907,22 @@ var CHG={
  brand:function(k,v){if(k==='color'){v=String(v).trim();if(v[0]!=='#')v='#'+v;if(!/^#[0-9a-fA-F]{6}$/.test(v)){toast('Use a 6-digit hex colour such as #FF5A1F.','err');refresh();return}bdraft()[U.brand].color=v.toUpperCase();save();refresh();toast('Brand colour set to '+v.toUpperCase()+' in draft.')}}
 };
 pwaReg();
+function bcImageField(s){
+  return '<div class="f"><label for="bc-img">Promotional image (optional)</label>'+(s.image?'<div class="cmimg"><img class="thumb" src="'+esc(s.image)+'" alt="Promotional image preview"><div class="cmimg-b"><div class="acts"><label class="btn" for="bc-img">'+ic('upload')+'Replace</label>'+btn(ic('trash')+'Remove','bcImgClear',null,'')+'</div></div></div>':'<label class="btn" for="bc-img" style="width:fit-content">'+ic('upload')+(s.imgBusy?'Uploading…':'Add an image')+'</label>')+
+   '<input id="bc-img" type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-file="bcimg" hidden><small>PNG, JPG, WebP or GIF up to 5 MB. Shown under the heading. A wide picture, about 1200 × 600, looks best.</small>'+(s.imgErr?'<div class="err">'+esc(s.imgErr)+'</div>':'')+'</div>';
+}
+function bcImgFile(file,input){
+  var s=U.bc.email;if(!file)return;s.imgErr='';
+  if(!beOn()){s.imgErr='Connect the live backend to upload images.';input.value='';refresh();return}
+  if(!/^image\/(png|jpe?g|webp|gif)$/.test(file.type)){s.imgErr='Use a PNG, JPG, WebP or GIF image.';input.value='';refresh();return}
+  if(file.size>5*1048576){s.imgErr='That image is '+(file.size/1048576).toFixed(1)+' MB. The limit is 5 MB.';input.value='';refresh();return}
+  var ext={'image/png':'png','image/jpeg':'jpg','image/webp':'webp','image/gif':'gif'}[file.type],name=Date.now().toString(36)+Math.random().toString(36).slice(2,8)+'.'+ext;
+  s.imgBusy=true;refresh();
+  pwaPut('email/'+name,file,file.type,false).then(function(){s.image=BE.url.replace(/\/+$/,'')+'/storage/v1/object/public/brand/email/'+name;s.imgBusy=false;input.value='';refresh();toast('Image added. Send a test to check how it looks.')},
+    function(e){s.imgBusy=false;s.imgErr=e.message;input.value='';refresh()});
+}
 function onFile(slot,file,input){
+  if(slot==='bcimg')return bcImgFile(file,input);
   if(slot==='pwaicon')return pwaFile(file,input);
   if(!file)return;
   var okType=/^image\/(svg\+xml|png|webp|jpeg)$/.test(file.type);
@@ -1711,7 +1740,7 @@ function ensureMsg(){
   S.msg.email.raw={};   /* secrets are never kept in this browser */
 }
 ensureMsg();
-U.edraft=null;U.econn='';U.bc={email:{roles:{customer:true,rider:false,merchant:false},subject:'',body:'',counts:null,busy:false,prog:null},push:{roles:{customer:true,rider:false,merchant:false},subject:'',body:'',counts:null,busy:false,prog:null}};
+U.edraft=null;U.econn='';U.bc={email:{roles:{customer:true,rider:false,merchant:false},subject:'',body:'',image:'',counts:null,busy:false,prog:null},push:{roles:{customer:true,rider:false,merchant:false},subject:'',body:'',counts:null,busy:false,prog:null}};
 U.beMsg='';U.beBusy=false;U.hist=null;
 function ee(){if(!U.edraft)U.edraft=clone(S.msg.email);return U.edraft}
 function ed(){return U.edraft||S.msg.email}
@@ -1943,7 +1972,7 @@ function vBroadcast(kind){
   if(s.counts===null&&roles.length&&!s.busy&&!s.loaded){s.loaded=true;setTimeout(function(){bcCount(kind);refresh()},0)}
   var picker='<div class="tabs sm" role="group" aria-label="Recipients"><button type="button" data-act="bcAll" data-id="'+kind+'" aria-pressed="'+all+'">Select all</button>'+BCROLES.map(function(r){return '<button type="button" data-act="bcRole" data-id="'+kind+':'+r[0]+'" aria-pressed="'+!!s.roles[r[0]]+'">'+r[1]+(s.counts&&s.counts[r[0]]!=null?' · '+num(s.counts[r[0]]):'')+'</button>'}).join('')+'</div>';
   var limitS=em?150:65,limitB=em?20000:178;
-  var prev=em?'<div style="background:#FFF8F3;border-radius:1rem;padding:1rem;color:#1F1A17"><div style="background:#FF5A1F;color:#fff;padding:.7rem 1rem;border-radius:.7rem .7rem 0 0;font-weight:800">ChowBuy</div><div style="background:#fff;padding:1rem;border-radius:0 0 .7rem .7rem"><b style="font-size:1.05rem">'+esc(s.subject||'Your subject line')+'</b><div style="margin-top:.7rem;white-space:pre-wrap;line-height:1.5;font-size:.92rem">'+esc((s.body||'Your message appears here.').replace(/\{\{first_name\}\}/g,'Ada'))+'</div></div></div>'
+  var prev=em?'<div style="background:#FFF8F3;border-radius:1rem;padding:1rem;color:#1F1A17"><div style="background:#FF5A1F;color:#fff;padding:.7rem 1rem;border-radius:.7rem .7rem 0 0;font-weight:800">ChowBuy</div><div style="background:#fff;padding:1rem;border-radius:0 0 .7rem .7rem"><b style="font-size:1.05rem">'+esc(s.subject||'Your subject line')+'</b>'+(s.image?'<img src="'+esc(s.image)+'" alt="" style="display:block;width:100%;height:auto;border-radius:.6rem;margin-top:.7rem">':'')+'<div style="margin-top:.7rem;white-space:pre-wrap;line-height:1.5;font-size:.92rem">'+esc((s.body||'Your message appears here.').replace(/\{\{first_name\}\}/g,'Ada'))+'</div></div></div>'
      :'<div style="background:linear-gradient(160deg,#1e293b,#0f172a);border-radius:1.4rem;padding:1.2rem"><div style="background:rgba(255,255,255,.92);color:#111;border-radius:1rem;padding:.8rem .9rem;display:flex;gap:.7rem"><span style="flex:none;width:2.2rem;height:2.2rem;border-radius:.55rem;background:#FF5A1F;color:#fff;display:grid;place-items:center;font-weight:800">C</span><div style="min-width:0"><div style="font-size:.72rem;opacity:.6">CHOWBUY · now</div><b style="display:block;font-size:.9rem">'+esc(s.subject||'Notification title')+'</b><span style="font-size:.85rem;line-height:1.35;display:block;word-break:break-word">'+esc((s.body||'Notification text appears here.').replace(/\{\{first_name\}\}/g,'Ada'))+'</span></div></div></div>';
   var ok=!!roles.length&&s.subject.trim().length>=3&&s.body.trim().length>=3&&!s.busy;
   var prog=s.prog?'<div class="card pad" role="status"><b>'+(s.prog.done?'Finished':'Sending…')+'</b><div class="muted" style="font-size:.9rem;margin-top:.3rem">Delivered '+num(s.prog.sent)+(s.prog.failed?' · Failed '+num(s.prog.failed):'')+(s.prog.total!=null&&!s.prog.done?' of about '+num(s.prog.total):'')+(s.prog.demo?' (demo, nothing was sent)':'')+'</div>'+(s.prog.err?'<div class="err" style="margin-top:.4rem">'+esc(s.prog.err)+'</div>':'')+'<div style="height:.5rem;border-radius:1rem;background:var(--fill,rgba(127,127,127,.15));margin-top:.7rem;overflow:hidden"><div style="height:100%;width:'+(s.prog.total?Math.min(100,Math.round((s.prog.sent+s.prog.failed)/s.prog.total*100)):(s.prog.done?100:5))+'%;background:var(--accent,#FF5A1F)"></div></div></div>':'';
@@ -1951,19 +1980,29 @@ function vBroadcast(kind){
   return head(em?'Broadcast email':'Push promotions',em?'Send an email to customers, drivers or merchants.':'Send a promotional push notification to customers, drivers or merchants.')+
   '<div style="display:grid;gap:1rem">'+(beOn()?'':beCard())+
   '<div class="grid g2" style="align-items:start"><div class="card pad"><h3>1. Choose recipients</h3><p class="sub">Only people who have not opted out'+(em?' and who have an email address':' and who have a registered device')+' are counted.</p><div style="margin-top:1rem">'+picker+'</div>'+
-  '<p style="margin-top:1rem" role="status"><b class="mono" style="font-size:1.4rem">'+(total==null?(roles.length?'…':'0'):num(total))+'</b> <span class="muted">'+(roles.length?'people will receive this':'Choose at least one group')+(s.demo&&total!=null?' (demo numbers)':'')+'</span></p>'+(s.err?'<div class="err">'+esc(s.err)+'</div>':'')+
+  '<p style="margin-top:1rem" role="status"><b class="mono" style="font-size:1.4rem">'+(total==null?(roles.length?'…':'0'):num(total))+'</b> <span class="muted">'+(roles.length?'people will receive this':'Choose at least one group')+(s.demo&&total!=null?' (demo numbers)':'')+'</span></p>'+(!em&&total===0&&roles.length?'<p class="muted" style="font-size:.88rem;margin-top:.4rem">No devices are registered yet. People appear here after they open the latest ChowBuy app (or the Merchant app on the web), sign in and tap Allow on the notification prompt. Email counts show everyone with an address.</p>':'')+(s.err?'<div class="err">'+esc(s.err)+'</div>':'')+
   '<h3 style="margin-top:1.4rem">2. Write your message</h3><div style="display:grid;gap:.9rem;margin-top:1rem">'+
   inp('bc-s',em?'Subject':'Title',s.subject,'data-fid="bc-s" data-in="bc:'+kind+'.subject" maxlength="'+limitS+'" autocomplete="off"')+
-  '<div class="f"><label for="bc-b">'+(em?'Message':'Text')+'</label><textarea id="bc-b" data-fid="bc-b" data-in="bc:'+kind+'.body" rows="'+(em?9:4)+'" maxlength="'+limitB+'" style="width:100%">'+esc(s.body)+'</textarea><small>'+s.body.length+' / '+num(limitB)+' characters. Use <code>{{first_name}}</code> to greet people by name.'+(em?' Blank lines start a new paragraph.':'')+'</small></div></div>'+
+  '<div class="f"><label for="bc-b">'+(em?'Message':'Text')+'</label><textarea id="bc-b" data-fid="bc-b" data-in="bc:'+kind+'.body" rows="'+(em?9:4)+'" maxlength="'+limitB+'" style="width:100%">'+esc(s.body)+'</textarea><small>'+s.body.length+' / '+num(limitB)+' characters. Use <code>{{first_name}}</code> to greet people by name.'+(em?' Blank lines start a new paragraph.':'')+'</small></div>'+(em?bcImageField(s):'')+'</div>'+
   '<div class="acts" style="margin-top:1.2rem">'+btn(ic('send')+'Send test to me','bcTest',kind,'',ok&&beOn()?'':' disabled')+btn(ic('send')+'Send to '+(total==null?'…':num(total))+' people','bcSend',kind,'pri',ok?'':' disabled')+'</div>'+(beOn()?'':'<small class="muted" style="display:block;margin-top:.5rem">Demo mode: sending is simulated.</small>')+(em?'<small class="muted" style="display:block;margin-top:.5rem">Emails include a note on how to stop promotional emails (App, Profile, Notifications). Needs email set up in Settings, Email.</small>':'<small class="muted" style="display:block;margin-top:.5rem">Needs the Expo access token or OneSignal key in Settings, and customers must have allowed notifications.</small>')+'</div>'+
   '<div style="display:grid;gap:1rem"><div class="card pad"><h3>Preview</h3><div style="margin-top:1rem">'+prev+'</div></div>'+prog+'</div></div>'+
   '<div class="card"><div class="pad" style="padding-bottom:0"><h3>Recent campaigns</h3></div>'+(hist.length?'<div class="tw"><table class="t" style="min-width:40rem"><thead><tr><th>'+(em?'Subject':'Title')+'</th><th>Sent to</th><th class="r">Delivered</th><th class="r">Failed</th><th>When</th></tr></thead><tbody>'+hist.map(function(h){return '<tr><td>'+esc(h[0])+'</td><td>'+esc(h[1])+'</td><td class="r mono">'+num(h[2])+'</td><td class="r mono">'+num(h[3])+'</td><td class="nw">'+esc(h[4])+'</td></tr>'}).join('')+'</tbody></table></div>':empty(em?'mail':'bell','No campaigns yet','Campaigns you send will be listed here.'))+'</div></div>';
 }
-Object.assign(INP,{bc:function(k,v){var p=k.split('.');U.bc[p[0]][p[1]]=v;refresh()}});
+Object.assign(INP,{dlv:function(k,v){if(U.dlvD){U.dlvD[k]=String(v).replace(/[^\d]/g,'');refresh()}},bc:function(k,v){var p=k.split('.');U.bc[p[0]][p[1]]=v;refresh()}});
 function bcToggle(kind,role){var s=U.bc[kind];s.roles[role]=!s.roles[role];s.counts=null;s.err='';s.loaded=false;s.prog=null;refresh()}
 Object.assign(A,{
  bcRole:function(el){var p=el.getAttribute('data-id').split(':');bcToggle(p[0],p[1])},
  bcAll:function(el){var k=el.getAttribute('data-id'),s=U.bc[k],all=bcRoles(s).length===3;BCROLES.forEach(function(r){s.roles[r[0]]=!all});if(all)s.roles.customer=false;s.counts=null;s.err='';s.loaded=false;s.prog=null;refresh()},
+ dlvRetry:function(){U.dlvErr='';refresh()},
+ dlvDiscard:function(){U.dlvD=clone(U.dlv);refresh()},
+ dlvSave:function(){
+   if(!dlvDirty()||U.dlvSaving)return;
+   var p={};DLVF.forEach(function(f){p[f[0]]=Number(U.dlvD[f[0]]===''?NaN:U.dlvD[f[0]])});
+   if(!isFinite(p.base)){toast('Enter the base delivery fare in naira.','err');return}
+   U.dlvSaving=true;refresh();
+   beReq('/rest/v1/rpc/admin_delivery_save','POST',{p:p}).then(function(r){U.dlv=r;U.dlvD=clone(r);U.dlvSaving=false;refresh();toast('Saved. Every store now charges '+ngn(r.base)+' for delivery.')},function(e){U.dlvSaving=false;refresh();toast(e.message,'err')});
+ },
+ bcImgClear:function(){U.bc.email.image='';U.bc.email.imgErr='';refresh()},
  bcTest:function(el){bcRun(el.getAttribute('data-id'),true)},
  bcSend:function(el){
    var kind=el.getAttribute('data-id'),s=U.bc[kind],roles=bcRoles(s),names=BCROLES.filter(function(r){return s.roles[r[0]]}).map(function(r){return r[1].toLowerCase()}),t=bcTotal(kind);
@@ -1982,7 +2021,7 @@ function bcRun(kind,test){
   if(!beOn()){var n=test?1:(s.prog.total||0),i=0;(function step(){i+=Math.max(1,Math.ceil(n/6));s.prog.sent=Math.min(n,i);refresh();if(s.prog.sent<n)setTimeout(step,250);else finish()})();return}
   var cursor=null,id=null;
   (function page(){
-    beFn('admin-broadcast',{kind:kind,roles:roles,subject:s.subject.trim(),body:s.body.trim(),test:!!test,cursor:cursor,broadcastId:id}).then(function(r){
+    beFn('admin-broadcast',{kind:kind,roles:roles,subject:s.subject.trim(),body:s.body.trim(),image:kind==='email'?(s.image||''):'',test:!!test,cursor:cursor,broadcastId:id}).then(function(r){
       id=r.broadcastId||id;s.prog.sent+=r.sent||0;s.prog.failed+=r.failed||0;cursor=r.cursor;
       if(r.errors&&r.errors.length&&!s.prog.err)s.prog.err=r.errors[0];
       if(r.done||test||!cursor){finish(test&&!r.sent?(r.errors&&r.errors[0])||'The test could not be delivered.':'')}else{refresh();page()}

@@ -23,6 +23,10 @@ Deno.serve(handle(async (req) => {
   const subject = String(b.subject ?? '').trim(), body = String(b.body ?? '').trim();
   if (subject.length < 3 || subject.length > (kind === 'email' ? 150 : 65)) throw new HttpError(400, kind === 'email' ? 'The subject must be 3 to 150 characters.' : 'The title must be 3 to 65 characters.');
   if (body.length < 3 || body.length > (kind === 'email' ? 20000 : 178)) throw new HttpError(400, kind === 'email' ? 'Write the message body.' : 'Push messages are limited to 178 characters.');
+  // Optional promotional image for emails: only pictures uploaded to our own public brand bucket (email/ folder) are accepted.
+  const base = (Deno.env.get('SUPABASE_URL') ?? '').replace(/\/+$/, '') + '/storage/v1/object/public/brand/email/';
+  const image = kind === 'email' && typeof b.image === 'string' && b.image ? String(b.image) : '';
+  if (image && (!image.startsWith(base) || image.length > 300 || !/^[A-Za-z0-9._-]+$/.test(image.slice(base.length)))) throw new HttpError(400, 'That promotional image is not allowed. Upload it again from this page.');
   const db = admin();
   const test = b.test === true;
 
@@ -61,7 +65,7 @@ Deno.serve(handle(async (req) => {
       for (let r = queue.shift(); r; r = queue.shift()) {
         const first = (r.full_name || '').split(' ')[0] || 'there';
         const personal = (t: string) => t.replaceAll('{{first_name}}', first);
-        const { html, text } = renderEmail(personal(subject), personal(body), footer);
+        const { html, text } = renderEmail(personal(subject), personal(body), footer, image || undefined);
         try { await sender.send({ to: r.email!, subject: (test ? '[Test] ' : '') + personal(subject), html, text }); sent++; }
         catch (e) { failed++; if (errors.length < 3) errors.push(e instanceof Error ? e.message : 'send failed'); }
       }
