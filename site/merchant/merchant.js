@@ -1053,9 +1053,49 @@ function buildLiveS(){
   S.notifs=[];S.activity=[];S.items=[];S.cats=[];S.ships=[];S.rx=[];S.reviews=[];
   S.orders=(LV.orders||[]).map(mapOrder);
 }
+
+/* ---------- store photos (logo, cover, products) ---------- */
+function dataUrlBlob(u){var a=u.split(','),m=/data:([^;]+)/.exec(a[0])[1],b=atob(a[1]),n=b.length,u8=new Uint8Array(n);while(n--)u8[n]=b.charCodeAt(n);return new Blob([u8],{type:m})}
+function storeUpload(file,kind,max){
+  return new Promise(function(ok,bad){
+    if(!/^image\/(png|jpe?g|webp)$/.test(file.type)){bad(new Error('Use a JPG, PNG or WebP photo.'));return}
+    compress(file,function(du){
+      var name=kind+'-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)+'.jpg',id=LV.store.id,tok=lget('cb-merch-tok');
+      fetch(LAPI.url+'/storage/v1/object/store-media/'+encodeURIComponent(id)+'/'+name,{method:'POST',headers:{apikey:LAPI.anon,Authorization:'Bearer '+tok,'Content-Type':'image/jpeg','x-upsert':'false','cache-control':'max-age=3600'},body:dataUrlBlob(du)})
+       .then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(/row-level security|Unauthorized/i.test(t)?'You are not allowed to upload photos for this store.':'Upload failed ('+r.status+'). Try again.')});ok(LAPI.url+'/storage/v1/object/public/store-media/'+id+'/'+name)})
+       .catch(function(e){bad(e.message==='Failed to fetch'?new Error('Could not reach the server. Check your connection.'):e)});
+    },max||1200);
+  });
+}
+function lmediaCard(){
+  var m=LV.media||{},b=U.mbusy||'';
+  var tile=function(id,label,hint,cur,wide){return '<div class="f"><label>'+label+'</label><div class="drop" data-drop="'+id+'" tabindex="0" role="button" aria-label="'+esc(label)+'" style="'+(wide?'min-height:9rem':'')+'">'+(cur?'<img src="'+esc(cur)+'" alt="" style="'+(wide?'width:100%;max-height:11rem;object-fit:cover;border-radius:.6rem':'width:4.5rem;height:4.5rem;object-fit:cover;border-radius:50%')+'">':'<span>'+ic('upload')+'</span>')+'<div><b>'+(b===id?'Uploading…':cur?'Change photo':'Add photo')+'</b><small>'+hint+'</small></div><input type="file" accept="image/png,image/jpeg,image/webp" hidden data-file="'+id+'"></div>'+(cur?'<button type="button" class="btn sm" data-act="lmRemove" data-id="'+id+'" style="margin-top:.4rem">Remove</button>':'')+'</div>'};
+  return '<div class="card pad" style="margin-top:1rem"><h3>Store photos</h3><p class="sub">Customers see your cover on your store card and your logo next to your name. JPG, PNG or WebP.</p><div class="mgrid" style="margin-top:1rem">'+
+    tile('lslogo','Business logo','Square picture, at least 400 × 400',m.logo,false)+tile('lscover','Cover image','Wide picture, about 1200 × 600',m.image,true)+'</div></div>';
+}
+function lmediaSave(kind,url){
+  var args={p_merchant:LV.store.id};args[kind==='logo'?'p_logo':'p_cover']=url;
+  return lrpc('merchant_media_save',args).then(function(){LV.media=LV.media||{};LV.media[kind==='logo'?'logo':'image']=url||null});
+}
+FILES.lslogo=function(f){lmediaPick(f,'logo',600)};
+FILES.lscover=function(f){lmediaPick(f,'cover',1400)};
+function lmediaPick(f,kind,max){
+  if(!f)return;var id=kind==='logo'?'lslogo':'lscover';U.mbusy=id;refresh();
+  storeUpload(f,kind,max).then(function(u){return lmediaSave(kind,u)}).then(function(){U.mbusy='';refresh();toast(kind==='logo'?'Logo saved.':'Cover image saved.')},function(e){U.mbusy='';refresh();toast(e.message,'err')});
+}
+function pimgBox(){
+  var b=U.pimgBusy;
+  return '<div class="drop" data-drop="lpimg" tabindex="0" role="button" aria-label="Product photo">'+(U.pimg?'<img src="'+esc(U.pimg)+'" alt="" style="width:5rem;height:5rem;object-fit:cover;border-radius:.6rem">':'<span>'+ic('upload')+'</span>')+'<div><b>'+(b?'Uploading…':U.pimg?'Change photo':'Add a photo')+'</b><small>Clear, bright, square works best</small></div><input type="file" accept="image/png,image/jpeg,image/webp" hidden data-file="lpimg"></div>'+(U.pimg?'<button type="button" class="btn sm" data-act="lpRemove" style="margin-top:.4rem">Remove photo</button>':'');
+}
+function pimgDraw(){var b=$('#pimgbox');if(b)b.innerHTML=pimgBox()}
+FILES.lpimg=function(f){
+  if(!f)return;U.pimgBusy=true;pimgDraw();
+  storeUpload(f,'product',1000).then(function(u){U.pimg=u;U.pimgChanged=true;U.pimgBusy=false;pimgDraw()},function(e){U.pimgBusy=false;pimgDraw();var er=$('#merr');if(er)er.textContent=e.message;toast(e.message,'err')});
+};
 function liveLoad(){
   var id=LV.store.id;
-  return Promise.all([lrpc('merchant_orders',{p_merchant:id,p_limit:200}),lreq('/rest/v1/products?merchant_id=eq.'+encodeURIComponent(id)+'&select=id,name,descr,price,category,in_stock,rx&order=category.asc,name.asc&limit=1000','GET')]).then(function(r){
+  return Promise.all([lrpc('merchant_orders',{p_merchant:id,p_limit:200}),lreq('/rest/v1/products?merchant_id=eq.'+encodeURIComponent(id)+'&select=id,name,descr,price,category,in_stock,rx,image&order=category.asc,name.asc&limit=1000','GET'),lreq('/rest/v1/merchants?id=eq.'+encodeURIComponent(id)+'&select=logo,image,delivery_fee','GET').catch(function(){return []})]).then(function(r){
+    LV.media=(r[2]&&r[2][0])||LV.media||{};
     var fresh=[];if(LV.seen){r[0].forEach(function(o){if(o.stage==='received'&&!LV.seen[o.id])fresh.push(o)})}
     LV.seen=LV.seen||{};r[0].forEach(function(o){LV.seen[o.id]=1});
     LV.orders=r[0];LV.products=r[1];buildLiveS();
@@ -1094,13 +1134,15 @@ function vCatalogLive(){
   var rows=P.filter(function(p){return(t==='all'||lcat(p)===t)&&(!q||(p.name+' '+lcat(p)).toLowerCase().indexOf(q)>=0)});
   return head(rest?'Menu':'Products','What customers can order from you. Changes are live straight away.',btn(ic('plus')+'Add '+(rest?'dish':'product'),'pNew','','pri'))+
   '<div class="card"><div class="bar"><div class="tabs" role="group"><button type="button" data-act="tab" data-k="lcat" data-v="all" aria-pressed="'+(t==='all')+'">All <em>'+P.length+'</em></button>'+cats.map(function(c){return '<button type="button" data-act="tab" data-k="lcat" data-v="'+esc(c)+'" aria-pressed="'+(t===c)+'">'+esc(c)+'</button>'}).join('')+'</div>'+search('lcat','Search items')+'</div>'+
-  (rows.length?'<div class="tw"><table class="t" style="min-width:36rem"><thead><tr><th>Item</th><th>Category</th><th style="text-align:right">Price</th><th>Available</th><th></th></tr></thead><tbody>'+rows.map(function(p){return '<tr><td><b>'+esc(p.name)+'</b>'+(p.rx?' '+pill('Rx','warn'):'')+(p.descr?'<div class="muted" style="font-size:.8rem">'+esc(p.descr.length>70?p.descr.slice(0,70)+'…':p.descr)+'</div>':'')+'</td><td>'+esc(lcat(p))+'</td><td class="mono" style="text-align:right">'+ngn(p.price)+'</td><td>'+sw(p.in_stock,'pStock',p.id,'Available to order')+'</td><td><div class="acts">'+btn('Edit','pEdit',p.id)+btn('Delete','pDel',p.id,'danger')+'</div></td></tr>'}).join('')+'</tbody></table></div>'
+  (rows.length?'<div class="tw"><table class="t" style="min-width:36rem"><thead><tr><th>Item</th><th>Category</th><th style="text-align:right">Price</th><th>Available</th><th></th></tr></thead><tbody>'+rows.map(function(p){return '<tr><td>'+(p.image?'<img src="'+esc(p.image)+'" alt="" loading="lazy" style="width:2.4rem;height:2.4rem;border-radius:.5rem;object-fit:cover;vertical-align:middle;margin-right:.6rem">':'')+'<b>'+esc(p.name)+'</b>'+(p.rx?' '+pill('Rx','warn'):'')+(p.descr?'<div class="muted" style="font-size:.8rem">'+esc(p.descr.length>70?p.descr.slice(0,70)+'…':p.descr)+'</div>':'')+'</td><td>'+esc(lcat(p))+'</td><td class="mono" style="text-align:right">'+ngn(p.price)+'</td><td>'+sw(p.in_stock,'pStock',p.id,'Available to order')+'</td><td><div class="acts">'+btn('Edit','pEdit',p.id)+btn('Delete','pDel',p.id,'danger')+'</div></td></tr>'}).join('')+'</tbody></table></div>'
     :empty('bag',P.length?'No match':(rest?'Your menu is ready to be created':'Your catalogue is empty'),P.length?'Try another category or clear the search.':(CKHELP[LV.store.type]||'Add your first product.'),P.length?'':btn('Add '+(rest?'dish':'product'),'pNew','','pri')))+'</div>';
 }
 function pForm(p){
+  U.pimg=p&&p.image?p.image:'';U.pimgChanged=false;
   var rest=S.vertical==='restaurant',cats=[];(LV.products||[]).forEach(function(x){if(cats.indexOf(lcat(x))<0)cats.push(lcat(x))});
   return '<h3>'+(p?'Edit':'Add')+' '+(rest?'dish':'product')+'</h3>'+inp('pn','Name',p?p.name:'','maxlength="80" required')+
    '<div class="f"><label for="pd">Description</label><textarea id="pd" name="pd" rows="3" maxlength="400">'+esc(p?p.descr:'')+'</textarea></div>'+
+   '<div class="f"><label>Photo</label><div id="pimgbox">'+pimgBox()+'</div></div>'+
    '<div class="mgrid">'+inp('pp','Price (₦)',p?p.price:'','inputmode="numeric" placeholder="3500"')+inp('pc','Category',p?p.category:'','maxlength="40" list="pcl" placeholder="e.g. Rice Dishes"')+'</div><datalist id="pcl">'+cats.map(function(c){return '<option value="'+esc(c)+'">'}).join('')+'</datalist>'+
    '<label style="display:flex;gap:.5rem;align-items:center;margin-top:.8rem"><input type="checkbox" name="pa"'+(!p||p.in_stock?' checked':'')+' style="width:auto"> Available to order</label>'+
    (S.vertical==='pharmacy'?'<label style="display:flex;gap:.5rem;align-items:center;margin-top:.5rem"><input type="checkbox" name="px"'+(p&&p.rx?' checked':'')+' style="width:auto"> Needs a prescription</label>':'')+
@@ -1111,23 +1153,25 @@ function pSubmit(id){return function(d){
   if(!d.pn.trim())return 'Enter a name.';
   if(!(price>=0))return 'Enter a price in naira.';
   var b=$('#mf button[type=submit]');b.disabled=true;
-  lrpc('merchant_product_save',{p_merchant:LV.store.id,p_id:id||null,p_name:d.pn,p_descr:d.pd||'',p_price:price,p_category:d.pc||'',p_in_stock:!!d.pa,p_rx:!!d.px}).then(function(){return liveLoad()}).then(function(){closeM();refresh();toast(id?'Saved.':'Added. Customers can order it now.')},function(e){b.disabled=false;var er=$('#merr');if(er)er.textContent=e.message});
+  lrpc('merchant_product_save',{p_merchant:LV.store.id,p_id:id||null,p_name:d.pn,p_descr:d.pd||'',p_price:price,p_category:d.pc||'',p_in_stock:!!d.pa,p_rx:!!d.px,p_image:U.pimgChanged?(U.pimg||''):null}).then(function(){return liveLoad()}).then(function(){closeM();refresh();toast(id?'Saved.':'Added. Customers can order it now.')},function(e){b.disabled=false;var er=$('#merr');if(er)er.textContent=e.message});
   return false}}
 function vSettingsLive(){
   var st=LV.store;
   return head('Store settings','What customers see about your store.')+
   '<div class="card pad"><div class="acts" style="justify-content:space-between"><div><h3>Accepting orders</h3><p class="sub">Turn off to pause new orders. Customers see the store as closed.</p></div>'+sw(st.open,'lsOpen','x','Accepting orders')+'</div></div>'+
-  '<form data-form="lstore" class="card pad" style="margin-top:1rem" novalidate><h3>Store details</h3><div class="mgrid" style="margin-top:1rem">'+inp('sn','Store name',st.name,'maxlength="80"')+inp('sh','Opening hours',st.hours,'maxlength="80" placeholder="e.g. 8am – 10pm daily"')+inp('sf','Delivery fee (₦)',st.deliveryFee,'inputmode="numeric"')+inp('se1','Fastest delivery (min)',st.etaMin,'inputmode="numeric"')+inp('se2','Slowest delivery (min)',st.etaMax,'inputmode="numeric"')+'</div>'+
-  '<p class="sub" style="margin-top:.8rem">Area: '+esc(st.area||'Not set')+' · Type: '+esc(V[st.vertical])+'. To change these, contact ChowBuy support.</p><div class="acts" style="margin-top:1rem"><button type="submit" class="btn pri">Save changes</button></div></form>';
+  lmediaCard()+
+  '<form data-form="lstore" class="card pad" style="margin-top:1rem" novalidate><h3>Store details</h3><div class="mgrid" style="margin-top:1rem">'+inp('sn','Store name',st.name,'maxlength="80"')+inp('sh','Opening hours',st.hours,'maxlength="80" placeholder="e.g. 8am – 10pm daily"')+inp('se1','Fastest delivery (min)',st.etaMin,'inputmode="numeric"')+inp('se2','Slowest delivery (min)',st.etaMax,'inputmode="numeric"')+'</div>'+
+  '<p class="sub" style="margin-top:.8rem">Delivery fee: <b>'+ngn((LV.media&&LV.media.delivery_fee!=null)?LV.media.delivery_fee:st.deliveryFee)+'</b>. ChowBuy sets delivery fees for all stores, so this is not editable here.</p><p class="sub" style="margin-top:.4rem">Area: '+esc(st.area||'Not set')+' · Type: '+esc(V[st.vertical])+'. To change these, contact ChowBuy support.</p><div class="acts" style="margin-top:1rem"><button type="submit" class="btn pri">Save changes</button></div></form>';
 }
 FORMS.lstore=function(f){
-  var d=fdata(f),fee=parseInt(d.sf,10),a=parseInt(d.se1,10),b=parseInt(d.se2,10);
+  var d=fdata(f),a=parseInt(d.se1,10),b=parseInt(d.se2,10);
   if(d.sn.trim().length<2){toast('Enter a store name.','warn');return}
-  if(!(fee>=0&&fee<=100000)){toast('Enter a delivery fee in naira.','warn');return}
   if(!(a>=1&&b>=a&&b<=240)){toast('Enter a delivery time range, fastest first.','warn');return}
-  lrpc('merchant_store_update',{p_merchant:LV.store.id,p_name:d.sn.trim(),p_hours:d.sh.trim(),p_fee:fee,p_eta_min:a,p_eta_max:b}).then(function(){return liveBoot()}).then(function(){buildNav();refresh();toast('Saved.')},liveErr);
+  lrpc('merchant_store_update',{p_merchant:LV.store.id,p_name:d.sn.trim(),p_hours:d.sh.trim(),p_eta_min:a,p_eta_max:b}).then(function(){return liveBoot()}).then(function(){buildNav();refresh();toast('Saved.')},liveErr);
 };
 Object.assign(A,{
+ lmRemove:function(el){var k=el.getAttribute('data-id')==='lslogo'?'logo':'cover';lmediaSave(k,'').then(function(){refresh();toast('Removed.')},liveErr)},
+ lpRemove:function(){U.pimg='';U.pimgChanged=true;pimgDraw()},
  liveRefresh:function(){liveLoad().then(function(){refresh();toast('Up to date.')},liveErr)},
  pNew:function(){openM(pForm(null),pSubmit(null))},
  pEdit:function(el){var p=find(LV.products,el.getAttribute('data-id'));if(p)openM(pForm(p),pSubmit(p.id))},

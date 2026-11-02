@@ -34,6 +34,11 @@
             OneSignal.init({ appId: p.onesignalAppId, serviceWorkerPath: 'OneSignalSDKWorker.js', serviceWorkerParam: { scope: '/' }, allowLocalhostAsSecureOrigin: true, notifyButton: { enable: false } })
               .then(function () { return OneSignal.login(uid); })
               .then(function () {
+                // Record the device so Admin's audience counts include web users (Merchant and Admin). Uses the person's own session; RLS limits it to their own row.
+                var mark = function () { try { if (OneSignal.User.PushSubscription.optedIn) fetch(API.url + '/rest/v1/profiles?id=eq.' + uid, { method: 'PATCH', headers: { apikey: API.anon, Authorization: 'Bearer ' + opts.token, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ push_token: { provider: 'onesignal', platform: 'web', token: uid } }) }).catch(function () {}); } catch (e) {} };
+                mark(); try { OneSignal.User.PushSubscription.addEventListener('change', mark); } catch (e) {}
+              })
+              .then(function () {
                 var perm = OneSignal.Notifications.permission, recent = 0; try { recent = +localStorage.getItem('cb-push-dismiss') || 0; } catch (e) {}
                 if (!perm && OneSignal.Notifications.permissionNative !== 'denied' && Date.now() - recent > 3 * 864e5) banner(OneSignal);
               });

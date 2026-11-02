@@ -36,6 +36,7 @@ await db.exec(fs.readFileSync(root + 'migrations/20261104000001_brand_storage_se
 await db.exec(`create schema if not exists extensions; create schema if not exists net; create table net.calls (url text, headers jsonb, body jsonb);
   create function net.http_post(url text, headers jsonb default '{}', body jsonb default '{}', timeout_milliseconds int default 1000) returns bigint language sql as $$ insert into net.calls values (url, headers, body) returning 1::bigint $$;`);
 await db.exec(fs.readFileSync(root + 'migrations/20261104000002_push_events.sql', 'utf8').replace('create extension if not exists pg_net with schema extensions;', ''));
+await db.exec(fs.readFileSync(root + 'migrations/20261105000001_media_delivery_pricing.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -826,13 +827,14 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
     await throws('owner cannot make themselves a different store owner', () => q(`update merchants set owner_id = '${A}' where id = 'm1'`), 'permission denied');
     await throws('owner cannot create a live store directly', () => q(`insert into merchants (id, owner_id, name, vertical, lat, lng) values ('mx', '${M}', 'Mine', 'restaurant', 1, 1)`), 'permission denied');
     await throws('owner cannot update the store table directly any more', () => q(`update merchants set name = 'Hack' where id = 'm1'`), 'permission denied');
-    await q(`select merchant_store_update('m1', 'Mama Put Kitchen', '8am - 9pm', 600, 10, 20)`);
+    await q(`select merchant_store_update('m1', 'Mama Put Kitchen', '8am - 9pm', 10, 20)`);
     ok('owner can still rename the store (through the function)', (await q(`select name from merchants where id = 'm1'`))[0].name === 'Mama Put Kitchen');
+    await throws('owner cannot change the delivery fee directly', () => q(`update merchants set delivery_fee = 1 where id = 'm1'`), 'permission denied');
   });
   await as(A, async () => {
     const none = (await q(`select merchant_me() r`))[0].r;
     ok('a customer with no business gets no workspaces (and no arbitrary store)', none.stores.length === 0 && none.workspaces.length === 0 && none.invitations.length === 0);
-    await throws('a customer cannot rename a store', () => q(`select merchant_store_update('m1', 'Hack', '', 0, 5, 9)`), 'not found');
+    await throws('a customer cannot rename a store', () => q(`select merchant_store_update('m1', 'Hack', '', 5, 9)`), 'not found');
     await throws('a customer cannot read store orders', () => q(`select merchant_orders('m1')`), 'not found');
     await throws('a customer cannot add products to a store', () => q(`select merchant_product_save('m1', null, 'Hack', '', 100, '', true, false)`), 'not found');
     await throws('a customer cannot close a store', () => q(`select merchant_set_open('m1', false)`), 'not found');
@@ -1163,5 +1165,26 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
   ok('an SOS posts a push event for admins', (await calls()).some((b) => b.event === 'sos'));
   const h = (await q(`select headers from net.calls limit 1`))[0]?.headers;
   ok('push events carry the hook secret header', h && h['x-hook-secret'] === sec);
+}
+{
+  const mid = (await q(`select id from merchants where active limit 1`))[0]?.id;
+  const url = (f) => `https://abc.supabase.co/storage/v1/object/public/store-media/${mid}/${f}`;
+  ok('store media accepts an address inside the store folder', (await q(`select _store_media_ok('${mid}', '${url('logo-1.jpg')}') ok`))[0].ok === true);
+  ok('store media rejects another store folder', (await q(`select _store_media_ok('${mid}', 'https://abc.supabase.co/storage/v1/object/public/store-media/other/x.jpg') ok`))[0].ok === false);
+  ok('store media rejects an outside address', (await q(`select _store_media_ok('${mid}', 'https://evil.example/x.jpg') ok`))[0].ok === false);
+  ok('empty media address is allowed (removes the picture)', (await q(`select _store_media_ok('${mid}', '') ok`))[0].ok === true);
+  const cfg0 = (await q(`select _delivery_cfg() c`))[0].c;
+  ok('delivery engine has a default base fare', Number(cfg0.base) >= 0);
+  await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${ADM}', false)`);
+  const saved = (await q(`select admin_delivery_save('{"base": 700}'::jsonb) c`))[0].c;
+  await db.exec(`reset role`);
+  ok('admin can set the base delivery fare', Number(saved.base) === 700);
+  ok('saving the fare updates every store', (await q(`select count(*)::int n from merchants where delivery_fee <> 700`))[0].n === 0);
+  await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${A}', false)`);
+  let blocked = false; try { await q(`select admin_delivery_save('{"base": 1}'::jsonb)`); } catch (e) { blocked = true; }
+  await db.exec(`reset role`);
+  ok('a customer cannot change delivery pricing', blocked);
+  await db.exec(`insert into merchants (id, name, vertical, active, lat, lng) values ('mfee1', 'Fee test', 'restaurant', false, 1, 1)`);
+  ok('a new store starts at the platform fare', (await q(`select delivery_fee f from merchants where id = 'mfee1'`))[0].f === 700);
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

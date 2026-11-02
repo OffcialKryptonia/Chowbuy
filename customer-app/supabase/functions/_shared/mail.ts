@@ -48,9 +48,11 @@ export function brandEmail(inner: string, footer: string): string {
 }
 
 /** Plain text in, branded HTML out. Everything is escaped; blank lines become paragraphs. */
-export function renderEmail(subject: string, body: string, footer: string): { html: string; text: string } {
+export function renderEmail(subject: string, body: string, footer: string, image?: string): { html: string; text: string } {
   const paras = body.trim().split(/\n{2,}/).map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
-  const html = brandEmail(`<h1>${esc(subject)}</h1>${paras}`, esc(footer));
+  // Optional promotional picture under the heading. The address must already have been checked by the caller (our own brand bucket only).
+  const pic = image ? `<p style="margin:0 0 16px"><img src="${esc(image)}" alt="" width="536" style="display:block;width:100%;max-width:536px;height:auto;border:0;border-radius:12px"></p>` : '';
+  const html = brandEmail(`<h1>${esc(subject)}</h1>${pic}${paras}`, esc(footer));
   return { html, text: `${body.trim()}\n\n--\n${footer}` };
 }
 
