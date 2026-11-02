@@ -62,3 +62,44 @@ end $$;
 
 revoke all on function public.admin_cancel_order(text, text, text) from public, anon;
 grant execute on function public.admin_cancel_order(text, text, text) to authenticated;
+
+-- Include the cancellation audit summary in the live Orders list.
+create or replace function public.admin_orders(
+  p_status text default 'all',
+  p_search text default '',
+  p_limit int default 50,
+  p_offset int default 0
+) returns jsonb language plpgsql stable security definer set search_path = public, pg_temp as $$
+declare q text := '%' || lower(btrim(coalesce(p_search, ''))) || '%'; total int; rows jsonb;
+begin
+  perform public._need_admin();
+  select count(*) into total
+  from public.orders o
+  join public.merchants m on m.id = o.merchant_id
+  left join public.profiles c on c.id = o.customer_id
+  where (coalesce(p_status, 'all') = 'all' or public._admin_status(o.stage) = p_status)
+    and lower(o.id || ' ' || m.name || ' ' || coalesce(c.full_name, '') || ' ' || coalesce(o.rider->>'name', '')) like q;
+
+  select coalesce(jsonb_agg(x order by x.placed desc), '[]'::jsonb) into rows
+  from (
+    select o.id, o.created_at as placed, m.vertical, m.name as merchant,
+      coalesce(nullif(c.full_name, ''), c.email, 'Customer') as customer,
+      coalesce(nullif(o.address->>'area', ''), '') as city, o.total, o.service_fee as commission,
+      public._admin_status(o.stage) as status, o.stage::text as stage,
+      coalesce(o.rider->>'name', '') as rider, o.pay::text as pay, o.paid,
+      ac.reason as cancel_reason,
+      case when ac.order_id is not null then 'admin' else null end as cancelled_by,
+      ac.refund_status
+    from public.orders o
+    join public.merchants m on m.id = o.merchant_id
+    left join public.profiles c on c.id = o.customer_id
+    left join public.order_admin_cancellations ac on ac.order_id = o.id
+    where (coalesce(p_status, 'all') = 'all' or public._admin_status(o.stage) = p_status)
+      and lower(o.id || ' ' || m.name || ' ' || coalesce(c.full_name, '') || ' ' || coalesce(o.rider->>'name', '')) like q
+    order by o.created_at desc
+    limit least(greatest(p_limit, 1), 200) offset greatest(p_offset, 0)
+  ) x;
+  return jsonb_build_object('total', total, 'rows', rows);
+end $$;
+revoke all on function public.admin_orders(text, text, int, int) from public, anon;
+grant execute on function public.admin_orders(text, text, int, int) to authenticated;
