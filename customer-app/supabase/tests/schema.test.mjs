@@ -37,6 +37,7 @@ await db.exec(`create schema if not exists extensions; create schema if not exis
   create function net.http_post(url text, headers jsonb default '{}', body jsonb default '{}', timeout_milliseconds int default 1000) returns bigint language sql as $$ insert into net.calls values (url, headers, body) returning 1::bigint $$;`);
 await db.exec(fs.readFileSync(root + 'migrations/20261104000002_push_events.sql', 'utf8').replace('create extension if not exists pg_net with schema extensions;', ''));
 await db.exec(fs.readFileSync(root + 'migrations/20261105000001_media_delivery_pricing.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261105000002_ops_fixes.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -1186,5 +1187,54 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
   ok('a customer cannot change delivery pricing', blocked);
   await db.exec(`insert into merchants (id, name, vertical, active, lat, lng) values ('mfee1', 'Fee test', 'restaurant', false, 1, 1)`);
   ok('a new store starts at the platform fare', (await q(`select delivery_fee f from merchants where id = 'mfee1'`))[0].f === 700);
+}
+// ---- ops fixes: rider sign-up role, cancelling and expiring pending orders, applicants in the Riders list ----
+{
+  const q = async (sql) => (await db.query(sql)).rows;
+  await db.exec(`insert into auth.users (id, email, raw_user_meta_data) values ('00000000-0000-4000-8000-0000000000a1', 'newrider@x.ng', '{"full_name":"Rida Rider","signup_as":"rider"}'), ('00000000-0000-4000-8000-0000000000a2', 'sneaky@x.ng', '{"full_name":"Sneaky","signup_as":"admin"}'), ('00000000-0000-4000-8000-0000000000a3', 'plain@x.ng', '{"full_name":"Plain"}')`);
+  const roles = Object.fromEntries((await q(`select email, role::text r from profiles where email in ('newrider@x.ng','sneaky@x.ng','plain@x.ng')`)).map((x) => [x.email, x.r]));
+  ok('a rider sign-up is a rider, not a customer', roles['newrider@x.ng'] === 'rider');
+  ok('no other value can grant a role at sign-up', roles['sneaky@x.ng'] === 'customer' && roles['plain@x.ng'] === 'customer');
+  ok('rider sign-ups are not in the Customers list', (await q(`select count(*)::int n from profiles where role = 'customer' and email = 'newrider@x.ng'`))[0].n === 0);
+
+  await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${ADM}', false)`);
+  const rl = (await q(`select admin_riders() r`))[0].r;
+  await db.exec(`reset role`);
+  const app = rl.find((x) => x.name === 'Rida Rider');
+  ok('an unfinished rider sign-up appears in the Riders list as pending', !!app && app.status === 'pending' && app.applied === false);
+
+  // orders: one unpaid online, one COD pending, one paid-online pending, one with a rider
+  await db.exec(`update wallets set balance = 0 where user_id = '${A}'`);
+  const mkOrder = async (id, pay, paid, stage, riderId, ageMin) => db.query(`insert into orders (id, customer_id, merchant_id, lines, subtotal, delivery_fee, service_fee, total, pay, paid, stage, rider_id, address, eta_minutes, latest_by, created_at)
+    values ($1, $2, 'm1', '[]', 1000, 0, 0, 1000, $3, $4, $5, $6, '{}', 1, now(), now() - make_interval(mins => $7))`, [id, A, pay, paid, stage, riderId, ageMin]);
+  await mkOrder('CB-T1', 'korapay', false, 'received', null, 45);   // abandoned checkout
+  await mkOrder('CB-T2', 'cod', false, 'received', null, 20);       // store never accepted
+  await mkOrder('CB-T3', 'wallet', true, 'received', null, 20);     // paid, store never accepted: must refund
+  await mkOrder('CB-T4', 'cod', false, 'received', null, 5);        // fresh: must stay
+  await mkOrder('CB-T5', 'cod', false, 'preparing', null, 40);      // accepted but no rider
+  await mkOrder('CB-T6', 'cod', false, 'preparing', R, 90);         // has a rider: must stay
+  const n = (await q(`select expire_stale_orders() n`))[0].n;
+  const st = Object.fromEntries((await q(`select id, stage::text s, cancelled_by cb, refunded rf from orders where id like 'CB-T%'`)).map((x) => [x.id, x]));
+  ok('stale unassigned orders expire', n === 4 && st['CB-T1'].s === 'cancelled' && st['CB-T2'].s === 'cancelled' && st['CB-T3'].s === 'cancelled' && st['CB-T5'].s === 'cancelled', JSON.stringify(st));
+  ok('fresh and rider-assigned orders are left alone', st['CB-T4'].s === 'received' && st['CB-T6'].s === 'preparing');
+  ok('expired orders are marked as automatic', st['CB-T2'].cb === 'system');
+  ok('a paid order is refunded to the wallet when it expires', st['CB-T3'].rf === 1000 && (await q(`select balance b from wallets where user_id = '${A}'`))[0].b === 1000);
+  ok('an unpaid order is not refunded', st['CB-T1'].rf === 0 && st['CB-T2'].rf === 0);
+  ok('running the expiry again changes nothing', (await q(`select expire_stale_orders() n`))[0].n === 0);
+
+  await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${ADM}', false)`);
+  const c = (await q(`select admin_cancel_order('CB-T4', 'Store is closed today') c`))[0].c;
+  await db.exec(`reset role`);
+  ok('admin can cancel a pending order', (await q(`select stage::text s, cancelled_by cb, cancel_reason r from orders where id = 'CB-T4'`))[0].s === 'cancelled' && c.refunded === 0);
+  await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${ADM}', false)`);
+  let twice = false; try { await q(`select admin_cancel_order('CB-T4', 'again')`); } catch (e) { twice = true; }
+  let noReason = false; try { await q(`select admin_cancel_order('CB-T6', '')`); } catch (e) { noReason = true; }
+  await db.exec(`reset role`);
+  ok('a cancelled order cannot be cancelled again, and a reason is required', twice && noReason);
+  await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${A}', false)`);
+  let cust = false; try { await q(`select admin_cancel_order('CB-T6', 'I want it gone')`); } catch (e) { cust = true; }
+  let direct = false; try { await q(`select expire_stale_orders()`); } catch (e) { direct = true; }
+  await db.exec(`reset role`);
+  ok('customers cannot cancel through the admin function or run the expiry', cust && direct);
 }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

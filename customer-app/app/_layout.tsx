@@ -30,14 +30,13 @@ function Boot() {
   const scheme = useResolvedScheme();
   const pal = scheme === 'dark' ? dark : light;
   const cfg = usePublicConfig().data;
-  const oneSignal = useSettings((s) => s.pushOneSignal);
   const onboarded = useSettings((s) => s.onboarded);
   const auth = useAuth();
   const uid = auth.session?.user.id ?? 'demo';
   useOrderTransport();
   useBackendSync();
   useEffect(() => auth.init(), []);   // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (!DEMO && !auth.session) return; registerPush({ oneSignalAppId: cfg.push.onesignalAppId, useOneSignal: oneSignal && !!cfg.push.onesignalAppId, userId: uid }).catch(() => {}); }, [cfg.push.onesignalAppId, oneSignal, uid]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!DEMO && !auth.session) return; registerPush({ oneSignalAppId: cfg.push.onesignalAppId, useOneSignal: !!cfg.push.onesignalAppId, userId: uid }).catch(() => {}); }, [cfg.push.onesignalAppId, uid]);   // eslint-disable-line react-hooks/exhaustive-deps
   if (!onboarded) return <><StatusBar style={scheme === 'dark' ? 'light' : 'dark'} /><Intro onDone={() => useSettings.getState().set({ onboarded: true })} /></>;
   if (!DEMO && !auth.ready) return null;
   if (!DEMO && !auth.session) return <><StatusBar style={scheme === 'dark' ? 'light' : 'dark'} /><SignIn /></>;

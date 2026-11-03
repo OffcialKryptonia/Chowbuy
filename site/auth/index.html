@@ -85,7 +85,13 @@ a.alt{display:block;color:var(--brand);text-decoration:none;font-weight:600;padd
   }
   if (token) {
     // Email confirmation: hand the session to the app when it is installed.
-    open.href = 'chowbuy://auth-callback#' + raw;
+    // Riders signed up in the Rider app (the sign-up marks the account), so send them back to that app, not the Customer app.
+    var scheme = 'chowbuy', label = 'Open the ChowBuy app';
+    try {
+      var pl = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      if (pl && pl.user_metadata && pl.user_metadata.signup_as === 'rider') { scheme = 'chowbuyrider'; label = 'Open the ChowBuy Rider app'; M.textContent = 'You are all set. Open the ChowBuy Rider app and sign in to finish your application.'; }
+    } catch (e) {}
+    open.href = scheme + '://auth-callback#' + raw; open.textContent = label;
   }
 })();
 </script>

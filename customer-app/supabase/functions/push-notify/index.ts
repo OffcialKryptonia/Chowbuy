@@ -69,7 +69,7 @@ async function deliver(db: ReturnType<typeof admin>, m: Msg) {
   const { data: set } = await db.from('platform_settings').select('value').eq('key', 'public').maybeSingle();
   const appId = set?.value?.push?.onesignalAppId as string | undefined, key = await secret('onesignal_rest_key');
   // OneSignal targets by external id (the user id every app logs in with), so it reaches Customer, Rider, Merchant (web) and Admin (web) devices alike.
-  if (set?.value?.push?.provider === 'onesignal' && appId && key) {
+  if (appId && key) {   // the App ID and REST key being saved is the switch; the old provider toggle must not silence OneSignal devices
     const r = await fetch('https://api.onesignal.com/notifications', { method: 'POST', headers: { Authorization: `Key ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ app_id: appId, target_channel: 'push', include_aliases: { external_id: ids }, headings: { en: m.title }, contents: { en: m.body }, data: { type: m.type }, ...(m.url ? { web_url: 'https://chowbuy.ng' + m.url } : {}), priority: 10 }) });
     if (!r.ok) console.error('OneSignal', r.status, (await r.text().catch(() => '')).slice(0, 200));
