@@ -1,6 +1,6 @@
 -- Operations fixes (run once in the Supabase SQL editor; safe to run again).
 --  1. Rider sign-ups are recorded as riders from the start, so they never appear in the Customers list.
---  2. Admin can cancel a pending order; unassigned pending orders expire on their own (with an automatic refund when already paid).
+--  2. Unassigned pending orders expire on their own (with an automatic refund when already paid). Admin cancelling is in 20261106000001.
 --  3. Admin Riders list also shows people who signed up as a rider but have not finished the application yet.
 
 /* ---------------- 1. rider sign-ups ---------------- */
@@ -39,17 +39,6 @@ begin
   return amt;
 end $$;
 
--- Admin cancels an order that has not been picked up yet (pending or being prepared).
-create or replace function public.admin_cancel_order(p_order text, p_reason text) returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
-declare why text := left(btrim(coalesce(p_reason, '')), 200); amt int;
-begin
-  perform public._need_admin();
-  if char_length(why) < 3 then raise exception 'Write a reason for cancelling.'; end if;
-  amt := public._cancel_order(p_order, why, 'admin');
-  if amt < 0 then raise exception 'Only pending or preparing orders can be cancelled here. This one has moved on or does not exist.'; end if;
-  return jsonb_build_object('refunded', amt);
-end $$;
-
 -- Waiting limits, in minutes. Defaults follow the market: a store that has not accepted within 15 minutes has effectively missed the order,
 -- and a delivery with no rider after 30 minutes is cancelled (the same 30-minute rule StoreHub Beep Delivery publishes).
 -- Admin can change them later by saving platform_settings key 'order_timeouts' = {"pendingMin":15,"noRiderMin":30,"unpaidMin":30}.
@@ -78,8 +67,6 @@ begin
 end $$;
 
 revoke all on function public._cancel_order(text, text, text), public.expire_stale_orders() from public, anon, authenticated;
-revoke all on function public.admin_cancel_order(text, text) from public, anon;
-grant execute on function public.admin_cancel_order(text, text) to authenticated;
 
 -- Runs every minute. If pg_cron cannot be enabled here, the notice below says so and the rest of this file still applies.
 do $$ begin
@@ -118,3 +105,30 @@ begin
 end $$;
 revoke execute on function public.admin_riders() from public, anon;
 grant execute on function public.admin_riders() to authenticated;
+
+/* ---------------- 4. Orders list: show every kind of cancellation ---------------- */
+-- 20261106000001 rebuilt admin_orders around the admin-cancellation audit table only, which hid store cancellations and automatic expiries.
+-- This version keeps its audit fields and also shows the reason, who cancelled, and any automatic refund recorded on the order itself.
+create or replace function public.admin_orders(p_status text default 'all', p_search text default '', p_limit int default 50, p_offset int default 0) returns jsonb language plpgsql stable security definer set search_path = public, pg_temp as $$
+declare q text := '%' || lower(btrim(coalesce(p_search, ''))) || '%'; total int; rows jsonb;
+begin
+  perform public._need_admin();
+  select count(*) into total from public.orders o join public.merchants m on m.id = o.merchant_id left join public.profiles c on c.id = o.customer_id
+    where (coalesce(p_status, 'all') = 'all' or public._admin_status(o.stage) = p_status)
+      and lower(o.id || ' ' || m.name || ' ' || coalesce(c.full_name, '') || ' ' || coalesce(o.rider->>'name', '')) like q;
+  select coalesce(jsonb_agg(x order by x.placed desc), '[]'::jsonb) into rows from (
+    select o.id, o.created_at as placed, m.vertical, m.name as merchant, coalesce(nullif(c.full_name, ''), c.email, 'Customer') as customer,
+           coalesce(nullif(o.address->>'area', ''), '') as city, o.total, o.service_fee as commission, public._admin_status(o.stage) as status,
+           o.stage::text as stage, coalesce(o.rider->>'name', '') as rider, o.pay::text as pay, o.paid,
+           coalesce(ac.reason, o.cancel_reason, '') as cancel_reason,
+           case when ac.order_id is not null then 'admin' else coalesce(o.cancelled_by, '') end as cancelled_by,
+           o.refunded, ac.refund_status
+    from public.orders o join public.merchants m on m.id = o.merchant_id left join public.profiles c on c.id = o.customer_id
+    left join public.order_admin_cancellations ac on ac.order_id = o.id
+    where (coalesce(p_status, 'all') = 'all' or public._admin_status(o.stage) = p_status)
+      and lower(o.id || ' ' || m.name || ' ' || coalesce(c.full_name, '') || ' ' || coalesce(o.rider->>'name', '')) like q
+    order by o.created_at desc limit least(greatest(p_limit, 1), 200) offset greatest(p_offset, 0)) x;
+  return jsonb_build_object('total', total, 'rows', rows);
+end $$;
+revoke all on function public.admin_orders(text, text, int, int) from public, anon;
+grant execute on function public.admin_orders(text, text, int, int) to authenticated;

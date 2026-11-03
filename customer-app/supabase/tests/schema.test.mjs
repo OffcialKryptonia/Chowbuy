@@ -37,7 +37,8 @@ await db.exec(`create schema if not exists extensions; create schema if not exis
   create function net.http_post(url text, headers jsonb default '{}', body jsonb default '{}', timeout_milliseconds int default 1000) returns bigint language sql as $$ insert into net.calls values (url, headers, body) returning 1::bigint $$;`);
 await db.exec(fs.readFileSync(root + 'migrations/20261104000002_push_events.sql', 'utf8').replace('create extension if not exists pg_net with schema extensions;', ''));
 await db.exec(fs.readFileSync(root + 'migrations/20261105000001_media_delivery_pricing.sql', 'utf8'));
-await db.exec(fs.readFileSync(root + 'migrations/20261105000002_ops_fixes.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261106000001_admin_cancel_orders.sql', 'utf8'));
+await db.exec(fs.readFileSync(root + 'migrations/20261106000002_ops_fixes.sql', 'utf8'));
 await db.exec(fs.readFileSync(root + 'seed.sql', 'utf8'));
 await db.exec(`grant all on all tables in schema public to service_role; grant execute on all functions in schema public to service_role;`);
 await db.exec(`grant usage on all sequences in schema public to service_role`);
@@ -503,7 +504,7 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
 }
 // ---- Real rider positions
 {
-  const rid = (await q(`select user_id from riders where verified order by user_id limit 1`))[0]?.user_id;
+  const rid = (await q(`select user_id from riders where verified and pay_model <> 'flex' order by user_id limit 1`))[0]?.user_id;
   ok('there is a verified rider to test with', !!rid);
   await as(A, async () => {
     await throws('customers cannot ping', () => db.query(`select rider_ping(6.5, 3.4)`), 'Go online first');
@@ -1225,7 +1226,7 @@ ok('public config exposes sign-in flags (off by default)', cfg.auth.google.enabl
   await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${ADM}', false)`);
   const c = (await q(`select admin_cancel_order('CB-T4', 'Store is closed today') c`))[0].c;
   await db.exec(`reset role`);
-  ok('admin can cancel a pending order', (await q(`select stage::text s, cancelled_by cb, cancel_reason r from orders where id = 'CB-T4'`))[0].s === 'cancelled' && c.refunded === 0);
+  ok('admin can cancel a pending order', (await q(`select stage::text s from orders where id = 'CB-T4'`))[0].s === 'cancelled' && c.status === 'cancelled');
   await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${ADM}', false)`);
   let twice = false; try { await q(`select admin_cancel_order('CB-T4', 'again')`); } catch (e) { twice = true; }
   let noReason = false; try { await q(`select admin_cancel_order('CB-T6', '')`); } catch (e) { noReason = true; }
