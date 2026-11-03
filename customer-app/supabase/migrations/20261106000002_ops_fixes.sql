@@ -23,6 +23,9 @@ update public.profiles p set role = 'rider'
    and not exists (select 1 from public.orders o where o.customer_id = p.id);
 
 /* ---------------- 2. cancel and expire pending orders ---------------- */
+-- An earlier draft of this file created a 2-argument admin_cancel_order. The real one (3 arguments) is in 20261106000001; two versions would make calls ambiguous.
+drop function if exists public.admin_cancel_order(text, text);
+
 -- One place that cancels an order, refunds it when it was paid online, and records who did it and why.
 create or replace function public._cancel_order(p_order text, p_reason text, p_by text) returns int language plpgsql security definer set search_path = public, pg_temp as $$
 declare o public.orders; amt int := 0;
