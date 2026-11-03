@@ -9,8 +9,10 @@ export async function signIn(email: string, password: string) {
   if (r.error) throw new BackendError(r.error.message);
   return r.data.session;
 }
+/** Where the confirmation email sends people. The page shows the result and works on any phone. */
+const AUTH_WEB_URL = 'https://chowbuy.ng/auth';
 export async function signUp(v: { email: string; password: string; name: string; phone: string }) {
-  const r = await supabase.auth.signUp({ email: v.email.trim(), password: v.password, options: { data: { full_name: v.name.trim(), phone: v.phone } } });
+  const r = await supabase.auth.signUp({ email: v.email.trim(), password: v.password, options: { emailRedirectTo: AUTH_WEB_URL, data: { full_name: v.name.trim(), phone: v.phone, signup_as: 'rider' } } });
   if (r.error) throw new BackendError(r.error.message);
   return r.data.session;   // null when the project asks the new rider to confirm their email first
 }

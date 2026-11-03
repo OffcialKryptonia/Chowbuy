@@ -16,7 +16,7 @@ Notifications.setNotificationHandler({
  */
 export async function registerPush(opts: { oneSignalAppId?: string; useOneSignal: boolean; userId: string }) {
   if (DEMO) return { provider: 'demo' as const };
-  if (opts.useOneSignal && opts.oneSignalAppId) {
+  if (opts.oneSignalAppId) {   // OneSignal is used whenever Admin has saved its App ID; Expo remains only as a fallback for builds without it
     // Lazy-load: the native module may be absent in some builds, and importing it eagerly would crash the app at launch.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { OneSignal } = require('react-native-onesignal') as typeof import('react-native-onesignal');

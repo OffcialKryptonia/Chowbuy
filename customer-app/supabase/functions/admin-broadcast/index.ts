@@ -74,14 +74,13 @@ Deno.serve(handle(async (req) => {
     await sender.close();
   } else {
     const { data: set } = await db.from('platform_settings').select('value').eq('key', 'public').maybeSingle();
-    const osOn = set?.value?.push?.provider === 'onesignal';
-    const all = rows.map((r) => ({ id: r.id, prov: r.push_token?.provider as string | undefined, token: r.push_token?.token as string | undefined, sound: (r.push_token?.sound as string | undefined) ?? 'dingtone' })).filter((t) => t.token);
+        const all = rows.map((r) => ({ id: r.id, prov: r.push_token?.provider as string | undefined, token: r.push_token?.token as string | undefined, sound: (r.push_token?.sound as string | undefined) ?? 'dingtone' })).filter((t) => t.token);
     // Devices register with the provider they were built for (the Rider app is always OneSignal; Customer follows Admin). Route each device to its own provider.
     const osTargets = all.filter((t) => t.prov === 'onesignal');
     const tokens = all.filter((t) => t.prov !== 'onesignal');
     if (osTargets.length) {
       const key = await secret('onesignal_rest_key'), appId = set?.value?.push?.onesignalAppId;
-      if (!osOn || !key || !appId) { failed += osTargets.length; errors.push('OneSignal devices skipped: choose OneSignal and save the App ID and REST key in Admin, Settings, Realtime & push.'); }
+      if (!key || !appId) { failed += osTargets.length; errors.push('OneSignal devices skipped: save the OneSignal App ID and REST key in Admin, Settings, Realtime & push.'); }
       else for (let i = 0; i < osTargets.length; i += 2000) {
         const chunk = osTargets.slice(i, i + 2000);
         const r = await fetch('https://api.onesignal.com/notifications', { method: 'POST', headers: { Authorization: `Key ${key}`, 'Content-Type': 'application/json' },
